@@ -13,3 +13,4 @@ All notable changes to Heliograph are recorded here. The format follows
   managed with uv, with a locked set of development tools.
 - `scripts/check.sh`: one entry point for lint, format, strict types and
   tests, including a run in a non-UTC time zone.
+- Continuous integration on GitHub Actions running the same checks.
