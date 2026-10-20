@@ -1,0 +1,20 @@
+# Normalize every text file to LF in the repository and on checkout,
+# so patches apply byte-for-byte on every operating system.
+* text=auto eol=lf
+
+# Binary files: never convert, diff or merge as text.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.webp    binary
+*.pdf     binary
+*.zip     binary
+*.gz      binary
+*.parquet binary
+*.feather binary
+*.sqlite  binary
+*.db      binary
+*.woff    binary
+*.woff2   binary
