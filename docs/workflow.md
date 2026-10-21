@@ -66,6 +66,6 @@ once CI is green on GitHub. The owner creates and pushes tags.
 
 ## Dependencies
 
-`uv add "<pkg>>=x,<y"` (or `--dev`), commit `uv.lock`, and update
-`THIRD_PARTY_NOTICES.md` for runtime dependencies. Check the licence first
-([licensing.md](licensing.md)).
+`uv add "<pkg>>=x,<y"` (or `--dev`), commit `uv.lock`, and regenerate the
+notices table with `python3 scripts/licence_report.py --write`. Check the
+licence first ([licensing.md](licensing.md)).

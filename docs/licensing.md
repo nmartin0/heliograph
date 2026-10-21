@@ -13,14 +13,16 @@ protects that is about where code comes from, not which libraries we install.
   Unlicense) is allowed, but keeps its original notice: it goes in
   `third_party/` with its licence file and a line in
   `THIRD_PARTY_NOTICES.md`, and can sit inside a proprietary product.
-- **Libraries may be copyleft** (GPL, LGPL, MPL) when used as unmodified,
-  separately installed dependencies. A library we need to change is forked as
-  its own package under its own licence, never folded into our tree.
+- **Libraries may be copyleft** (GPL, LGPL, MPL, EPL, CDDL) when used as
+  unmodified, separately installed dependencies. A library we need to change
+  is forked as its own package under its own licence, never folded into our
+  tree.
 - **AGPL is avoided.** If one is ever needed, it runs as-is as a separate tool
   or service that is never shipped or bundled with Heliograph.
-- **Source-available licences are avoided** (BSL, Commons Clause, SSPL,
-  Elastic). Only something critical is considered, case by case, with the
-  decision and its restrictions written in [decisions.md](decisions.md).
+- **Source-available licences are avoided** (Business Source License, SPDX
+  `BUSL`; Commons Clause; SSPL; Elastic). Only something critical is
+  considered, case by case, with the decision and its restrictions written in
+  [decisions.md](decisions.md).
 - **Ideas are free.** Reading GPL code (pysystemtrade, Freqtrade, Lumibot,
   NautilusTrader) and implementing the method in our own words is fine; copying
   or translating it line by line is not.
@@ -33,14 +35,20 @@ protects that is about where code comes from, not which libraries we install.
 
 ## Checks
 
-- `THIRD_PARTY_NOTICES.md` lists every runtime dependency with its version and
-  licence; update it with every dependency change.
-- Planned (Phase 1): a committed licence report from pip-licenses of the runtime
-  environment, so a new copyleft dependency is a visible diff; an AGPL or
-  source-available dependency fails the build unless listed in an
-  approved-exceptions file with its reason; an overrides file for wrong or
-  empty metadata (TA-Lib's licence field is blank; arctic says GPL on PyPI but
-  is LGPL-2.1).
+- `scripts/licence_report.py` (run by `./scripts/check.sh`) walks every
+  runtime dependency in `uv.lock` on every platform, reads its licence from
+  package metadata, and generates the table in `THIRD_PARTY_NOTICES.md`; the
+  check fails when the table is out of date, so a new copyleft dependency
+  appears as a reviewed diff marked `copyleft`. An SPDX expression takes the
+  best of its `OR` choices and the worst of its `AND` parts, so a package
+  offered as "MIT OR AGPL-3.0-only" is used under MIT. AGPL, source-available,
+  proprietary and unidentifiable licences fail unless listed with a reason
+  under `[tool.heliograph.licences.exceptions]` in `pyproject.toml`; wrong,
+  empty or not-installed-here metadata is corrected under `...overrides`
+  (TA-Lib's licence field is blank; arctic says GPL on PyPI but is LGPL-2.1).
+  Entries for packages no longer depended on fail too, so approvals do not
+  outlive their reason. We wrote this instead of depending on pip-licenses
+  because it needs the runtime set only and our policy's verdicts.
 - Every Python and shell file under `src/`, `tests/` and `scripts/` starts
   with the two-line SPDX header (`SPDX-FileCopyrightText: 2026 Nicholas
   Martin`, `SPDX-License-Identifier: LicenseRef-Proprietary`), after any

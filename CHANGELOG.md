@@ -49,6 +49,9 @@ All notable changes to Heliograph are recorded here. The format follows
   `CLAUDE.md` as the entry point for AI-assisted sessions.
 - Every Python and shell file carries an SPDX copyright header, checked by a
   test.
+- `scripts/licence_report.py`, run by `./scripts/check.sh`: checks every
+  runtime dependency's licence against the policy and generates the table in
+  `THIRD_PARTY_NOTICES.md`.
 
 ### Fixed
 

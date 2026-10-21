@@ -21,6 +21,7 @@ run() {
 }
 
 run "lockfile is current" uv lock --check
+run "licences"            uv run --frozen python scripts/licence_report.py
 run "lint"                uv run --frozen ruff check .
 run "format"              uv run --frozen ruff format --check .
 run "types"               uv run --frozen mypy

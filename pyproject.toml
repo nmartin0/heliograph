@@ -97,3 +97,17 @@ root_package = "heliograph"
 name = "Dependencies point inward: app -> plugins -> core"
 type = "layers"
 layers = ["heliograph.app", "heliograph.plugins", "heliograph.core"]
+
+[tool.heliograph.licences]
+# Read by scripts/licence_report.py; the policy is docs/licensing.md.
+
+[tool.heliograph.licences.overrides]
+# Package = "SPDX expression", where its metadata is wrong or empty.
+
+[tool.heliograph.licences.exceptions]
+# Package = "reason", for a denied licence accepted case by case.
+
+[tool.heliograph.licences.projects]
+# Package = "URL", where its metadata has no useful project link.
+pydantic-core = "https://github.com/pydantic/pydantic-core"
+typing-extensions = "https://github.com/python/typing_extensions"
