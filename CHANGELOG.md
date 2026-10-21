@@ -25,3 +25,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - Backtest engine: merges time-ordered feeds and publishes each message at
   its own instant, proven by a property test that no component sees the
   future.
+- Plug-in manifests and parameter schemas: each plug-in declares its kind,
+  name, version, summary and a Pydantic parameter model whose JSON schema
+  carries defaults, bounds, search steps and help text.
+- First runtime dependency, pydantic, and `THIRD_PARTY_NOTICES.md` listing
+  every runtime component and its license.
