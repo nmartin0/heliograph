@@ -21,6 +21,7 @@ run "lockfile is current" uv lock --check
 run "lint"                uv run --frozen ruff check .
 run "format"              uv run --frozen ruff format --check .
 run "types"               uv run --frozen mypy
+run "layers"              uv run --frozen lint-imports
 run "tests"               uv run --frozen pytest
 run "tests (non-UTC)"     env TZ=America/St_Johns uv run --frozen pytest -q
 

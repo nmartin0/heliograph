@@ -35,3 +35,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - Run configuration and composition root: a TOML file names the plug-ins and
   their parameters, is validated as a whole and fingerprinted with SHA-256;
   every problem is reported at once and a bad configuration builds nothing.
+- Layering checks: import-linter keeps dependencies pointing inward
+  (app, then plugins, then core), and a test keeps third-party packages out of
+  the core.

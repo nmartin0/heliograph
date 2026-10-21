@@ -21,6 +21,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "hypothesis>=6.140",
+    "import-linter>=2.15",
     "mypy>=1.18",
     "pytest>=8.4",
     "ruff>=0.14",
@@ -86,3 +87,11 @@ testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = ["error"]
+
+[tool.importlinter]
+root_package = "heliograph"
+
+[[tool.importlinter.contracts]]
+name = "Dependencies point inward: app -> plugins -> core"
+type = "layers"
+layers = ["heliograph.app", "heliograph.plugins", "heliograph.core"]

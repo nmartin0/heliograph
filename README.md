@@ -29,10 +29,17 @@ uv sync               # create .venv and install the locked dependencies
 ## Project layout
 
 ```
-src/heliograph/   the package
-tests/            the test suite
-scripts/          developer scripts
+src/heliograph/
+  core/      contracts, messages, time, clocks, bus, engine (standard library only)
+  plugins/   plug-in manifests, parameter schemas and the registry
+  app/       run configuration and the composition root
+tests/       the test suite, mirroring the package
+scripts/     developer scripts
 ```
+
+Dependencies point inward only: `app` may import `plugins` and `core`,
+`plugins` may import `core`, and `core` imports nothing but the standard
+library. `./scripts/check.sh` enforces both rules.
 
 ## Working on Heliograph
 
