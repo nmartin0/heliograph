@@ -7,3 +7,7 @@ class HeliographError(Exception):
 
 class ClockError(HeliographError):
     """A clock was asked to move backwards."""
+
+
+class LookAheadError(HeliographError):
+    """A message stamped later than the current time was published."""

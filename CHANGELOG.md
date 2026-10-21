@@ -20,3 +20,5 @@ All notable changes to Heliograph are recorded here. The format follows
   becomes known when its interval closes.
 - Clocks: a forward-only simulated clock for backtests and a wall clock for
   live data. A lint rule bans reading the system time anywhere else.
+- Message bus: typed publish and subscribe with breadth-first delivery; it
+  refuses any message stamped later than the clock's current time.
