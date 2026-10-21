@@ -52,6 +52,10 @@ All notable changes to Heliograph are recorded here. The format follows
 - `scripts/licence_report.py`, run by `./scripts/check.sh`: checks every
   runtime dependency's licence against the policy and generates the table in
   `THIRD_PARTY_NOTICES.md`.
+- Alarms: components set keyed one-off or repeating alarms through a
+  `Scheduler`, and the backtest engine publishes `AlarmFired` messages in time
+  order between feed messages; `run(until=…)` stops a replay at an instant
+  and closes what is still open.
 
 ### Fixed
 

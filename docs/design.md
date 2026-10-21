@@ -40,8 +40,15 @@ contract and a core purity test).
   themselves. Every message has `ts`, the instant it became known. A bar covers
   `[start, end)` and has `ts = end`.
 - **Clock (built).** The only source of time. `SimulatedClock` moves forward
-  only when told; `WallClock` reads the system. Planned: alarms (`at`,
-  `every`) so the clock can close bars and fire session timers, in both modes.
+  only when told; `WallClock` reads the system and never goes backwards.
+- **Alarms (built).** Components set keyed alarms (`at`, `every`, `cancel`)
+  through a `Scheduler`; the engine publishes an `AlarmFired` message when one
+  is due, so bars close and sessions open on time. An alarm already set for an
+  instant fires before data at that instant; one a handler sets for the
+  current instant fires after the message it is handling. `run(until=…)`
+  stops a replay at that instant and, when the data ends earlier, carries it
+  on to close what is still open. More than 10,000 alarms at one instant end
+  the run with `AlarmLoopError`.
 - **MessageBus (built).** Typed publish and subscribe, synchronous and
   breadth-first. Refuses any message stamped later than the clock
   (`LookAheadError`). A failing handler ends delivery and discards the queue.

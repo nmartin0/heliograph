@@ -28,5 +28,9 @@ class OutOfOrderError(HeliographError):
     """A feed produced a message stamped earlier than the one before it."""
 
 
+class AlarmLoopError(HeliographError, RuntimeError):
+    """Alarms kept firing at one instant, so time could never move on."""
+
+
 class ReentrancyError(HeliographError, RuntimeError):
     """A run was started while another run or a message delivery was in progress."""
