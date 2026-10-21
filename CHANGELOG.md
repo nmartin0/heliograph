@@ -32,3 +32,6 @@ All notable changes to Heliograph are recorded here. The format follows
   every runtime component and its license.
 - Plug-in registry: plug-ins are discovered through `heliograph.<kind>` entry
   points; unknown names fail with a list of the valid ones.
+- Run configuration and composition root: a TOML file names the plug-ins and
+  their parameters, is validated as a whole and fingerprinted with SHA-256;
+  every problem is reported at once and a bad configuration builds nothing.
