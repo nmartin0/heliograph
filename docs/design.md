@@ -35,10 +35,12 @@ contract and a core purity test).
 
 - **Timestamp (built).** `int` nanoseconds since the Unix epoch, UTC.
   Conversions refuse naive datetimes. Display zones are a GUI concern.
-- **Messages and value objects (built: `Bar` message, `Instrument` value
-  object).** Frozen, slotted, keyword-only dataclasses that validate
-  themselves. Every message has `ts`, the instant it became known. A bar covers
-  `[start, end)` and has `ts = end`.
+- **Messages and value objects (built: `Point` and `Bar` messages,
+  `Instrument` value object).** Frozen, slotted, keyword-only dataclasses that
+  validate themselves. Every message has `ts`, the instant it became known.
+  A `Point` carries the source's `event_time` and Heliograph's `received_at`,
+  which is its `ts`. A bar covers `[start, end)` and has `ts = end`, or a later
+  `received_at` when it arrived after closing.
 - **Clock (built).** The only source of time. `SimulatedClock` moves forward
   only when told; `WallClock` reads the system and never goes backwards.
 - **Alarms (built).** Components set keyed alarms (`at`, `every`, `cancel`)

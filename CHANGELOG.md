@@ -56,6 +56,10 @@ All notable changes to Heliograph are recorded here. The format follows
   `Scheduler`, and the backtest engine publishes `AlarmFired` messages in time
   order between feed messages; `run(until=…)` stops a replay at an instant
   and closes what is still open.
+- `Point`: one observation of an instrument with named numeric values, the
+  time it happened by its source and the time Heliograph received it, which is
+  when it becomes known. `Bar` gains an optional `received_at` for bars that
+  arrive after they close.
 
 ### Fixed
 
