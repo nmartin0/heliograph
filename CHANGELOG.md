@@ -64,3 +64,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - A run configuration can be dumped to JSON or a dict and hashed; its
   frozen parameters made `model_dump_json()` raise, `model_dump()` warn and
   `hash()` fail.
+- A run configuration refuses date-times and times of day without a UTC
+  offset in plug-in parameters, naming where each one is; they reached
+  plug-ins as naive values, against the project's time rule.

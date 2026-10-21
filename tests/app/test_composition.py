@@ -127,6 +127,30 @@ def test_equal_configs_hash_equal_and_can_be_set_members() -> None:
     assert len({first, second, parse_config(CONFIG).config}) == 2
 
 
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        ("1979-05-27T07:32:00", "params.when = 1979-05-27T07:32:00"),
+        ("07:32:00", "params.when = 07:32:00"),
+        ("[2026-01-01T00:00:00Z, 2026-01-01T09:30:00]", "params.when[1]"),
+        ("{ open = 2026-01-01T09:30:00 }", "params.when.open"),
+    ],
+)
+def test_a_time_without_an_offset_is_refused_where_it_is(value: str, shown: str) -> None:
+    text = f'[[components]]\nkind = "filters"\nplugin = "sma"\nparams = {{ when = {value} }}\n'
+    with pytest.raises(ConfigError, match="need a UTC offset") as excinfo:
+        parse_config(text)
+    assert shown in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "value", ["1979-05-27T07:32:00Z", "1979-05-27T07:32:00-05:00", "1979-05-27"]
+)
+def test_times_with_an_offset_and_whole_dates_are_accepted(value: str) -> None:
+    text = f'[[components]]\nkind = "filters"\nplugin = "sma"\nparams = {{ when = {value} }}\n'
+    assert "when" in parse_config(text).config.components[0].params
+
+
 def test_a_misspelt_setting_is_refused() -> None:
     with pytest.raises(ConfigError, match="Extra inputs are not permitted"):
         parse_config('[[components]]\nkind = "filters"\nplugin = "sma"\nparam = {}\n')
