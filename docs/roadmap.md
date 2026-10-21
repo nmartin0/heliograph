@@ -6,8 +6,8 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 
 | Phase | Theme | Status |
 | --- | --- | --- |
-| 0 | Foundations | done; tag `v0.1.0` pending a green CI run |
-| 1 | Data | next |
+| 0 | Foundations | done; CI green; tag deferred by the owner |
+| 1 | Data | in progress (4 of 14 commits) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -20,10 +20,11 @@ Repository and tooling; UTC nanosecond time; `Instrument` and `Bar`; simulated
 and wall clocks; the time-guarded message bus; the backtest event loop;
 plug-in manifests, parameter schemas and registry; run configuration and
 composition root; layering checks; one error hierarchy; the eight defects
-found by the Elysium team's review fixed. 128 tests.
+found by the Elysium team's review fixed.
 
-**Gate (passed locally):** layer contracts and the no-look-ahead property test
-pass on every commit. **To close:** CI green on GitHub, then tag `v0.1.0`.
+**Gate (passed):** layer contracts and the no-look-ahead property test pass on
+every commit, and CI is green on GitHub. Tagging `v0.1.0` is deferred at the
+owner's request (2026-10-21).
 
 ## Phase 1 · Data
 
@@ -32,13 +33,13 @@ any bar size, closed on time, recorded in a replayable journal.
 
 Planned commits, in order:
 
-- [ ] `build`: copyright header on every file we own, checked in CI
+- [x] `build`: copyright header on every file we own, checked in CI
       (`third_party/` exempt).
-- [ ] `build`: licence report of runtime dependencies (pip-licenses) committed
-      and checked; AGPL and source-available fail without an approved exception.
-- [ ] `feat(core)`: clock alarms (`at`, `every`) fired in time order by the
+- [x] `build`: licence report of runtime dependencies committed and checked;
+      AGPL and source-available fail without an approved exception.
+- [x] `feat(core)`: clock alarms (`at`, `every`) fired in time order by the
       engine between feed messages.
-- [ ] `feat(core)`: `Point` with `received_at`; `Bar` gains `received_at`.
+- [x] `feat(core)`: `Point` with `received_at`; `Bar` gains `received_at`.
 - [ ] `feat(core)`: stream specs: bar size, anchor, time zone, session, gap
       policy, price field.
 - [ ] `feat(core)`: time-bar resampler closed by clock alarms; refuses
@@ -54,15 +55,15 @@ Planned commits, in order:
       capabilities and terms flags; adapter rate-limit wrapper.
 - [ ] `feat(plugins)`: CSV and Parquet source; static instrument provider.
 - [ ] `feat(plugins)`: raw, clean and published store with quarantine.
-- [ ] `feat(plugins)`: the first live source, CCXT or Alpaca, per the
-      first-market decision below.
+- [ ] `feat(plugins)`: CCXT source, history and live (D21); the exchange is
+      a parameter of the mount.
 
 **Gate:** a 4h value ending at T is visible to the 1h consumer at T and never
 earlier, in a test; replaying a journal reproduces the run byte for byte; a
 published snapshot rebuilds exactly from its raw files.
 
-**Decide during the phase:** first market (crypto or US stocks). The engine
-runs as its own process (D18).
+The first market is crypto through CCXT (D21). The engine runs as its own
+process (D18).
 
 ## Phase 2 · Backtest engine and strategy pipeline
 
@@ -101,7 +102,7 @@ code written for it.
 - Sinks: journal, ntfy, desktop, webhook, Apprise; dispatcher with retries.
 - Optional: a published-records sink writing signals, simulated fills and
   daily equity to a separate SQLite file that Elysium reads as a silo (D20).
-- The second live source (Alpaca or CCXT, whichever Phase 1 did not build).
+- The second live source: Alpaca, for US stocks (D21).
 - Paper broker on live data; took-it/skipped journal.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
 

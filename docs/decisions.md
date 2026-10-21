@@ -168,3 +168,13 @@ that Elysium reads as a silo by configuration alone. How Heliograph's screens
 appear inside Elysium (a React module over our API, NiceGUI in an iframe, or
 data only) is decided at the start of Phase 3. See
 [research/elysium.md](research/elysium.md).
+
+## D21 · Crypto through CCXT is the first market (2026-10-21)
+
+The first live source is CCXT; Alpaca for US stocks follows in Phase 4. The
+exchange is a parameter of each mount, so the owner picks one available where
+he lives (Binance is closed to US residents; Kraken and Coinbase are not).
+**Why:** free, no API key for public data, trades around the clock so the live
+path is exercised constantly, and one adapter covers many exchanges.
+**Rejected for now:** Alpaca first (free tier limited to IEX real time and
+history older than 15 minutes; market hours make live testing slower).

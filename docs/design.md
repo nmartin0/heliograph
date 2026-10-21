@@ -293,8 +293,6 @@ Libraries per view are in [licensing.md](licensing.md).
 
 ## Open questions
 
-- First market to exercise end to end: crypto through CCXT (free, no key) or
-  US stocks through Alpaca.
 - How Heliograph's screens appear inside Elysium, if they do: a React module
   over our API, NiceGUI in an iframe, or data only (D20). Decide at Phase 3.
 - Series indexing style in the SDK (`latest`/`previous` versus an index).
