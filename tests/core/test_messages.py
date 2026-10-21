@@ -30,6 +30,19 @@ def test_instrument_key_names_venue_and_symbol() -> None:
     assert BTC.key == "binance:BTC/USDT"
 
 
+def test_a_symbol_may_contain_a_colon() -> None:
+    perp = Instrument(
+        symbol="BTC/USDT:USDT", venue="binance", asset_class="crypto", quote_currency="USDT"
+    )
+    assert perp.key == "binance:BTC/USDT:USDT"
+
+
+def test_a_venue_may_not_contain_a_colon_so_keys_stay_unique() -> None:
+    # Allowed, "a:b" + "c" and "a" + "b:c" would both have the key "a:b:c".
+    with pytest.raises(InvalidValueError, match="venue 'a:b' must not contain ':'"):
+        Instrument(symbol="c", venue="a:b", asset_class="crypto", quote_currency="USDT")
+
+
 def test_instrument_fields_must_not_be_empty() -> None:
     with pytest.raises(InvalidValueError, match="symbol"):
         Instrument(symbol=" ", venue="binance", asset_class="crypto", quote_currency="USDT")

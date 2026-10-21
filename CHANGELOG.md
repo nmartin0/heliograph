@@ -54,3 +54,5 @@ All notable changes to Heliograph are recorded here. The format follows
   silently dropping digits past the microsecond, and refuses finer ones;
   `to_datetime` raises `InvalidValueError` for instants outside the years 1
   to 9999 instead of a bare `OverflowError`.
+- `Instrument` refuses a venue containing `:`, which let two different
+  instruments share one key (`a:b` + `c` and `a` + `b:c`).

@@ -34,6 +34,11 @@ class Instrument:
         for name in ("symbol", "venue", "asset_class", "quote_currency"):
             if not getattr(self, name).strip():
                 raise InvalidValueError(f"Instrument.{name} must not be empty")
+        # The key joins venue and symbol with ":". Symbols may contain one
+        # (CCXT writes "BTC/USDT:USDT"), so the venue may not, or two
+        # instruments could share a key.
+        if ":" in self.venue:
+            raise InvalidValueError(f"Instrument.venue {self.venue!r} must not contain ':'")
 
     @property
     def key(self) -> str:
