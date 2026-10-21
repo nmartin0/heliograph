@@ -16,7 +16,7 @@ from heliograph.core.errors import (
     OutOfOrderError,
     ReentrancyError,
 )
-from heliograph.core.messages import Message
+from heliograph.core.messages import Message, Settled
 from heliograph.core.time import Timestamp
 
 
@@ -30,12 +30,16 @@ class BacktestEngine:
 
     Alarms set through :attr:`scheduler` are fired in time order between feed
     messages; an alarm due at the same instant as a message fires first.
+
+    When everything at an instant has been delivered, and before time moves
+    on, the engine publishes :class:`Settled` for that instant. Settling is
+    final: an alarm set for a settled instant ends the run with ClockError.
     """
 
     MAX_ALARMS_PER_INSTANT = 10_000
     """More alarms than this at one instant means a handler keeps re-setting one."""
 
-    __slots__ = ("_alarms", "_bus", "_clock", "_running", "_scheduler")
+    __slots__ = ("_alarms", "_bus", "_clock", "_instant", "_running", "_scheduler", "_unsettled")
 
     def __init__(
         self, clock: SimulatedClock, bus: MessageBus, alarms: AlarmQueue | None = None
@@ -49,6 +53,8 @@ class BacktestEngine:
         self._alarms = alarms if alarms is not None else AlarmQueue(clock)
         self._scheduler = SchedulerView(self._alarms)
         self._running = False
+        self._instant: Timestamp | None = None
+        self._unsettled = False
 
     @property
     def scheduler(self) -> Scheduler:
@@ -88,11 +94,12 @@ class BacktestEngine:
                 if until is not None and message.ts > until:
                     break
                 self._fire_alarms_due_by(message.ts)
-                self._clock.advance_to(message.ts)
-                self._bus.publish(message)
+                self._deliver(message)
                 published += 1
             end = until if until is not None else self._clock.now()
             self._fire_alarms_due_by(end)
+            if self._unsettled:
+                self._settle()
             self._clock.advance_to(end)
             return published
         finally:
@@ -110,8 +117,23 @@ class BacktestEngine:
                     f"more than {self.MAX_ALARMS_PER_INSTANT} alarms fired at {alarm.ts}; "
                     f"a handler probably re-sets {alarm.key!r} for the current instant"
                 )
-            self._clock.advance_to(alarm.ts)
-            self._bus.publish(alarm)
+            self._deliver(alarm)
+
+    def _deliver(self, message: Message) -> None:
+        if self._unsettled and self._instant is not None and message.ts > self._instant:
+            self._settle()
+        self._clock.advance_to(message.ts)
+        self._bus.publish(message)
+        self._instant = message.ts
+        self._unsettled = True
+
+    def _settle(self) -> None:
+        assert self._instant is not None
+        self._bus.publish(Settled(self._instant))
+        self._unsettled = False
+        due = self._alarms.next_due()
+        if due is not None and due <= self._instant:
+            raise ClockError(f"an alarm was set for {due}, an instant that has already settled")
 
 
 def _timestamp(message: Message) -> Timestamp:

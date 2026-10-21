@@ -31,6 +31,20 @@ class Message(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class Settled:
+    """Everything stamped ``ts`` has been delivered; nothing more will be at ``ts``.
+
+    The engine publishes it once per instant at which anything happened,
+    before time moves on. A consumer that combines streams (a 1-hour and a
+    4-hour bar both closing at 16:00) acts on this rather than on whichever
+    arrived first. What a handler publishes in reaction is still stamped
+    ``ts`` and is delivered before time moves on.
+    """
+
+    ts: Timestamp
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Instrument:
     """Something that can be priced. Markets are described by data, never by code."""

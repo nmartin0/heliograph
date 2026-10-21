@@ -58,6 +58,10 @@ contract and a core purity test).
 - **BacktestEngine (built).** Merges time-ordered feeds, advances the clock to
   each message's `ts`, then publishes it. Equal timestamps keep feed order.
   Refuses re-entrant runs. The no-look-ahead property test is the Phase 0 gate.
+- **Settled (built).** When everything stamped T has been delivered, and
+  before time moves on, the engine publishes `Settled(T)`. Consumers that
+  combine streams act on it, so a 1-hour bar and a 4-hour bar both closing at
+  16:00 are seen together; the Phase 2 indicator graph stabilises on it.
 - **Journal (planned).** The bus stamps each message with a sequence number and
   appends it to a journal before delivery (Jane Street's Concord idea). The
   header records code, plug-in and parameter versions. Replaying a journal

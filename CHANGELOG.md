@@ -64,6 +64,9 @@ All notable changes to Heliograph are recorded here. The format follows
   cut (size, anchor, grace for late points, gap policy, price and volume
   fields); spans such as `15m`, `4h` or `1h30m` are parsed and written back
   exactly.
+- `Settled`: the backtest engine publishes it once everything at an instant
+  has been delivered and before time moves on, so consumers that combine
+  streams see them together.
 
 ### Fixed
 
