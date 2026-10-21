@@ -6,7 +6,7 @@
 import heapq
 from collections.abc import Iterable, Iterator
 
-from heliograph.core.alarms import AlarmQueue, Scheduler, SchedulerView
+from heliograph.core.alarms import AlarmFired, AlarmQueue, Scheduler, SchedulerView
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.errors import (
@@ -123,13 +123,13 @@ class BacktestEngine:
         if self._unsettled and self._instant is not None and message.ts > self._instant:
             self._settle()
         self._clock.advance_to(message.ts)
-        self._bus.publish(message)
+        self._bus.publish(message, origin="engine" if isinstance(message, AlarmFired) else "input")
         self._instant = message.ts
         self._unsettled = True
 
     def _settle(self) -> None:
         assert self._instant is not None
-        self._bus.publish(Settled(self._instant))
+        self._bus.publish(Settled(self._instant), origin="engine")
         self._unsettled = False
         due = self._alarms.next_due()
         if due is not None and due <= self._instant:

@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
+"""The journal: every message on the bus, numbered, in the order delivered.
+
+Jane Street's Concord keeps one ordered log and recovers by replaying it; this
+is the same idea at our scale. The bus numbers each message and hands it to
+the journal before delivering it, recording where it came from:
+
+- ``input``: data from outside, published by the engine from its feeds or by
+  a live source;
+- ``engine``: alarms and Settled marks, which the engine produces from the
+  components' own state;
+- ``derived``: what handlers published in reaction.
+
+Only inputs are replayed. Feeding them to the same components reproduces
+every engine and derived message, so a replayed journal equals the original
+entry for entry; that is how a backtest or a live day is reproduced exactly.
+"""
+
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from typing import Literal, Protocol
+
+from heliograph.core.messages import Message
+
+type Origin = Literal["input", "engine", "derived"]
+
+
+@dataclass(frozen=True, slots=True)
+class JournalEntry:
+    """One message as the bus delivered it."""
+
+    seq: int
+    origin: Origin
+    message: Message
+
+
+class Journal(Protocol):
+    """Where the bus records messages."""
+
+    def append(self, entry: JournalEntry) -> None:
+        """Record ``entry``; entries arrive with consecutive sequence numbers."""
+        ...
+
+
+class MemoryJournal:
+    """A journal held in a list, for tests and short runs."""
+
+    __slots__ = ("entries",)
+
+    def __init__(self) -> None:
+        self.entries: list[JournalEntry] = []
+
+    def append(self, entry: JournalEntry) -> None:
+        self.entries.append(entry)
+
+
+def inputs(entries: Iterable[JournalEntry]) -> Iterator[Message]:
+    """The input messages of a journal, in order: what a replay feeds the engine."""
+    return (entry.message for entry in entries if entry.origin == "input")

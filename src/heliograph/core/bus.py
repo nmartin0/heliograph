@@ -9,6 +9,7 @@ from typing import Any
 
 from heliograph.core.clock import Clock
 from heliograph.core.errors import InvalidTypeError, LookAheadError
+from heliograph.core.journal import Journal, JournalEntry, Origin
 from heliograph.core.messages import Message
 
 
@@ -43,15 +44,25 @@ class MessageBus:
     If a handler raises, the exception propagates to the publisher: the current
     message does not reach the remaining subscribers and every queued message is
     discarded. A failing handler ends the run; delivery is never half-resumed.
+
+    Every accepted message gets the next sequence number and, with a journal,
+    is recorded before it is delivered, in delivery order.
     """
 
-    __slots__ = ("_clock", "_dispatching", "_queue", "_subscriptions")
+    __slots__ = ("_clock", "_dispatching", "_journal", "_queue", "_sequence", "_subscriptions")
 
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, journal: Journal | None = None) -> None:
         self._clock = clock
+        self._journal = journal
         self._subscriptions: list[Subscription[Any]] = []
         self._queue: deque[Message] = deque()
         self._dispatching = False
+        self._sequence = 0
+
+    @property
+    def sequence(self) -> int:
+        """The sequence number of the last message accepted; 0 before the first."""
+        return self._sequence
 
     @property
     def dispatching(self) -> bool:
@@ -88,8 +99,12 @@ class MessageBus:
         subscription._active = False
         self._subscriptions = [s for s in self._subscriptions if s is not subscription]
 
-    def publish(self, message: Message) -> None:
+    def publish(self, message: Message, *, origin: Origin = "input") -> None:
         """Deliver ``message`` to its subscribers.
+
+        ``origin`` is recorded in the journal: ``input`` for outside data,
+        ``engine`` for what the engine produces itself. A message published by
+        a handler is always ``derived``, whatever is passed.
 
         Raises:
             LookAheadError: if the message is stamped later than the clock's
@@ -100,6 +115,10 @@ class MessageBus:
             raise LookAheadError(
                 f"{type(message).__name__} stamped {message.ts} published at {now}"
             )
+        self._sequence += 1
+        if self._journal is not None:
+            recorded: Origin = "derived" if self._dispatching else origin
+            self._journal.append(JournalEntry(self._sequence, recorded, message))
         self._queue.append(message)
         if self._dispatching:
             return

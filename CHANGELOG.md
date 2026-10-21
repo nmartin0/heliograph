@@ -70,6 +70,9 @@ All notable changes to Heliograph are recorded here. The format follows
 - `TimeBars`: builds the bars of a stream from its points and publishes each
   when its interval closes, by alarm, whether or not another point arrives;
   late points are counted and never change a published bar.
+- Message journal: the bus numbers every message and records it, marked input,
+  engine or derived, before delivering it; replaying a journal's inputs
+  reproduces the whole journal.
 
 ### Fixed
 
