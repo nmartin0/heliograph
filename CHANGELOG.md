@@ -22,3 +22,6 @@ All notable changes to Heliograph are recorded here. The format follows
   live data. A lint rule bans reading the system time anywhere else.
 - Message bus: typed publish and subscribe with breadth-first delivery; it
   refuses any message stamped later than the clock's current time.
+- Backtest engine: merges time-ordered feeds and publishes each message at
+  its own instant, proven by a property test that no component sees the
+  future.

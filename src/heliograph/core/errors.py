@@ -11,3 +11,11 @@ class ClockError(HeliographError):
 
 class LookAheadError(HeliographError):
     """A message stamped later than the current time was published."""
+
+
+class OutOfOrderError(HeliographError):
+    """A feed produced a message stamped earlier than the one before it."""
+
+
+class ReentrancyError(HeliographError, RuntimeError):
+    """A run was started while another run or a message delivery was in progress."""
