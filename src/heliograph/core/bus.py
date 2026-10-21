@@ -115,10 +115,11 @@ class MessageBus:
             raise LookAheadError(
                 f"{type(message).__name__} stamped {message.ts} published at {now}"
             )
-        self._sequence += 1
+        sequence = self._sequence + 1
         if self._journal is not None:
             recorded: Origin = "derived" if self._dispatching else origin
-            self._journal.append(JournalEntry(self._sequence, recorded, message))
+            self._journal.append(JournalEntry(sequence, recorded, message))
+        self._sequence = sequence
         self._queue.append(message)
         if self._dispatching:
             return

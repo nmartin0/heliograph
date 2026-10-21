@@ -45,6 +45,17 @@ class Settled:
     ts: Timestamp
 
 
+@dataclass(frozen=True, slots=True)
+class RunEnded:
+    """A run stopped at ``ts``; journals keep it so a replay can stop at the same place.
+
+    Published by the engine as the last message of each run, after the final
+    Settled; the one message allowed at an instant that has settled.
+    """
+
+    ts: Timestamp
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Instrument:
     """Something that can be priced. Markets are described by data, never by code."""
