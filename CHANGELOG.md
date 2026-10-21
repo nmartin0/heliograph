@@ -38,3 +38,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - Layering checks: import-linter keeps dependencies pointing inward
   (app, then plugins, then core), and a test keeps third-party packages out of
   the core.
+- One error hierarchy: every error Heliograph raises derives from
+  `HeliographError` and also from the builtin it refines, such as
+  `ValueError`, so callers can catch either.

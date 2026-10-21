@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from heliograph.core.clock import Clock
-from heliograph.core.errors import LookAheadError
+from heliograph.core.errors import InvalidTypeError, LookAheadError
 from heliograph.core.messages import Message
 
 
@@ -69,13 +69,13 @@ class MessageBus:
         """Call ``handler`` with every published message that is a ``message_type``.
 
         Raises:
-            TypeError: if ``message_type`` cannot be used with ``isinstance``,
+            InvalidTypeError: if ``message_type`` cannot be used with ``isinstance``,
                 such as a protocol that is not runtime-checkable.
         """
         try:
             isinstance(None, message_type)
         except TypeError as exc:
-            raise TypeError(f"cannot subscribe to {message_type!r}: {exc}") from exc
+            raise InvalidTypeError(f"cannot subscribe to {message_type!r}: {exc}") from exc
         subscription = Subscription(message_type, handler)
         self._subscriptions.append(subscription)
         return subscription

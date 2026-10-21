@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Instrument
 from heliograph.core.time import NANOS_PER_HOUR, Timestamp
 
@@ -30,7 +31,7 @@ def test_instrument_key_names_venue_and_symbol() -> None:
 
 
 def test_instrument_fields_must_not_be_empty() -> None:
-    with pytest.raises(ValueError, match="symbol"):
+    with pytest.raises(InvalidValueError, match="symbol"):
         Instrument(symbol=" ", venue="binance", asset_class="crypto", quote_currency="USDT")
 
 
@@ -56,5 +57,5 @@ def test_messages_cannot_be_changed_after_creation() -> None:
     ],
 )
 def test_impossible_bars_are_refused(changes: dict[str, Any], reason: str) -> None:
-    with pytest.raises(ValueError, match=reason):
+    with pytest.raises(InvalidValueError, match=reason):
         make_bar(**changes)

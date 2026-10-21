@@ -11,6 +11,7 @@ from typing import Any, ClassVar, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from heliograph.core.errors import InvalidValueError
 from heliograph.plugins.errors import PluginDefinitionError
 
 _SLUG = re.compile(r"[a-z][a-z0-9_]*")
@@ -44,10 +45,10 @@ def param(
     the JSON schema next to ``minimum`` and ``maximum``.
 
     Raises:
-        ValueError: if ``step`` is zero or negative.
+        InvalidValueError: if ``step`` is zero or negative.
     """
     if step is not None and step <= 0:
-        raise ValueError(f"step must be positive, got {step}")
+        raise InvalidValueError(f"step must be positive, got {step}")
     extra: dict[str, Any] | None = None if step is None else {"step": step}
     return Field(default, description=description, ge=ge, le=le, json_schema_extra=extra)
 
@@ -71,11 +72,15 @@ class Manifest:
         for field in ("kind", "name"):
             value = getattr(self, field)
             if not _SLUG.fullmatch(value):
-                raise ValueError(f"Manifest.{field} {value!r} must be a lowercase slug")
+                raise PluginDefinitionError(f"Manifest.{field} {value!r} must be a lowercase slug")
         if not self.version.strip() or not self.summary.strip():
-            raise ValueError(f"manifest {self.kind}/{self.name} needs a version and a summary")
+            raise PluginDefinitionError(
+                f"manifest {self.kind}/{self.name} needs a version and a summary"
+            )
         if not issubclass(self.params, Params):
-            raise TypeError(f"manifest {self.kind}/{self.name}: params must subclass Params")
+            raise PluginDefinitionError(
+                f"manifest {self.kind}/{self.name}: params must subclass Params"
+            )
 
     def params_schema(self) -> dict[str, Any]:
         """The JSON schema of the parameters: types, defaults, bounds, steps, help."""

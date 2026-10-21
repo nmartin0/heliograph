@@ -5,7 +5,7 @@ from collections.abc import Iterable, Iterator
 
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
-from heliograph.core.errors import OutOfOrderError, ReentrancyError
+from heliograph.core.errors import InvalidValueError, OutOfOrderError, ReentrancyError
 from heliograph.core.messages import Message
 from heliograph.core.time import Timestamp
 
@@ -23,7 +23,7 @@ class BacktestEngine:
 
     def __init__(self, clock: SimulatedClock, bus: MessageBus) -> None:
         if not bus.runs_on(clock):
-            raise ValueError("the engine and the bus must share one clock")
+            raise InvalidValueError("the engine and the bus must share one clock")
         self._clock = clock
         self._bus = bus
         self._running = False

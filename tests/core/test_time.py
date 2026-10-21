@@ -4,6 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from heliograph.core.errors import InvalidValueError
 from heliograph.core.time import (
     NANOS_PER_SECOND,
     Timestamp,
@@ -26,7 +27,7 @@ def test_the_same_instant_in_any_zone_gives_the_same_timestamp() -> None:
 
 
 def test_a_naive_datetime_is_refused() -> None:
-    with pytest.raises(ValueError, match="no time zone"):
+    with pytest.raises(InvalidValueError, match="no time zone"):
         from_datetime(datetime(2026, 10, 20))  # noqa: DTZ001 - naive on purpose
 
 
@@ -53,5 +54,10 @@ def test_iso_text_with_an_offset_is_parsed() -> None:
 
 
 def test_iso_text_without_an_offset_is_refused() -> None:
-    with pytest.raises(ValueError, match="no time zone"):
+    with pytest.raises(InvalidValueError, match="no time zone"):
         from_iso("2026-10-20T00:00:00")
+
+
+def test_text_that_is_not_a_date_time_is_refused() -> None:
+    with pytest.raises(InvalidValueError, match="not an ISO 8601 date-time"):
+        from_iso("yesterday")

@@ -4,7 +4,7 @@ import pytest
 
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
-from heliograph.core.errors import LookAheadError
+from heliograph.core.errors import InvalidTypeError, LookAheadError
 from heliograph.core.messages import Message
 from heliograph.core.time import Timestamp
 
@@ -144,7 +144,7 @@ def test_dispatching_is_true_only_inside_handlers(bus: MessageBus) -> None:
 
 
 def test_a_type_isinstance_cannot_check_is_refused_at_subscription(bus: MessageBus) -> None:
-    with pytest.raises(TypeError, match="cannot subscribe to"):
+    with pytest.raises(InvalidTypeError, match="cannot subscribe to"):
         bus.subscribe(Message, lambda _: None)  # type: ignore[type-abstract]
 
 

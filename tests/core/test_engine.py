@@ -8,7 +8,13 @@ from hypothesis import strategies as st
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.engine import BacktestEngine
-from heliograph.core.errors import ClockError, LookAheadError, OutOfOrderError, ReentrancyError
+from heliograph.core.errors import (
+    ClockError,
+    InvalidValueError,
+    LookAheadError,
+    OutOfOrderError,
+    ReentrancyError,
+)
 from heliograph.core.time import Timestamp
 
 
@@ -119,7 +125,7 @@ def test_a_feed_that_starts_before_the_clock_is_refused() -> None:
 
 def test_engine_and_bus_must_share_one_clock() -> None:
     bus = MessageBus(SimulatedClock(Timestamp(0)))
-    with pytest.raises(ValueError, match="share one clock"):
+    with pytest.raises(InvalidValueError, match="share one clock"):
         BacktestEngine(SimulatedClock(Timestamp(0)), bus)
 
 

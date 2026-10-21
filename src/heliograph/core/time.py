@@ -8,6 +8,8 @@ Display time zones belong to the user interface and never reach the core.
 from datetime import UTC, datetime, timedelta
 from typing import NewType
 
+from heliograph.core.errors import InvalidValueError
+
 Timestamp = NewType("Timestamp", int)
 """An instant: nanoseconds since 1970-01-01T00:00:00Z."""
 
@@ -25,10 +27,10 @@ def from_datetime(moment: datetime) -> Timestamp:
     """Convert a time-zone-aware datetime to a timestamp.
 
     Raises:
-        ValueError: if ``moment`` is naive, because its instant is unknown.
+        InvalidValueError: if ``moment`` is naive, because its instant is unknown.
     """
     if moment.utcoffset() is None:
-        raise ValueError(f"naive datetime {moment.isoformat()!r} has no time zone")
+        raise InvalidValueError(f"naive datetime {moment.isoformat()!r} has no time zone")
     delta = moment - _EPOCH
     seconds = delta.days * 86_400 + delta.seconds
     return Timestamp(seconds * NANOS_PER_SECOND + delta.microseconds * NANOS_PER_MICROSECOND)
@@ -47,6 +49,10 @@ def from_iso(text: str) -> Timestamp:
     """Parse an ISO 8601 date-time that states its offset, such as ``2026-10-20T14:30:00Z``.
 
     Raises:
-        ValueError: if the text is not ISO 8601 or has no offset.
+        InvalidValueError: if the text is not ISO 8601 or has no offset.
     """
-    return from_datetime(datetime.fromisoformat(text))
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise InvalidValueError(f"{text!r} is not an ISO 8601 date-time") from exc
+    return from_datetime(moment)

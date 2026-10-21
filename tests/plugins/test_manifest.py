@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from heliograph.core.errors import InvalidValueError
 from heliograph.plugins.errors import PluginDefinitionError
 from heliograph.plugins.manifest import Manifest, NoParams, Params, Plugin, param
 
@@ -67,12 +68,12 @@ def test_plugins_without_parameters_use_no_params() -> None:
 
 @pytest.mark.parametrize("name", ["Moving Average", "1st", "", "moving-average"])
 def test_names_must_be_lowercase_slugs(name: str) -> None:
-    with pytest.raises(ValueError, match="lowercase slug"):
+    with pytest.raises(PluginDefinitionError, match="lowercase slug"):
         Manifest(kind="filters", name=name, version="1", summary="x")
 
 
 def test_a_manifest_needs_a_version_and_summary() -> None:
-    with pytest.raises(ValueError, match="version and a summary"):
+    with pytest.raises(PluginDefinitionError, match="version and a summary"):
         Manifest(kind="filters", name="sma", version=" ", summary="x")
 
 
@@ -86,7 +87,7 @@ def test_a_default_outside_its_own_bounds_is_caught() -> None:
 
 @pytest.mark.parametrize("step", [0, -1, -0.5])
 def test_a_step_must_be_positive(step: float) -> None:
-    with pytest.raises(ValueError, match="step must be positive"):
+    with pytest.raises(InvalidValueError, match="step must be positive"):
         param(10, description="x", ge=0, le=20, step=step)
 
 

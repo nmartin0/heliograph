@@ -5,6 +5,14 @@ class HeliographError(Exception):
     """Base class for all errors raised by Heliograph."""
 
 
+class InvalidValueError(HeliographError, ValueError):
+    """A value was refused because it is malformed or out of range."""
+
+
+class InvalidTypeError(HeliographError, TypeError):
+    """An argument was refused because it is the wrong kind of thing."""
+
+
 class ClockError(HeliographError):
     """A clock was asked to move backwards."""
 
