@@ -57,6 +57,15 @@ class Scheduler(Protocol):
         """Remove the alarm under ``key``, if any."""
         ...
 
+    def claim(self, owner: str) -> None:
+        """Reserve ``owner`` as a key for one component; a second claim is refused.
+
+        Keyed alarms move when set again, so two components using one key would
+        silently steal each other's alarms. Claiming the key first makes that a
+        loud error instead.
+        """
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class _Entry:
@@ -83,17 +92,21 @@ class SchedulerView:
     def cancel(self, key: str) -> None:
         self._queue.cancel(key)
 
+    def claim(self, owner: str) -> None:
+        self._queue.claim(owner)
+
 
 class AlarmQueue:
     """The alarms of one run, in time order. An engine fires them; components set them."""
 
-    __slots__ = ("_clock", "_current", "_heap", "_order")
+    __slots__ = ("_claimed", "_clock", "_current", "_heap", "_order")
 
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
         self._heap: list[tuple[Timestamp, int, int, _Entry]] = []
         self._current: dict[str, _Entry] = {}
         self._order = 0
+        self._claimed: set[str] = set()
 
     def runs_on(self, clock: Clock) -> bool:
         """Whether alarms are checked against ``clock``."""
@@ -121,6 +134,16 @@ class AlarmQueue:
     def cancel(self, key: str) -> None:
         """Remove the alarm under ``key``, if any."""
         self._current.pop(key, None)
+
+    def claim(self, owner: str) -> None:
+        """Reserve ``owner`` for one component.
+
+        Raises:
+            InvalidValueError: if ``owner`` was already claimed.
+        """
+        if owner in self._claimed:
+            raise InvalidValueError(f"alarm key {owner!r} is already claimed by another component")
+        self._claimed.add(owner)
 
     def next_due(self) -> Timestamp | None:
         """When the earliest alarm is due, or None if there is none."""

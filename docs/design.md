@@ -104,6 +104,13 @@ stored as bars and marked so. Every record keeps lineage: source adapter,
 download time, row hash. `received_at` makes data bitemporal, so a backtest can
 read the past as it was known even after a vendor corrects its history.
 
+**Bars (built).** `TimeBars` builds the bars of one stream from its points:
+points go to the bar containing their `event_time`, in any order; each open
+bar is published by an alarm when its interval ends (plus the spec's grace);
+a point arriving at or after its bar's close is counted as late and changes
+nothing. One builder per stream: a second is refused, because components
+claim their alarm keys.
+
 **Streams.** Every consumer (indicator, chart, strategy) is bound to a
 *stream*: an instrument plus a resampler spec (bar size, anchor, time zone and
 session calendar, gap policy, price field). Consumers on the same stream share
