@@ -9,10 +9,16 @@ from hypothesis import strategies as st
 
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.time import (
+    NANOS_PER_DAY,
+    NANOS_PER_HOUR,
+    NANOS_PER_MILLISECOND,
+    NANOS_PER_MINUTE,
     NANOS_PER_SECOND,
     Timestamp,
+    format_span,
     from_datetime,
     from_iso,
+    parse_span,
     to_datetime,
 )
 
@@ -88,3 +94,35 @@ def test_iso_text_finer_than_a_nanosecond_is_refused() -> None:
 def test_an_instant_outside_datetime_range_is_refused(ts: int) -> None:
     with pytest.raises(InvalidValueError, match="outside the range"):
         to_datetime(Timestamp(ts))
+
+
+@pytest.mark.parametrize(
+    ("text", "nanos"),
+    [
+        ("15m", 15 * NANOS_PER_MINUTE),
+        ("4h", 4 * NANOS_PER_HOUR),
+        ("1d", NANOS_PER_DAY),
+        ("1w", 7 * NANOS_PER_DAY),
+        ("1h30m", 90 * NANOS_PER_MINUTE),
+        ("250ms", 250 * NANOS_PER_MILLISECOND),
+        ("1ns", 1),
+    ],
+)
+def test_spans_are_read_and_written_back_exactly(text: str, nanos: int) -> None:
+    assert parse_span(text) == nanos
+    assert format_span(nanos) == text
+
+
+MALFORMED_SPANS = ["", "15", "m", "1.5h", "1h 30m", "30m1h", "1h1h", "0m", "-1h", "1h0m", "01h"]
+MALFORMED_SPANS += ["\u0661h", "99999999999999999999w"]
+
+
+@pytest.mark.parametrize("text", MALFORMED_SPANS)
+def test_malformed_spans_are_refused(text: str) -> None:
+    with pytest.raises(InvalidValueError):
+        parse_span(text)
+
+
+@given(st.integers(1, 10**18))
+def test_any_positive_span_round_trips(nanos: int) -> None:
+    assert parse_span(format_span(nanos)) == nanos

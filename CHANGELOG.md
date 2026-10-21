@@ -60,6 +60,10 @@ All notable changes to Heliograph are recorded here. The format follows
   time it happened by its source and the time Heliograph received it, which is
   when it becomes known. `Bar` gains an optional `received_at` for bars that
   arrive after they close.
+- Stream and bar specs: each consumer names its instrument and how bars are
+  cut (size, anchor, grace for late points, gap policy, price and volume
+  fields); spans such as `15m`, `4h` or `1h30m` are parsed and written back
+  exactly.
 
 ### Fixed
 

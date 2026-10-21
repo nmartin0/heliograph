@@ -79,3 +79,57 @@ def from_iso(text: str) -> Timestamp:
     except ValueError as exc:
         raise InvalidValueError(f"{text!r} is not an ISO 8601 date-time") from exc
     return Timestamp(from_datetime(moment) + extra_nanos)
+
+
+_SPAN_UNITS = {
+    "w": 7 * NANOS_PER_DAY,
+    "d": NANOS_PER_DAY,
+    "h": NANOS_PER_HOUR,
+    "m": NANOS_PER_MINUTE,
+    "s": NANOS_PER_SECOND,
+    "ms": NANOS_PER_MILLISECOND,
+    "us": NANOS_PER_MICROSECOND,
+    "ns": 1,
+}
+_SPAN_PART = re.compile(r"([1-9][0-9]*)(w|d|h|ms|m|s|us|ns)")
+_INT64_MAX = 2**63 - 1
+
+
+def parse_span(text: str) -> int:
+    """A length of time written as ``15m``, ``4h``, ``1d`` or ``1h30m``, in nanoseconds.
+
+    Units are w, d, h, m, s, ms, us and ns, largest first, each with a whole
+    number of ASCII digits and no leading zero. Days and weeks are exact
+    multiples of 24 hours: calendar days are a session calendar's job.
+
+    Raises:
+        InvalidValueError: if the text is not such a span, or is longer than a
+            64-bit count of nanoseconds holds (about 292 years).
+    """
+    parts = _SPAN_PART.findall(text)
+    if not parts or "".join(n + u for n, u in parts) != text:
+        raise InvalidValueError(f"{text!r} is not a span such as 15m, 4h or 1h30m")
+    units = [unit for _, unit in parts]
+    order = list(_SPAN_UNITS)
+    if units != sorted(set(units), key=order.index):
+        raise InvalidValueError(f"{text!r} repeats a unit or lists them out of order")
+    total = sum(int(number) * _SPAN_UNITS[unit] for number, unit in parts)
+    if total > _INT64_MAX:
+        raise InvalidValueError(f"{text!r} is longer than 2**63 nanoseconds")
+    return total
+
+
+def format_span(nanos: int) -> str:
+    """The shortest exact way to write a positive span: 90 minutes is ``1h30m``.
+
+    Raises:
+        InvalidValueError: if ``nanos`` is not positive.
+    """
+    if type(nanos) is not int or not 0 < nanos <= _INT64_MAX:
+        raise InvalidValueError(f"a span must be a positive int64 count, got {nanos!r}")
+    parts = []
+    for unit, size in _SPAN_UNITS.items():
+        count, nanos = divmod(nanos, size)
+        if count:
+            parts.append(f"{count}{unit}")
+    return "".join(parts)
