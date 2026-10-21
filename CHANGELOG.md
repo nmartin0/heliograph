@@ -69,3 +69,10 @@ All notable changes to Heliograph are recorded here. The format follows
   plug-ins as naive values, against the project's time rule.
 - `heliograph` imports from a source folder that was never installed;
   `__version__` is then `0+unknown` instead of an import error.
+
+### Changed
+
+- Decisions D17–D20 and `docs/research/elysium.md`: OCaml is not adopted,
+  the engine runs as a supervisable process behind a JSON API, times cross
+  JSON as ISO strings, and Heliograph stays standalone until Elysium's
+  module API settles; a draft Elysium manifest is in `integrations/elysium/`.

@@ -19,7 +19,8 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 Repository and tooling; UTC nanosecond time; `Instrument` and `Bar`; simulated
 and wall clocks; the time-guarded message bus; the backtest event loop;
 plug-in manifests, parameter schemas and registry; run configuration and
-composition root; layering checks; one error hierarchy. 104 tests.
+composition root; layering checks; one error hierarchy; the eight defects
+found by the Elysium team's review fixed. 128 tests.
 
 **Gate (passed locally):** layer contracts and the no-look-ahead property test
 pass on every commit. **To close:** CI green on GitHub, then tag `v0.1.0`.
@@ -60,8 +61,8 @@ Planned commits, in order:
 earlier, in a test; replaying a journal reproduces the run byte for byte; a
 published snapshot rebuilds exactly from its raw files.
 
-**Decide during the phase:** first market (crypto or US stocks); engine in a
-thread or a separate process.
+**Decide during the phase:** first market (crypto or US stocks). The engine
+runs as its own process (D18).
 
 ## Phase 2 · Backtest engine and strategy pipeline
 
@@ -79,6 +80,13 @@ conformance kit fails on a deliberately peeking indicator.
 
 ## Phase 3 · Graphical workspace
 
+- First: the engine process and its JSON API (D18): supervisable (arguments
+  or environment for port, data and config; `127.0.0.1`; SIGTERM; health;
+  stderr logs; one worker), times as ISO strings (D19), parameter schemas
+  served from `model_json_schema()`.
+- Decide how the screens could appear inside Elysium (D20), once Elysium's
+  module bundles (its step 1.2) exist.
+
 - NiceGUI window; Lightweight Charts element (candles, lines, markers, panes,
   steps); series labelled by stream.
 - Indicator catalogue with settings panels generated from parameter schemas.
@@ -91,6 +99,8 @@ code written for it.
 ## Phase 4 · Signals and paper trading
 
 - Sinks: journal, ntfy, desktop, webhook, Apprise; dispatcher with retries.
+- Optional: a published-records sink writing signals, simulated fills and
+  daily equity to a separate SQLite file that Elysium reads as a silo (D20).
 - The second live source (Alpaca or CCXT, whichever Phase 1 did not build).
 - Paper broker on live data; took-it/skipped journal.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
@@ -114,6 +124,9 @@ online change-point detection, Ornstein–Uhlenbeck exits, triple barrier,
 meta-labelling sizer, wavelet denoising (causal only).
 
 ## Later, not scheduled
+
+Configuration fingerprint over canonical JSON rather than raw text, once a
+tool rather than a person writes configuration files.
 
 Web version for several users (FastAPI underneath NiceGUI; Point72's
 csp-gateway as a reference); a real broker behind the risk gate (ib_async or

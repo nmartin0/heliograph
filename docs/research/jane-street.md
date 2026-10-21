@@ -49,6 +49,24 @@ code, refuse to start on version mismatches, and do not rely on people being
 Multicast, retransmitters, sequencer failover, allocation-free tuning,
 FPGAs and Hardcaml, magic-trace, adopting OCaml.
 
+## Adopting their libraries (assessed 2026-10-21, decision D17)
+
+- All 411 repositories in github.com/janestreet were surveyed: standard
+  library and concurrency (Core, Base, Async), serialisation and RPC (sexp,
+  bin_prot, async_rpc, babel), Incremental, Bonsai, testing (ppx_expect,
+  Quickcheck), about 30 Hardcaml repositories, editor tooling, OxCaml work
+  and forks. None is a trading, market-data, order-book, FIX or backtesting
+  library; Concord is internal.
+- Almost all are MIT. v0.17 (May 2024) needs OCaml 5.1 or later; Async and
+  core_unix do not run natively on Windows.
+- `pythonlib`, the Python bridge, was archived on 2024-11-27 and only
+  supports OCaml 4.11–4.12, so it cannot load current Incremental.
+- Estimate: a rewrite in OCaml costs 90–180 engineer-days more than Python;
+  bridging Incremental alone costs 5–15 more. Worth borrowing as ideas:
+  Incremental's recompute heap and observers, `Time_source` and
+  `testable_timeout`, `babel` and `ppx_stable` for versioned messages,
+  `polling_state_rpc` for diffs to the GUI, `splittable_random`, `expectable`.
+
 ## Unverified
 
 "Favour readers over writers" as an exact phrase; pre-trade check design

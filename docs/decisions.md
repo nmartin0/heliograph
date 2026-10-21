@@ -14,8 +14,9 @@ signals by hand, and keeping execution outside removes the riskiest interface
 
 The core owns protocols and messages and imports only the standard library;
 everything concrete is a plug-in. Dependencies point app → plugins → core.
-**Why:** any part can be replaced without touching the rest; matches Elysium
-and NautilusTrader. **Rejected:** a framework-first design (Backtrader-style
+**Why:** any part can be replaced without touching the rest; the same
+direction of layers as Elysium (whose core, unlike ours, uses third-party
+libraries) and NautilusTrader. **Rejected:** a framework-first design (Backtrader-style
 inheritance) that ties strategies to one engine.
 
 ## D3 · Time is int nanoseconds UTC; `ts` is when a message became known (2026-10-20)
@@ -37,7 +38,8 @@ handler ends delivery and drops the queue, so delivery is never half-resumed.
 
 **Why:** third-party and built-in plug-ins work the same way; one parameter
 declaration drives the GUI, optimiser and presets. **Rejected:** hard-coded
-registries (Elysium's, which it plans to replace), stevedore (adds nothing).
+registries (Elysium's adapter registries are hard-coded dicts; its sub-apps
+moved to `module.json` manifests at `fae3e4e`), stevedore (adds nothing).
 
 ## D6 · TOML run configuration, validated whole and fingerprinted (2026-10-20)
 
@@ -45,7 +47,7 @@ registries (Elysium's, which it plans to replace), stevedore (adds nothing).
 SHA-256 digest ties every run and signal to the exact text. **Rejected:** YAML
 (needs a dependency, ambiguous types).
 
-## D7 · NiceGUI on pywebview; Lightweight Charts for prices (2026-10-20, confirmed 2026-10-21)
+## D7 · NiceGUI on pywebview; Lightweight Charts for prices (2026-10-20, confirmed 2026-10-21; provisional, see D20)
 
 **Why:** one codebase for desktop now and web later; Vue-based custom elements;
 bundles ECharts, AG Grid Community and CodeMirror. Lightweight Charts is
@@ -98,9 +100,10 @@ tulipy and finta (unmaintained).
 
 `DataSource`, `InstrumentProvider`, `SignalSink`, `Broker`; async protocols in
 the core, with the event loop and a bridge to the synchronous bus in the app;
-capabilities checked at composition; limits enforced by a core wrapper. **Why:** Elysium's
-measured 40× slowdown from try-and-catch capability discovery, and the
-Unix-file model the owner proposed. See [research/adapters.md](research/adapters.md).
+capabilities checked at composition; limits enforced by a core wrapper. **Why:** Elysium measured
+a 40× slowdown when filter push-down an adapter could not do fell back to a
+full scan, which declared capabilities avoid; and the Unix-file model the
+owner proposed. See [research/adapters.md](research/adapters.md).
 
 ## D14 · Licence policy: our code is ours (2026-10-21)
 
@@ -122,3 +125,46 @@ The kind is the entry-point group suffix (`heliograph.<kind>`) and the
 `exits`, `risk_gates`, `strategies`. **Why:** the code and tests already use
 plural slugs (`filters`, `data_sources`, `sinks`); one convention prevents
 plug-ins registering under a group nobody reads.
+
+## D17 · Jane Street's OCaml libraries are not adopted (2026-10-21)
+
+**Why:** none of their 411 GitHub repositories is a trading library, and the
+one component they would replace, our indicator graph, is about 300–600
+lines. Rewriting in OCaml was estimated at 90–180 engineer-days extra
+(losing CCXT, TA-Lib, polars, Optuna, statsmodels); bridging Incremental from
+Python at 5–15 days extra, because `pythonlib` is archived and incompatible
+with current Incremental. We take ideas, not code. See
+[research/jane-street.md](research/jane-street.md).
+
+## D18 · The engine runs as its own supervisable process behind a JSON API (2026-10-21)
+
+Every screen reads and acts through a JSON HTTP API (with WebSocket or SSE for
+streams); the GUI holds no logic of its own; parameter schemas are served
+from `model_json_schema()`. The process takes its port, data directory and
+configuration path from arguments or environment, binds to `127.0.0.1` by
+default, saves the paper session and closes the journal on SIGTERM within a
+deadline, serves a health endpoint, logs one structured line per event to
+stderr, and runs as a single worker. **Why:** it keeps every front end open
+(NiceGUI, an Elysium module, a CLI, tests), it answers the open question of
+where the engine runs, and it is the likely shape of Elysium's add-on
+lifecycle contract. **Rejected:** the engine in the GUI's process.
+
+## D19 · Times cross JSON as ISO 8601 strings (2026-10-21)
+
+Inside Heliograph a time is an integer of nanoseconds; on the wire it is an
+ISO 8601 UTC string with up to nine fractional digits, or milliseconds where a
+chart needs numbers. **Why:** a nanosecond timestamp (about 1.8×10¹⁸) is far
+beyond the largest integer a JavaScript number holds exactly (2⁵³).
+
+## D20 · Standalone first; Elysium integration when its module API settles (2026-10-21)
+
+Heliograph runs standalone and does not build against parts of Elysium's
+module system that are not yet decided: module bundles and `activate`, slots,
+the add-on launch contract, identity for add-on servers, the proxy, and add-on
+Inbox, timers and jobs. Allowed now: a draft manifest
+(`integrations/elysium/module.json`) and, optionally, publishing low-rate
+records (signals, simulated fills, daily equity) to a separate SQLite file
+that Elysium reads as a silo by configuration alone. How Heliograph's screens
+appear inside Elysium (a React module over our API, NiceGUI in an iframe, or
+data only) is decided at the start of Phase 3. See
+[research/elysium.md](research/elysium.md).

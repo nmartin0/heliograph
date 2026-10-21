@@ -37,6 +37,7 @@ src/heliograph/
 tests/       the test suite, mirroring the package
 scripts/     developer scripts
 docs/        design, roadmap, decisions, research and lessons
+integrations/  drafts for hosting Heliograph elsewhere (Elysium)
 ```
 
 Dependencies point inward only: `app` may import `plugins` and `core`,

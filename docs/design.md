@@ -263,8 +263,10 @@ what MT5 lacks.
 ## GUI
 
 NiceGUI in native mode (a pywebview window) now, served as a web app later. The
-GUI is a client of application services, never part of the engine; the engine
-runs in its own process or thread. Chart zoom and crosshair stay client-side.
+GUI is a client of the engine's JSON API and holds no logic of its own; the
+engine runs in its own supervisable process (D18). Times cross the API as ISO
+8601 strings (D19). Elysium may host these screens later (D20,
+[research/elysium.md](research/elysium.md)). Chart zoom and crosshair stay client-side.
 The view is a function of state; changes go through actions (Jane Street's
 Bonsai idea).
 
@@ -284,8 +286,8 @@ Libraries per view are in [licensing.md](licensing.md).
 
 - First market to exercise end to end: crypto through CCXT (free, no key) or
   US stocks through Alpaca.
-- Engine placement: same process on a worker thread, or a separate process over
-  a local socket. Decide with a timing test.
+- How Heliograph's screens appear inside Elysium, if they do: a React module
+  over our API, NiceGUI in an iframe, or data only (D20). Decide at Phase 3.
 - Series indexing style in the SDK (`latest`/`previous` versus an index).
 - Whether Point72's ccflow suits Wizard-composed configuration.
 

@@ -1,0 +1,17 @@
+{
+  "id": "heliograph",
+  "name": "Heliograph",
+  "version": "0.1.0",
+  "permission": "heliograph:use",
+  "entry": null,
+  "contributes": {
+    "pages": [
+      { "id": "workspace", "path": "/heliograph" },
+      { "id": "signals", "path": "/heliograph/signals" },
+      { "id": "tester", "path": "/heliograph/tester" }
+    ],
+    "nav": [
+      { "title": "Heliograph", "path": "/heliograph", "subject": "Trading" }
+    ]
+  }
+}

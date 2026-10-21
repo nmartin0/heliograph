@@ -18,7 +18,8 @@ Researched 2026-10-20 (data sources) and 2026-10-21 (adapters).
 - **Capabilities as class attributes**: `max_concurrent_reads`,
   `max_concurrent_writes`, `pushable_operators`,
   `supports_atomic_conditional_write`. The core never asks for what was not
-  declared; the old raise-and-retry approach measured 40× slower.
+  declared. The 40× figure Elysium measured was filter push-down falling back
+  to a full scan, not capability discovery in general.
 - `core/llm/interface.py`: a narrow `Protocol` plus `max_concurrent_requests`,
   a shared `LLMUnavailable`, request deadlines.
 - `core/llm/concurrency_limited_adapter.py`: limits enforced by a wrapper.
@@ -27,8 +28,11 @@ Researched 2026-10-20 (data sources) and 2026-10-21 (adapters).
 - `core/notifications.py`: email and webhooks treated as "places data leaves".
 - `PRINCIPLES.md` §11: copyleft libraries unmodified are fine; modified code
   must be permissive.
-- Registries are hard-coded dicts; `THIRD_PARTY_EXTENSIONS.md` plans entry
-  points. Heliograph starts with entry points.
+- Adapter registries are hard-coded dicts. `THIRD_PARTY_EXTENSIONS.md`, which
+  planned entry points, was folded into `BLOCKING.md` item 3 on `dev`; at
+  `fae3e4e` sub-apps are declared by `module.json` manifests, and modules,
+  not adapters, are the integration surface for Heliograph (see
+  [elysium.md](elysium.md)). Heliograph starts with entry points.
 
 ## Engine interfaces worth mirroring
 

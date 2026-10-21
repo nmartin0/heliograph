@@ -26,6 +26,23 @@ within each section.
 
 ## Python and libraries
 
+- **An outside review found eight defects a full green suite missed**
+  (Elysium team, 2026-10-21): frozen parameters that could not be serialised,
+  a key collision, a wall clock that could step back, dropped nanoseconds,
+  naive TOML times, wrong error types. Tests prove what we thought of; ask for
+  review before building on a layer.
+- **`datetime.fromisoformat` keeps six fractional digits and silently drops
+  the rest.** Parse digits seven to nine ourselves.
+- **Pydantic cannot serialise `MappingProxyType`,** and a frozen model hashes
+  its fields, so a deep-frozen field needs a serializer and `__hash__`.
+- **`time.time_ns()` is not monotonic;** NTP can step it back. A wall clock
+  that feeds a look-ahead guard must hold still instead.
+- **JavaScript numbers hold integers exactly only up to 2⁵³;** nanosecond
+  timestamps cross JSON as ISO strings.
+- **The non-UTC test run took 250 s against 35 s in UTC on the Elysium
+  team's machine,** but 1.3 s in both here (2026-10-21). Not reproduced;
+  watch the timing in CI.
+
 - **PEP 495:** an aware datetime in an ambiguous local hour (a daylight-saving
   fall-back) compares unequal to every instant in another zone. Round-trip
   tests must compare in UTC (`moment.astimezone(UTC)`).
