@@ -14,3 +14,5 @@ All notable changes to Heliograph are recorded here. The format follows
 - `scripts/check.sh`: one entry point for lint, format, strict types and
   tests, including a run in a non-UTC time zone.
 - Continuous integration on GitHub Actions running the same checks.
+- Core time: UTC instants as integer nanoseconds, with conversion from and to
+  aware datetimes and ISO 8601 text; naive datetimes are refused.
