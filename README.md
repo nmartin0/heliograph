@@ -11,7 +11,8 @@ Heliograph never places real-money orders.
 
 ## Status
 
-Phase 0 (foundations) is in progress. See [CHANGELOG.md](CHANGELOG.md).
+Phase 0 (foundations) is done; Phase 1 (data) is next. See
+[docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
@@ -35,6 +36,7 @@ src/heliograph/
   app/       run configuration and the composition root
 tests/       the test suite, mirroring the package
 scripts/     developer scripts
+docs/        design, roadmap, decisions, research and lessons
 ```
 
 Dependencies point inward only: `app` may import `plugins` and `core`,
@@ -48,7 +50,9 @@ library. `./scripts/check.sh` enforces both rules.
   `feat(data): add the CSV source`.
 - `main` always passes `./scripts/check.sh`.
 - Changes arrive as `git format-patch` series and are applied with
-  `git am --3way`.
+  `git am --3way`; see [docs/workflow.md](docs/workflow.md).
+- The documentation in [docs/](docs/README.md) is the project's memory: read
+  the roadmap before starting work and update it when an item lands.
 
 ## License
 

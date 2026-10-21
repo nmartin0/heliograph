@@ -44,3 +44,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - `scripts/make_apply_script.py`: packages a range of commits as a bash
   script that checks the target repository's files before and after applying
   them, makes the person running it the author, and runs the checks.
+- Project documentation in `docs/`: design, roadmap, decisions, licence
+  policy, principles, workflow, lessons and research notes, with
+  `CLAUDE.md` as the entry point for AI-assisted sessions.
