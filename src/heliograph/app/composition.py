@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """The composition root: the one place that turns configuration into objects."""
 
 from typing import Any

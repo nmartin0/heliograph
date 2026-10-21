@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Clocks: the only source of the current time.
 
 Nothing else in Heliograph reads the system time; a lint rule enforces it.

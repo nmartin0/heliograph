@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 import pytest
 
 from heliograph.app.config import ConfigError

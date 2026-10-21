@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Errors raised by the core. Every Heliograph error derives from HeliographError."""
 
 

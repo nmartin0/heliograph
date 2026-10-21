@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest

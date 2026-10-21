@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Errors raised while defining, finding and loading plug-ins."""
 
 from heliograph.core.errors import HeliographError

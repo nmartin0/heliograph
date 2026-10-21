@@ -41,8 +41,12 @@ protects that is about where code comes from, not which libraries we install.
   approved-exceptions file with its reason; an overrides file for wrong or
   empty metadata (TA-Lib's licence field is blank; arctic says GPL on PyPI but
   is LGPL-2.1).
-- Planned (Phase 1): every file in our tree carries the copyright header,
-  except files under `third_party/`.
+- Every Python and shell file under `src/`, `tests/` and `scripts/` starts
+  with the two-line SPDX header (`SPDX-FileCopyrightText: 2026 Nicholas
+  Martin`, `SPDX-License-Identifier: LicenseRef-Proprietary`), after any
+  shebang; `tests/test_headers.py` enforces it. TypeScript joins the list when
+  the GUI arrives. Files under `third_party/` keep their own notices. The
+  LICENSE file covers everything else in the repository.
 
 ## Library choices
 

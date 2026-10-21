@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Instants in time as integer nanoseconds since the Unix epoch, in UTC.
 
 Integer nanoseconds match the int64 timestamps used by Arrow, Parquet, polars

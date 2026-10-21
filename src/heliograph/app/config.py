@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Run configuration: which plug-ins to use, with which parameters.
 
 A run is described by a TOML file::

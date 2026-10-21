@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 # Run every project check. The same script runs locally and in CI.
 # Each check runs even if an earlier one fails; the exit code is non-zero
 # if any of them failed.

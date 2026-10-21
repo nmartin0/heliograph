@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """The plug-in registry: every available plug-in, found through entry points.
 
 A package offers plug-ins by declaring them in its ``pyproject.toml``::

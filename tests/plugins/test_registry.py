@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any

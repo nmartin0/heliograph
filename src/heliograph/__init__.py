@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Heliograph: a plug-in based trading-signal engine."""
 
 from importlib.metadata import PackageNotFoundError

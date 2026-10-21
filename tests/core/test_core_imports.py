@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """The core imports only the standard library and itself.
 
 import-linter enforces the direction between Heliograph's own layers; this

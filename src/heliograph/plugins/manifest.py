@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """How a plug-in describes itself: its manifest and its parameters.
 
 A plug-in's parameters are a Pydantic model. From that one declaration the GUI

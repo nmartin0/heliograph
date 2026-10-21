@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """The backtest event loop: replays recorded feeds through the bus in time order."""
 
 import heapq

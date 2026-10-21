@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Immutable messages exchanged between layers.
 
 Every message published on the bus says when it became known (``ts``). A

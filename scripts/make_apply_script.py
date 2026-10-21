@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
 """Package a range of commits as a self-contained bash script that applies them.
 
 Heliograph changes are written in one checkout and applied in another with

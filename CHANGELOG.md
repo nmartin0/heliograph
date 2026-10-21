@@ -47,6 +47,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - Project documentation in `docs/`: design, roadmap, decisions, licence
   policy, principles, workflow, lessons and research notes, with
   `CLAUDE.md` as the entry point for AI-assisted sessions.
+- Every Python and shell file carries an SPDX copyright header, checked by a
+  test.
 
 ### Fixed
 
