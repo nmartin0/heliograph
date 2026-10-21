@@ -61,3 +61,27 @@ def test_iso_text_without_an_offset_is_refused() -> None:
 def test_text_that_is_not_a_date_time_is_refused() -> None:
     with pytest.raises(InvalidValueError, match="not an ISO 8601 date-time"):
         from_iso("yesterday")
+
+
+@pytest.mark.parametrize(
+    ("text", "nanos"),
+    [
+        ("2026-01-01T00:00:00.123456789Z", 123_456_789),
+        ("2026-01-01T00:00:00.1234567+00:00", 123_456_700),
+        ("2026-01-01T00:00:00,000000001Z", 1),
+        ("2026-01-01T00:00:00.5Z", 500_000_000),
+    ],
+)
+def test_iso_fractions_are_kept_to_the_nanosecond(text: str, nanos: int) -> None:
+    assert from_iso(text) == from_iso("2026-01-01T00:00:00Z") + nanos
+
+
+def test_iso_text_finer_than_a_nanosecond_is_refused() -> None:
+    with pytest.raises(InvalidValueError, match="more precise than a nanosecond"):
+        from_iso("2026-01-01T00:00:00.1234567891Z")
+
+
+@pytest.mark.parametrize("ts", [10**21, -(10**21)])
+def test_an_instant_outside_datetime_range_is_refused(ts: int) -> None:
+    with pytest.raises(InvalidValueError, match="outside the range"):
+        to_datetime(Timestamp(ts))

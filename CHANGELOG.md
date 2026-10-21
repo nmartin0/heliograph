@@ -47,3 +47,10 @@ All notable changes to Heliograph are recorded here. The format follows
 - Project documentation in `docs/`: design, roadmap, decisions, licence
   policy, principles, workflow, lessons and research notes, with
   `CLAUDE.md` as the entry point for AI-assisted sessions.
+
+### Fixed
+
+- `from_iso` keeps fractions of a second to the nanosecond instead of
+  silently dropping digits past the microsecond, and refuses finer ones;
+  `to_datetime` raises `InvalidValueError` for instants outside the years 1
+  to 9999 instead of a bare `OverflowError`.
