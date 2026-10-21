@@ -67,3 +67,5 @@ All notable changes to Heliograph are recorded here. The format follows
 - A run configuration refuses date-times and times of day without a UTC
   offset in plug-in parameters, naming where each one is; they reached
   plug-ins as naive values, against the project's time rule.
+- `heliograph` imports from a source folder that was never installed;
+  `__version__` is then `0+unknown` instead of an import error.
