@@ -16,3 +16,5 @@ All notable changes to Heliograph are recorded here. The format follows
 - Continuous integration on GitHub Actions running the same checks.
 - Core time: UTC instants as integer nanoseconds, with conversion from and to
   aware datetimes and ISO 8601 text; naive datetimes are refused.
+- Core messages: `Instrument` and `Bar`, immutable and self-validating; a bar
+  becomes known when its interval closes.
