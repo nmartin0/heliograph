@@ -30,3 +30,5 @@ All notable changes to Heliograph are recorded here. The format follows
   carries defaults, bounds, search steps and help text.
 - First runtime dependency, pydantic, and `THIRD_PARTY_NOTICES.md` listing
   every runtime component and its license.
+- Plug-in registry: plug-ins are discovered through `heliograph.<kind>` entry
+  points; unknown names fail with a list of the valid ones.
