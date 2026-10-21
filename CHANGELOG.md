@@ -59,3 +59,5 @@ All notable changes to Heliograph are recorded here. The format follows
 - `WallClock` never moves backwards: when the system clock steps back it
   holds at the latest time it reported, instead of letting the bus refuse
   every message already stamped and end a live run.
+- A manifest whose `params` is not a class raises `PluginDefinitionError`
+  instead of a bare `TypeError`.

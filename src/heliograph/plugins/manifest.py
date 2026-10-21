@@ -77,7 +77,7 @@ class Manifest:
             raise PluginDefinitionError(
                 f"manifest {self.kind}/{self.name} needs a version and a summary"
             )
-        if not issubclass(self.params, Params):
+        if not (isinstance(self.params, type) and issubclass(self.params, Params)):
             raise PluginDefinitionError(
                 f"manifest {self.kind}/{self.name}: params must subclass Params"
             )

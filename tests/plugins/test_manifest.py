@@ -77,6 +77,12 @@ def test_a_manifest_needs_a_version_and_summary() -> None:
         Manifest(kind="filters", name="sma", version=" ", summary="x")
 
 
+@pytest.mark.parametrize("params", [WindowParams(), int, "WindowParams"])
+def test_params_must_be_a_params_class(params: object) -> None:
+    with pytest.raises(PluginDefinitionError, match="params must subclass Params"):
+        Manifest(kind="filters", name="sma", version="1", summary="x", params=params)  # type: ignore[arg-type]
+
+
 def test_a_default_outside_its_own_bounds_is_caught() -> None:
     class Broken(Params):
         period: int = param(1, description="Bars in the window", ge=2)
