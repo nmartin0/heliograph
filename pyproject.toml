@@ -51,7 +51,20 @@ select = [
     "N",        # naming
     "DTZ",      # timezone-aware datetimes only
     "RUF",      # ruff-specific
+    "TID",      # banned APIs
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"time.time".msg = "Read the time from a Clock (heliograph.core.clock)."
+"time.time_ns".msg = "Read the time from a Clock (heliograph.core.clock)."
+"datetime.datetime.now".msg = "Read the time from a Clock (heliograph.core.clock)."
+"datetime.datetime.utcnow".msg = "Read the time from a Clock (heliograph.core.clock)."
+"datetime.datetime.today".msg = "Read the time from a Clock (heliograph.core.clock)."
+"datetime.date.today".msg = "Read the time from a Clock (heliograph.core.clock)."
+
+[tool.ruff.lint.per-file-ignores]
+# The wall clock is the one place allowed to read the system time.
+"src/heliograph/core/clock.py" = ["TID251"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -18,3 +18,5 @@ All notable changes to Heliograph are recorded here. The format follows
   aware datetimes and ISO 8601 text; naive datetimes are refused.
 - Core messages: `Instrument` and `Bar`, immutable and self-validating; a bar
   becomes known when its interval closes.
+- Clocks: a forward-only simulated clock for backtests and a wall clock for
+  live data. A lint rule bans reading the system time anywhere else.
