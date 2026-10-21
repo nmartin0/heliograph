@@ -15,6 +15,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "msgspec>=0.19,<1",
     "pydantic>=2.11,<3",
 ]
 
@@ -26,6 +27,9 @@ dev = [
     "pytest>=8.4",
     "ruff>=0.14",
 ]
+
+[project.entry-points."heliograph.journals"]
+sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
 
 [build-system]
 requires = ["hatchling>=1.27"]

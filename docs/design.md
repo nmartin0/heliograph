@@ -62,13 +62,15 @@ contract and a core purity test).
   before time moves on, the engine publishes `Settled(T)`. Consumers that
   combine streams act on it, so a 1-hour bar and a 4-hour bar both closing at
   16:00 are seen together; the Phase 2 indicator graph stabilises on it.
-- **Journal (built in core; SQLite store planned).** The bus numbers every
+- **Journal (built; SQLite store as the `journals/sqlite` plug-in).** The bus numbers every
   message and records it in a `Journal` before delivering it, marked
   `input` (outside data), `engine` (alarms, Settled) or `derived` (what
   handlers published) (Jane Street's Concord idea). Replaying only the inputs
   through the same components reproduces every other entry exactly; that is
-  how a backtest or a live day is reproduced. The header will record code,
-  plug-in and parameter versions.
+  how a backtest or a live day is reproduced. The SQLite journal stores one
+  row per message as deterministic msgspec JSON, so a replay is byte-for-byte
+  identical; its header holds key–value pairs for code, plug-in and parameter
+  versions, and reading it back takes an explicit list of message types.
 - **Indicator graph (planned).** Indicators form a dependency graph that is
   stabilised once per timestamp, after every input stamped at that time has
   arrived (Jane Street's Incremental idea). Nodes recompute in dependency
