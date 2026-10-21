@@ -66,7 +66,9 @@ All notable changes to Heliograph are recorded here. The format follows
   exactly.
 - `Settled`: the backtest engine publishes it once everything at an instant
   has been delivered and before time moves on, so consumers that combine
-  streams see them together.
+  streams see them together; each run ends with a `RunEnded` mark. The engine
+  takes alarms and feed messages in one time-ordered loop, refuses engine
+  messages in feeds, and refuses anything for an instant that has settled.
 - `TimeBars`: builds the bars of a stream from its points and publishes each
   when its interval closes, by alarm, whether or not another point arrives;
   late points are counted and never change a published bar.

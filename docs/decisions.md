@@ -122,7 +122,7 @@ two editable copies.
 The kind is the entry-point group suffix (`heliograph.<kind>`) and the
 `Manifest.kind` value: `data_sources`, `instrument_providers`, `sinks`,
 `brokers`, `indicators`, `forecasters`, `gates`, `combiners`, `sizers`,
-`exits`, `risk_gates`, `strategies`. **Why:** the code and tests already use
+`exits`, `risk_gates`, `strategies`, `journals`. **Why:** the code and tests already use
 plural slugs (`filters`, `data_sources`, `sinks`); one convention prevents
 plug-ins registering under a group nobody reads.
 
@@ -178,3 +178,17 @@ he lives (Binance is closed to US residents; Kraken and Coinbase are not).
 path is exercised constantly, and one adapter covers many exchanges.
 **Rejected for now:** Alpaca first (free tier limited to IEX real time and
 history older than 15 minutes; market hours make live testing slower).
+
+## D22 · The journal: SQLite rows of deterministic msgspec JSON, replayed by run (2026-10-22)
+
+Each bus message is one row (sequence, origin, type, timestamp, payload) with
+the payload encoded by msgspec in deterministic order; messages hold floats,
+not ints, so a value encodes the same before and after a round trip. The
+header records the format, the msgspec version and whether the run finished.
+A replay feeds each run's inputs back with the same `until`, which RunEnded
+marks record; it also needs the same components built in the same order from
+the same start time, which the header should record once runs are built from
+configuration. **Why:** byte-for-byte equality is a test anyone can run, and
+it catches nondeterminism the moment it appears. **Rejected:** pickle (not
+stable across versions, executes code on load), Parquet for the journal
+(append-heavy writes suit SQLite better; Parquet stays for market data).

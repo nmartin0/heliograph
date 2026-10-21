@@ -22,8 +22,9 @@ third-party plug-ins (they run in-process and are trusted).
 ## Packages
 
 ```
-heliograph.core      standard library only: time, messages, clock, bus, engine, errors; ports (planned)
-heliograph.plugins   plug-in base class, manifests, registry; built-in plug-ins later
+heliograph.core      standard library only: time, messages, clock, alarms, bus, engine, streams,
+                     bars, journal, errors; data ports (planned)
+heliograph.plugins   plug-in base class, manifests, registry; built-in plug-ins (journals/sqlite)
 heliograph.app       configuration, composition root, application services, GUI
 heliograph.sdk       (planned) the stable surface strategy authors import
 ```

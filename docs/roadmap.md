@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (4 of 14 commits) |
+| 1 | Data | in progress (9 of 15 commits) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -40,13 +40,19 @@ Planned commits, in order:
 - [x] `feat(core)`: clock alarms (`at`, `every`) fired in time order by the
       engine between feed messages.
 - [x] `feat(core)`: `Point` with `received_at`; `Bar` gains `received_at`.
-- [ ] `feat(core)`: stream specs: bar size, anchor, time zone, session, gap
-      policy, price field.
-- [ ] `feat(core)`: time-bar resampler closed by clock alarms; refuses
-      smaller-from-larger.
-- [ ] `feat(core)`: sequence numbers on the bus and a `Journal` port; the
+- [x] `feat(core)`: stream and bar specs: size, anchor, grace, gap policy,
+      price and volume fields; spans such as `4h` parsed exactly. (Time zones
+      and sessions moved to Phase 4 with the session calendar.)
+- [x] `feat(core)`: `Settled` marks the end of each instant (added: one
+      snapshot per timestamp).
+- [x] `feat(core)`: time bars from points, closed by alarms; late points
+      counted. (Building bars from finer bars, and refusing smaller-from-larger,
+      waits for a consumer that needs it; `BarSpec.can_be_built_from` is ready.)
+- [x] `feat(core)`: sequence numbers on the bus and a `Journal` port; the
       bus journals each message before delivery, in every mode.
-- [ ] `feat(plugins)`: SQLite journal (msgspec records) and replay.
+- [x] `feat(plugins)`: SQLite journal (msgspec records) and replay. (Building
+      it from run configuration needs the header and bus wiring in the app;
+      that comes with the mount table in batch C.)
 - [ ] `feat(core)`: `DataSource` and `InstrumentProvider` ports (async
       protocols) with declared capabilities; `SourceUnavailable`.
 - [ ] `feat(app)`: the asyncio bridge that feeds adapters into the
@@ -59,8 +65,10 @@ Planned commits, in order:
       a parameter of the mount.
 
 **Gate:** a 4h value ending at T is visible to the 1h consumer at T and never
-earlier, in a test; replaying a journal reproduces the run byte for byte; a
-published snapshot rebuilds exactly from its raw files.
+earlier, in a test (passing: `tests/core/test_bars.py`); replaying a journal
+reproduces the run byte for byte (passing:
+`tests/plugins/test_sqlite_journal.py`); a published snapshot rebuilds
+exactly from its raw files (Batch C).
 
 The first market is crypto through CCXT (D21). The engine runs as its own
 process (D18).
@@ -70,7 +78,9 @@ process (D18).
 - Indicator graph with stabilisation per timestamp, cutoffs and observers.
 - Conformance kit (no peeking, edge cases, reference values, manifest).
 - Indicator nodes wrapping TA-Lib streams and talipp; a first set of
-  indicators.
+  indicators. Bars built from finer bars where an indicator needs them.
+- Session calendars (exchange_calendars) for local days and market hours,
+  needed by Alpaca in Phase 4.
 - Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate; the
   `Signal` record and its lifecycle types.
 - One example strategy; simulated fills and cost model; a text report.

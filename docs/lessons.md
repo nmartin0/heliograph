@@ -5,6 +5,10 @@ within each section.
 
 ## Process
 
+- **`check.sh | grep … && git commit` committed a failing change** (2026-10-21):
+  the `&&` tested grep's exit code, which succeeds on "FAILED". Gate commits
+  on the check's own exit status.
+
 - **GitHub can lag the owner's checkout.** After "committed and pushed",
   `origin/main` was still the old base on 2026-10-21. Confirm the owner's tree
   (see workflow.md, step 1) before basing a series on it; the apply script
