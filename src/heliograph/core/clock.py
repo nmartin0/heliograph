@@ -6,6 +6,7 @@ WallClock, and the rest of the system cannot tell the difference.
 """
 
 import time
+from collections.abc import Callable
 from typing import Protocol
 
 from heliograph.core.errors import ClockError
@@ -43,9 +44,22 @@ class SimulatedClock:
 
 
 class WallClock:
-    """The real current time, from the operating system."""
+    """The real current time, from the operating system, never going backwards.
 
-    __slots__ = ()
+    The system clock can step back, for example when NTP corrects it. The bus
+    refuses any message stamped later than now, so a step back would turn
+    every message already stamped into a look-ahead error and stop a live run.
+    This clock therefore holds at the latest time it has reported until the
+    system clock catches up. Live data is stamped with this clock when it is
+    received, not with the venue's own timestamp, for the same reason.
+    """
+
+    __slots__ = ("_latest", "_source")
+
+    def __init__(self, source: Callable[[], int] = time.time_ns) -> None:
+        self._source = source
+        self._latest = Timestamp(source())
 
     def now(self) -> Timestamp:
-        return Timestamp(time.time_ns())
+        self._latest = Timestamp(max(self._latest, self._source()))
+        return self._latest

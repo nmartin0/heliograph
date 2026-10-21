@@ -29,3 +29,9 @@ def test_wall_clock_reads_a_plausible_current_time() -> None:
     assert second >= first
     # Later than 2026-01-01 and earlier than 2100-01-01.
     assert 20_454 * NANOS_PER_DAY < first < 47_482 * NANOS_PER_DAY
+
+
+def test_wall_clock_holds_still_when_the_system_clock_steps_back() -> None:
+    readings = iter([100, 150, 120, 140, 160])
+    clock = WallClock(source=lambda: next(readings))
+    assert [clock.now() for _ in range(4)] == [150, 150, 150, 160]

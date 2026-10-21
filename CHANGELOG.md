@@ -56,3 +56,6 @@ All notable changes to Heliograph are recorded here. The format follows
   to 9999 instead of a bare `OverflowError`.
 - `Instrument` refuses a venue containing `:`, which let two different
   instruments share one key (`a:b` + `c` and `a` + `b:c`).
+- `WallClock` never moves backwards: when the system clock steps back it
+  holds at the latest time it reported, instead of letting the bus refuse
+  every message already stamped and end a live run.
