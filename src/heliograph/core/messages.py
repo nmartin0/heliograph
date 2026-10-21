@@ -104,7 +104,8 @@ class Point:
             raise InvalidValueError(f"point for {key}: values must be a mapping of names")
         if not self.values:
             raise InvalidValueError(f"point for {key} has no values")
-        clean = {name: _finite_number(key, name, value) for name, value in self.values.items()}
+        what = f"point for {key}"
+        clean = {name: _finite_number(what, name, value) for name, value in self.values.items()}
         object.__setattr__(self, "values", FrozenValues(clean))
 
     @property
@@ -140,9 +141,10 @@ class Bar:
             )
         if self.end <= self.start:
             raise InvalidValueError(f"bar for {self.instrument.key} does not end after it starts")
-        prices = (self.open, self.high, self.low, self.close)
-        if not all(math.isfinite(value) for value in (*prices, self.volume)):
-            raise InvalidValueError(f"bar for {self.instrument.key} has a non-finite value")
+        # Stored as floats, so a bar journalled and read back is the same bar.
+        for name in ("open", "high", "low", "close", "volume"):
+            number = _finite_number(f"bar for {self.instrument.key}", name, getattr(self, name))
+            object.__setattr__(self, name, number)
         if not self.low <= min(self.open, self.close) <= max(self.open, self.close) <= self.high:
             raise InvalidValueError(f"bar for {self.instrument.key} has prices outside [low, high]")
         if self.volume < 0:
@@ -157,13 +159,13 @@ class Bar:
 def _finite_number(key: str, name: object, value: Any) -> float:
     """``value`` as a float, refusing anything that is not a finite real number."""
     if not isinstance(name, str) or not name.strip():
-        raise InvalidValueError(f"point for {key} has a value without a name: {name!r}")
+        raise InvalidValueError(f"{key} has a value without a name: {name!r}")
     if isinstance(value, bool) or not isinstance(value, Real):
-        raise InvalidValueError(f"point for {key}: {name} is {value!r}, not a number")
+        raise InvalidValueError(f"{key}: {name} is {value!r}, not a number")
     try:
         number = float(value)
     except OverflowError as exc:
-        raise InvalidValueError(f"point for {key}: {name} is too large for a float") from exc
+        raise InvalidValueError(f"{key}: {name} is too large for a float") from exc
     if not math.isfinite(number):
-        raise InvalidValueError(f"point for {key}: {name} is not finite")
+        raise InvalidValueError(f"{key}: {name} is not finite")
     return number

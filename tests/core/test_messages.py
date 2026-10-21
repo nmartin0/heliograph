@@ -70,8 +70,8 @@ def test_messages_cannot_be_changed_after_creation() -> None:
         ({"end": Timestamp(0)}, "does not end after it starts"),
         ({"high": 104.0}, "outside"),
         ({"low": 101.0}, "outside"),
-        ({"close": math.nan}, "non-finite"),
-        ({"volume": math.inf}, "non-finite"),
+        ({"close": math.nan}, "close is not finite"),
+        ({"volume": math.inf}, "volume is not finite"),
         ({"volume": -1.0}, "negative volume"),
     ],
 )
@@ -158,3 +158,14 @@ def test_points_survive_pickle_deepcopy_and_asdict() -> None:
     assert pickle.loads(pickle.dumps(point)) == point
     assert copy.deepcopy(point) == point
     assert dict(dataclasses.asdict(point)["values"]) == {"price": 101.5, "size": 2.0}
+
+
+def test_bar_values_are_stored_as_floats() -> None:
+    bar = make_bar(open=100, high=110, low=95, close=105, volume=12)
+    assert all(type(getattr(bar, n)) is float for n in ("open", "high", "low", "close", "volume"))
+    assert bar == make_bar(open=100.0, high=110.0, low=95.0, close=105.0, volume=12.0)
+
+
+def test_a_bar_value_that_is_not_a_number_is_refused() -> None:
+    with pytest.raises(InvalidValueError, match="open is True, not a number"):
+        make_bar(open=True)

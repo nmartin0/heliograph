@@ -86,6 +86,8 @@ All notable changes to Heliograph are recorded here. The format follows
   plug-ins as naive values, against the project's time rule.
 - `heliograph` imports from a source folder that was never installed;
   `__version__` is then `0+unknown` instead of an import error.
+- `Bar` stores its prices and volume as floats and refuses booleans, so a bar
+  journalled and read back encodes identically.
 
 ### Changed
 
