@@ -41,3 +41,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - One error hierarchy: every error Heliograph raises derives from
   `HeliographError` and also from the builtin it refines, such as
   `ValueError`, so callers can catch either.
+- `scripts/make_apply_script.py`: packages a range of commits as a bash
+  script that checks the target repository's files before and after applying
+  them, makes the person running it the author, and runs the checks.

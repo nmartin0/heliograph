@@ -68,12 +68,14 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # The wall clock is the one place allowed to read the system time.
 "src/heliograph/core/clock.py" = ["TID251"]
+# Embeds a bash script whose lines are kept whole for readability.
+"scripts/make_apply_script.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 warn_unreachable = true
 
 [tool.pydantic-mypy]
