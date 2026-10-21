@@ -61,3 +61,6 @@ All notable changes to Heliograph are recorded here. The format follows
   every message already stamped and end a live run.
 - A manifest whose `params` is not a class raises `PluginDefinitionError`
   instead of a bare `TypeError`.
+- A run configuration can be dumped to JSON or a dict and hashed; its
+  frozen parameters made `model_dump_json()` raise, `model_dump()` warn and
+  `hash()` fail.

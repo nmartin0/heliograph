@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from heliograph.app.composition import build_components
-from heliograph.app.config import ConfigError, load_config, parse_config
+from heliograph.app.config import ConfigError, RunConfig, load_config, parse_config
 from heliograph.plugins.manifest import Manifest, NoParams, Params, Plugin, param
 from heliograph.plugins.registry import Registry
 
@@ -97,6 +97,34 @@ def test_loaded_parameters_cannot_be_changed() -> None:
     with pytest.raises(TypeError):
         params["nested"]["a"] = 2
     assert params["levels"] == (1, 2)
+
+
+NESTED = (
+    '[[components]]\nkind = "filters"\nplugin = "sma"\n'
+    "params = { period = 50, levels = [1, 2], nested = { a = 1, b = [3] } }\n"
+)
+
+
+def test_a_config_round_trips_through_json() -> None:
+    config = parse_config(NESTED).config
+    text = config.model_dump_json()
+    assert '"levels":[1,2]' in text
+    assert RunConfig.model_validate_json(text) == config
+
+
+def test_dumping_a_config_gives_plain_values_without_warnings() -> None:
+    dumped = parse_config(NESTED).config.model_dump()
+    assert dumped["components"][0]["params"] == {
+        "period": 50,
+        "levels": [1, 2],
+        "nested": {"a": 1, "b": [3]},
+    }
+
+
+def test_equal_configs_hash_equal_and_can_be_set_members() -> None:
+    first, second = parse_config(NESTED).config, parse_config(NESTED).config
+    assert hash(first) == hash(second)
+    assert len({first, second, parse_config(CONFIG).config}) == 2
 
 
 def test_a_misspelt_setting_is_refused() -> None:

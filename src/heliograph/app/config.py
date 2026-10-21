@@ -19,7 +19,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_serializer,
+    field_validator,
+)
 
 from heliograph.core.errors import HeliographError
 
@@ -34,6 +41,24 @@ def _freeze(value: Any) -> Any:
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
     if isinstance(value, list | tuple):
         return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    """A plain copy of a frozen value: mapping proxies become dicts, tuples lists."""
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(item) for item in value]
+    return value
+
+
+def _hash_key(value: Any) -> Any:
+    """A hashable stand-in for a frozen value, equal exactly when the values are."""
+    if isinstance(value, Mapping):
+        return tuple(sorted((key, _hash_key(item)) for key, item in value.items()))
+    if isinstance(value, tuple):
+        return tuple(_hash_key(item) for item in value)
     return value
 
 
@@ -55,6 +80,14 @@ class ComponentConfig(BaseModel):
     def _freeze_params(cls, params: Mapping[str, Any]) -> Mapping[str, Any]:
         frozen: Mapping[str, Any] = _freeze(params)
         return frozen
+
+    @field_serializer("params")
+    def _serialize_params(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        thawed: dict[str, Any] = _thaw(params)
+        return thawed
+
+    def __hash__(self) -> int:
+        return hash((self.kind, self.plugin, _hash_key(self.params)))
 
 
 class RunConfig(BaseModel):
