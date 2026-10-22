@@ -49,7 +49,11 @@ def test_entries_read_back_equal_to_what_was_written(tmp_path: Path) -> None:
     assert header["msgspec"]
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=40)
+# No deadline: each example writes and reads two SQLite files, and disk
+# latency on a loaded machine is no defect (an example once took 271 ms).
+@settings(
+    suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=40, deadline=None
+)
 @given(st.lists(st.tuples(st.integers(0, 700), st.integers(90, 120)), max_size=60))
 def test_phase_1_gate_a_replayed_journal_is_identical_byte_for_byte(
     tmp_path: Path, raw: list[tuple[int, int]]

@@ -112,6 +112,9 @@ within each section.
 - **`pa.Array[Any]` in an annotation fails at import** (pyarrow's classes
   are not subscriptable at run time, though `pyarrow-stubs` makes them
   generic for mypy); quote the annotation.
+- **Hypothesis's default 200 ms deadline fails tests that do file I/O**
+  when the machine is busy (a journal example took 271 ms once, 16 ms on
+  the rerun). Set `deadline=None` on property tests that touch the disk.
 - **A second review found nine defects in a green, fully controlled
   series** (2026-10-22): cancellation lost in a thread, a live bar refused
   for a few milliseconds of clock skew, a semaphore bound to one event loop,
