@@ -1626,3 +1626,10 @@ path = "src/heliograph/plugins/indicators.py"
 old = "        return self._ema.update([2 * value - self._recent[0]])\n"
 new = "        return self._ema.update([value])\n"
 tests = ["tests/plugins/test_indicators.py::test_the_zero_lag_average_follows_its_definition"]
+
+[[control]]
+describes = "Hypothesis has no deadline anywhere in the suite, so a slow machine cannot fail a correct test"
+path = "tests/conftest.py"
+old = "settings.register_profile(\"heliograph\", deadline=None)\n"
+new = "settings.register_profile(\"heliograph\", deadline=1)\n"
+tests = ["tests/core/test_alarms.py::test_alarms_and_data_are_delivered_in_time_order_at_their_own_instant"]

@@ -192,6 +192,8 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- Hypothesis has no deadline anywhere in the suite (tests/conftest.py): on a
+  slower computer a correct property test failed for taking 285 ms.
 - `from_iso` keeps fractions of a second to the nanosecond instead of
   silently dropping digits past the microsecond, and refuses finer ones;
   `to_datetime` raises `InvalidValueError` for instants outside the years 1
