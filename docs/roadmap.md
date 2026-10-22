@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (9 of 15 commits) |
+| 1 | Data | in progress (9 of 22 commits; testing batch next) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -53,6 +53,35 @@ Planned commits, in order:
 - [x] `feat(plugins)`: SQLite journal (msgspec records) and replay. (Building
       it from run configuration needs the header and bus wiring in the app;
       that comes with the mount table in batch C.)
+Testing batch, before the data sources (D23; [testing.md](testing.md)). It
+comes first because batch C adds asynchronous adapters and a live
+exchange, which are hard to test well once built:
+
+- [ ] `test`: shared builders in `tests/support` (an instrument defined in
+      five files, `build()` in four, `ticks()` in three).
+- [ ] `build`: random test order (pytest-randomly) and branch coverage
+      reported per file in `check.sh`; CI fails if the checks changed the
+      working tree.
+- [ ] `test`: cross-process determinism: the same session in fresh
+      interpreters with different `PYTHONHASHSEED` and `TZ` gives
+      byte-identical journals. The control is a handler publishing once per
+      item of a set of strings.
+- [ ] `test`: suite rules in `tests/meta`:
+  - no `all(...)` over a collection not shown to be non-empty;
+  - no test imports from a conftest;
+  - every step of `check.sh` can fail the script;
+  - no skip without a stated platform reason;
+  - each rule asserts it found something to check.
+- [ ] `build`: `scripts/check_controls.py` with a declared control for
+      every guard written so far, and a `controls` job in CI.
+- [ ] `build`: `scripts/mutation_test.py` (mutmut in a scratch copy,
+      structural tests deselected); its survivors over the core either
+      tested or recorded.
+- [ ] `test`: a state machine checking the engine and alarm queue against a
+      sorted-list reference after any sequence of feeds, alarms and runs.
+
+Batch C:
+
 - [ ] `feat(core)`: `DataSource` and `InstrumentProvider` ports (async
       protocols) with declared capabilities; `SourceUnavailable`.
 - [ ] `feat(app)`: the asyncio bridge that feeds adapters into the
@@ -67,8 +96,9 @@ Planned commits, in order:
 **Gate:** a 4h value ending at T is visible to the 1h consumer at T and never
 earlier, in a test (passing: `tests/core/test_bars.py`); replaying a journal
 reproduces the run byte for byte (passing:
-`tests/plugins/test_sqlite_journal.py`); a published snapshot rebuilds
-exactly from its raw files (Batch C).
+`tests/plugins/test_sqlite_journal.py`), and in a fresh process with a
+different hash seed and time zone (testing batch); a published snapshot
+rebuilds exactly from its raw files (Batch C).
 
 The first market is crypto through CCXT (D21). The engine runs as its own
 process (D18).
@@ -76,7 +106,13 @@ process (D18).
 ## Phase 2 · Backtest engine and strategy pipeline
 
 - Indicator graph with stabilisation per timestamp, cutoffs and observers.
-- Conformance kit (no peeking, edge cases, reference values, manifest).
+- Conformance kits (no peeking, edge cases, reference values, manifest) run
+  on every registered plug-in by default; each check `error`, `todo` or
+  `off` with a reason; a broken sample plug-in per kind; a softened-checks
+  report; `heliograph.testkit` as a pytest plugin for outside plug-ins
+  ([testing.md](testing.md)).
+- Scenario tests after LEAN's regression algorithms: recorded counts,
+  statistics and signals; reports compared as text with inline-snapshot.
 - Indicator nodes wrapping TA-Lib streams and talipp; a first set of
   indicators. Bars built from finer bars where an indicator needs them.
 - Session calendars (exchange_calendars) for local days and market hours,
@@ -94,7 +130,9 @@ conformance kit fails on a deliberately peeking indicator.
 - First: the engine process and its JSON API (D18): supervisable (arguments
   or environment for port, data and config; `127.0.0.1`; SIGTERM; health;
   stderr logs; one worker), times as ISO strings (D19), parameter schemas
-  served from `model_json_schema()`.
+  served from `model_json_schema()`. Tested outside-in: the process started
+  as a person would start it, by tests that import nothing from
+  `heliograph`.
 - Decide how the screens could appear inside Elysium (D20), once Elysium's
   module bundles (its step 1.2) exist.
 

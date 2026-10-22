@@ -10,6 +10,7 @@ session.
 | [roadmap.md](roadmap.md) | Phases, gates, status, the next commits | an item lands or the plan changes |
 | [workflow.md](workflow.md) | How a change is made, checked, packaged and applied | the process changes |
 | [principles.md](principles.md) | The rules that decide design questions; coding standards | rarely |
+| [testing.md](testing.md) | How the code is tested: layers, controls, what fails and what skips | the testing practice changes |
 | [design.md](design.md) | Architecture, ports, data model, pipeline, adapters, GUI | the design changes |
 | [decisions.md](decisions.md) | Numbered decisions with their reasons and alternatives | a decision is made or reversed |
 | [licensing.md](licensing.md) | What code and libraries we may use, and the checks | the policy changes or a dependency is added |

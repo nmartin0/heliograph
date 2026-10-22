@@ -14,4 +14,5 @@ should be re-checked before relying on them.
 | [jane-street.md](jane-street.md) | Jane Street's engineering ideas and which apply to us |
 | [adapters.md](adapters.md) | Elysium's adapters, other engines' interfaces, data sources and their terms |
 | [libraries.md](libraries.md) | Library and trading-firm open-source evaluations behind the choices |
+| [testing.md](testing.md) | How Elysium and trading engines test, which tools fit, and how our suite measures |
 | [elysium.md](elysium.md) | Running Heliograph as a module of Elysium: what exists, what is deferred |

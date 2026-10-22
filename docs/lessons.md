@@ -30,6 +30,20 @@ within each section.
 
 ## Python and libraries
 
+- **Replaying inside one process cannot catch hash-order nondeterminism**
+  (2026-10-22). A handler publishing once per item of a set of strings
+  replays equal in-process. Yet its journal digest differed in each of
+  three processes with different `PYTHONHASHSEED`. Determinism needs a test
+  across fresh interpreters.
+- **mutmut injects an import into every mutated module,**
+  `mutmut.mutation.trampoline`, so our core-purity test fails every mutant.
+  Deselect the structural tests during mutation runs. The purity test was
+  right.
+- **A copied virtual environment runs the original's packages.** The
+  scripts in `.venv/bin` keep absolute shebangs, so `uv run pytest` in a
+  copy used the source tree's interpreter and missed newly installed
+  plug-ins. Recreate `.venv` in a copy, or call `python -m pytest`.
+
 - **An outside review found eight defects a full green suite missed**
   (Elysium team, 2026-10-21): frozen parameters that could not be serialised,
   a key collision, a wall clock that could step back, dropped nanoseconds,

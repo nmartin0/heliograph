@@ -192,3 +192,33 @@ configuration. **Why:** byte-for-byte equality is a test anyone can run, and
 it catches nondeterminism the moment it appears. **Rejected:** pickle (not
 stable across versions, executes code on load), Parquet for the journal
 (append-heavy writes suit SQLite better; Parquet stays for market data).
+
+## D23 · Our own testing framework, after Elysium's practice (2026-10-22)
+
+A test is unproven until a deliberate break has made it fail. The breaks
+are kept as declared controls in a script that CI runs. mutmut looks for
+the breaks nobody thought of. Rules about the suite itself are checked
+mechanically. A missing dependency fails rather than skips. Tests run in
+random order and in a second time zone. Journals are compared across
+processes with different hash seeds. Plug-ins share conformance kits that
+run by default, with each check `error`, `todo` or `off` and a reason for
+softening. Whole backtests are regression-tested against recorded counts
+and statistics, as LEAN does. Details in [testing.md](testing.md).
+
+**Why:**
+- Elysium counted nine controls that had silently stopped firing before it
+  kept them in a script.
+- Its production read path went untested behind a skip.
+- Measured here: in-process replay cannot see output that depends on the
+  hash seed.
+
+**Rejected:**
+- Coverage targets as the measure: Elysium's 96% hid a 63% file.
+- Mocking the clock (time-machine, freezegun): our core already takes a
+  `Clock`.
+- cosmic-ray: heavier than mutmut.
+- pytest-asyncio: `asyncio.run` in a test suffices.
+- A copied test template per plug-in: copies drift, and an inherited kit
+  carries every fix.
+
+See [research/testing.md](research/testing.md).

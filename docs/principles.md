@@ -61,7 +61,7 @@ time zones belong to the GUI.
 the other way. import-linter enforces the direction and a test parses every core
 module to keep third-party imports out.
 
-**Tests**
+**Tests** (the full framework is [testing.md](testing.md))
 
 - pytest with `filterwarnings = error`, strict markers and strict xfail.
 - Hypothesis for properties, such as "no output at time t changes when data

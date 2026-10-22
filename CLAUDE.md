@@ -16,6 +16,7 @@ behind a port owned by a standard-library-only core.
 Then, as the task needs: [`docs/design.md`](docs/design.md) (architecture),
 [`docs/decisions.md`](docs/decisions.md) (why things are the way they are),
 [`docs/licensing.md`](docs/licensing.md) (what code and libraries we may use),
+[`docs/testing.md`](docs/testing.md) (how tests are written and proven),
 [`docs/lessons.md`](docs/lessons.md) (mistakes not to repeat) and
 [`docs/research/`](docs/research/) (findings with sources).
 
