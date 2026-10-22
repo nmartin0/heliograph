@@ -429,3 +429,17 @@ new = 'def publish(self, message: Message, *, origin: Origin = "engine") -> None
 tests = [
     "tests/core/test_journal.py::test_a_message_published_straight_to_the_bus_is_journalled_as_input",
 ]
+
+[[control]]
+describes = "a repeating alarm keeps its exact period"
+path = "src/heliograph/core/alarms.py"
+old = "_Entry(Timestamp(entry.ts + entry.period), entry.order"
+new = "_Entry(Timestamp(entry.ts + entry.period + 1), entry.order"
+tests = ["tests/core/test_engine_state_machine.py::test_the_engine_matches_its_reference"]
+
+[[control]]
+describes = "a handler may set an alarm for the instant it is handling"
+path = "src/heliograph/core/alarms.py"
+old = "        if ts < now:\n"
+new = "        if ts <= now:\n"
+tests = ["tests/core/test_engine_state_machine.py::test_the_engine_matches_its_reference"]

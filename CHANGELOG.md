@@ -94,6 +94,8 @@ All notable changes to Heliograph are recorded here. The format follows
   unless every test it names fails; CI runs them as their own job.
 - scripts/mutation_test.py mutation-tests one module against the tests that
   cover it (mutmut, in a scratch copy) and lists every change no test noticed.
+- A state-machine test runs random sequences of alarm changes and runs against
+  a slow reference model of the engine.
 
 ### Fixed
 
