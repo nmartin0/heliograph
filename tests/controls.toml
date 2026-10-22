@@ -920,6 +920,39 @@ new = "                    if happened >= request.end + 10**12:\n               
 tests = ["tests/plugins/test_store.py::test_the_store_source_reads_a_snapshot_on_its_sources_terms"]
 
 [[control]]
+describes = "history is downloaded for a backtest only"
+path = "src/heliograph/app/data.py"
+old = "    if config.mode != \"backtest\":\n"
+new = "    if config.mode == \"neither\":\n"
+tests = ["tests/app/test_data.py::test_history_is_downloaded_for_a_backtest_only"]
+
+[[control]]
+describes = "every source is closed after downloading, even when one fails"
+path = "src/heliograph/app/data.py"
+old = """    finally:
+        sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
+        for source in sources.values():
+            await source.close()
+    return done
+"""
+new = """    except BaseException:
+        raise
+    else:
+        sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
+        for source in sources.values():
+            await source.close()
+    return done
+"""
+tests = ["tests/app/test_data.py::test_a_failed_download_keeps_those_before_it_and_closes_every_source"]
+
+[[control]]
+describes = "mounts on one dataset are published once"
+path = "src/heliograph/app/data.py"
+old = "        found.setdefault(dataset.name, dataset)\n"
+new = "        found[f'{dataset.name}{len(found)}'] = dataset\n"
+tests = ["tests/app/test_data.py::test_mounts_on_one_dataset_are_published_once"]
+
+[[control]]
 describes = "a publish that loses a race returns the snapshot already in place"
 path = "src/heliograph/plugins/store.py"
 old = "                if not (self.published / snapshot_id / \"manifest.json\").is_file():\n"

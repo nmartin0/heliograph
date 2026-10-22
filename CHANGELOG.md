@@ -133,6 +133,10 @@ All notable changes to Heliograph are recorded here. The format follows
   their inputs. `verify` rebuilds a snapshot from its raw files and compares
   bytes (the Phase 1 gate), and the `store` data source reads a snapshot on
   the live delay and terms of the source its data came from.
+- `download_mounts` downloads a backtest's mounts into the store after
+  checking them, closing every source afterwards, and `publish_mounts`
+  publishes their datasets as one snapshot, which a backtest then reads
+  through `store` mounts.
 
 ### Fixed
 
