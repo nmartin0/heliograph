@@ -953,6 +953,76 @@ new = "        found[f'{dataset.name}{len(found)}'] = dataset\n"
 tests = ["tests/app/test_data.py::test_mounts_on_one_dataset_are_published_once"]
 
 [[control]]
+describes = "a CCXT page's repeats of trades already delivered are dropped, copy by copy"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if ms == boundary and repeats[key] > 0:\n"
+new = "                if ms == boundary and repeats[key] > 1:\n"
+tests = [
+    "tests/plugins/test_ccxt_source.py::test_trades_are_read_page_by_page_each_once_in_order_within_the_request",
+    "tests/plugins/test_ccxt_source.py::test_identical_trades_at_a_page_boundary_are_each_delivered_once",
+]
+
+[[control]]
+describes = "only candles whole within the request are bars"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if start + size > request.end:  # not whole within the request\n"
+new = "                if start >= request.end:  # not whole within the request\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_the_candle_still_forming_is_never_taken_for_a_finished_bar"]
+
+[[control]]
+describes = "candles starting a bar or more after the request stop the read"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "fresh[0][0] * MS - request.start >= size:"
+new = "fresh[0][0] * MS - request.start >= 100 * size:"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_start_further_back_than_the_exchange_keeps_candles_stops_the_read"]
+
+[[control]]
+describes = "the CCXT source declares the exchange's rate limit"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            rate_limit=RateLimit(calls=1, period=period),\n"
+new = "            rate_limit=RateLimit(calls=2, period=period),\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_capabilities_are_what_ccxt_declares_about_the_exchange"]
+
+[[control]]
+describes = "a symbol the exchange does not list is invalid, not unavailable"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            except ccxt.BadSymbol as exc:\n"
+new = "            except ccxt.InvalidAddress as exc:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_ccxt_errors_become_the_ports_errors"]
+
+[[control]]
+describes = "the CCXT source refuses an instrument on another venue"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "        if instrument.venue != self.params.exchange:\n"
+new = "        if instrument.venue == '':\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_an_instrument_on_another_venue_is_refused"]
+
+[[control]]
+describes = "a buy is side 1 and a sell side -1"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "        values[\"side\"] = 1.0 if side == \"buy\" else -1.0\n"
+new = "        values[\"side\"] = -1.0 if side == \"buy\" else 1.0\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_trades_are_read_page_by_page_each_once_in_order_within_the_request"]
+
+[[control]]
+describes = "a CCXT read that cannot reach the newest trades stops with an error"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "        if times and max(times) >= after:\n"
+new = "        if times and max(times) >= after + 10**12:\n"
+tests = [
+    "tests/plugins/test_ccxt_source.py::test_a_second_busier_than_a_page_stops_the_read_rather_than_return_less",
+]
+
+[[control]]
+describes = "a CCXT trade is recognised by what it is, not by an id"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "    return (trade[\"timestamp\"], trade[\"price\"], trade[\"amount\"], trade.get(\"side\"))\n"
+new = "    return (trade.get(\"id\"), trade[\"timestamp\"], trade[\"price\"], trade[\"amount\"])\n"
+tests = [
+    "tests/plugins/test_ccxt_source.py::test_an_id_on_one_page_and_not_the_next_does_not_make_a_trade_look_new",
+]
+
+[[control]]
 describes = "a publish that loses a race returns the snapshot already in place"
 path = "src/heliograph/plugins/store.py"
 old = "                if not (self.published / snapshot_id / \"manifest.json\").is_file():\n"

@@ -137,6 +137,13 @@ All notable changes to Heliograph are recorded here. The format follows
   checking them, closing every source afterwards, and `publish_mounts`
   publishes their datasets as one snapshot, which a backtest then reads
   through `store` mounts.
+- The `ccxt` data source (D21): history trades and candles and live trades
+  from one exchange through CCXT, the exchange a parameter. Capabilities come
+  from what CCXT declares about the exchange; CCXT's own throttle is off and
+  every request goes through ours. Pages that repeat trades are read once;
+  only whole candles become bars; a history shorter than asked stops the read.
+  Live tests (`uv run pytest -m live`) check it against Kraken; they are
+  excluded by default. Adds ccxt (MIT) and its dependencies.
 
 ### Fixed
 

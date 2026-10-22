@@ -15,6 +15,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "ccxt>=4.5,<5",
     "msgspec>=0.19,<1",
     "pyarrow>=22,<27",
     "pydantic>=2.11,<3",
@@ -38,6 +39,7 @@ sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
 
 [project.entry-points."heliograph.data_sources"]
 file = "heliograph.plugins.file_source:FileSource"
+ccxt = "heliograph.plugins.ccxt_source:CcxtSource"
 store = "heliograph.plugins.store:StoreSource"
 
 [project.entry-points."heliograph.instrument_providers"]
@@ -101,6 +103,11 @@ mypy_path = ["src", "."]
 explicit_package_bases = true
 warn_unreachable = true
 
+[[tool.mypy.overrides]]
+# CCXT ships no type information; its objects are Any to mypy.
+module = ["ccxt", "ccxt.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
@@ -111,9 +118,15 @@ minversion = "8.0"
 testpaths = ["tests"]
 # The repository root, so tests import shared builders as `tests.support`.
 pythonpath = ["."]
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+# Live tests talk to real services; they run only when asked: -m live.
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not live"]
+markers = ["live: talks to a real exchange; run on request with -m live"]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # CCXT asks aiohttp for a work-around Python 3.13 no longer needs; harmless.
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning",
+]
 
 [tool.importlinter]
 root_package = "heliograph"
@@ -128,6 +141,11 @@ layers = ["heliograph.app", "heliograph.plugins", "heliograph.core"]
 
 [tool.heliograph.licences.overrides]
 # Package = "SPDX expression", where its metadata is wrong or empty.
+# multidict 6.9: metadata says "Apache License 2.0", not an SPDX identifier.
+multidict = "Apache-2.0"
+# winloop: Windows only, so not installed here to read; PyPI's metadata for
+# 0.6.3 states the MIT License.
+winloop = "MIT"
 
 [tool.heliograph.licences.exceptions]
 # Package = "reason", for a denied licence accepted case by case.
@@ -136,6 +154,7 @@ layers = ["heliograph.app", "heliograph.plugins", "heliograph.core"]
 # Package = "URL", where its metadata has no useful project link.
 pydantic-core = "https://github.com/pydantic/pydantic-core"
 typing-extensions = "https://github.com/python/typing_extensions"
+winloop = "https://github.com/Vizonex/Winloop"
 
 [tool.heliograph.coverage]
 # Branch coverage each source file must reach; scripts/coverage_floor.py.
