@@ -1,0 +1,326 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
+# Declared negative controls: each breaks one guarantee on purpose, and the
+# tests named must then fail. scripts/check_controls.py applies each break,
+# runs those tests, expects every one of them to fail, and restores the file.
+# A control whose tests still pass is the finding: either the break is not
+# the break it claims, or the tests do not check what they appear to.
+#
+#   describes  the guarantee, in its own words
+#   path       the file to break, from the repository root
+#   old        text that must occur exactly once in that file
+#   new        what replaces it
+#   tests      pytest node ids that must each fail
+#
+# Add a control when a test that guards a rule is written (docs/testing.md).
+
+[[control]]
+describes = "the bus refuses a message stamped after the clock"
+path = "src/heliograph/core/bus.py"
+old = "        if message.ts > now:\n"
+new = "        if False:\n"
+tests = [
+    "tests/core/test_bus.py::test_a_message_from_the_future_is_refused",
+    "tests/core/test_bus.py::test_a_handler_cannot_publish_into_the_future",
+    "tests/core/test_engine.py::test_a_component_reaching_into_the_future_stops_the_run",
+]
+
+[[control]]
+describes = "every message is journalled before it is delivered"
+path = "src/heliograph/core/bus.py"
+old = "            self._journal.append(JournalEntry(sequence, recorded, message))\n"
+new = "            pass\n"
+tests = [
+    "tests/core/test_journal.py::test_a_message_is_recorded_before_anyone_receives_it",
+    "tests/core/test_journal.py::test_every_message_is_numbered_and_marked_with_its_origin",
+]
+
+[[control]]
+describes = "a message the journal refuses uses no sequence number"
+path = "src/heliograph/core/bus.py"
+old = "        sequence = self._sequence + 1\n"
+new = "        self._sequence += 1\n        sequence = self._sequence\n"
+tests = [
+    "tests/core/test_journal.py::test_a_message_the_journal_refuses_uses_no_sequence_number",
+]
+
+[[control]]
+describes = "a feed that goes back in time is refused"
+path = "src/heliograph/core/engine.py"
+old = "        if previous is not None and message.ts < previous:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_engine.py::test_a_feed_that_goes_back_in_time_is_refused"]
+
+[[control]]
+describes = "a feed cannot carry messages only the engine makes"
+path = "src/heliograph/core/engine.py"
+old = "        if isinstance(message, ENGINE_MESSAGES):\n"
+new = "        if False:\n"
+tests = ["tests/core/test_settled.py::test_a_feed_cannot_carry_messages_only_the_engine_makes"]
+
+[[control]]
+describes = "nothing is delivered at an instant that has settled"
+path = "src/heliograph/core/engine.py"
+old = "        if self._settled_up_to is not None and message.ts <= self._settled_up_to:\n"
+new = "        if self._settled_up_to is not None and message.ts < self._settled_up_to:\n"
+tests = ["tests/core/test_settled.py::test_a_later_run_cannot_add_to_an_instant_that_settled"]
+
+[[control]]
+describes = "an alarm in the past is refused"
+path = "src/heliograph/core/alarms.py"
+old = "        if ts < now:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_alarms.py::test_an_alarm_in_the_past_is_refused"]
+
+[[control]]
+describes = "alarms due together fire in the order they were set"
+path = "src/heliograph/core/alarms.py"
+old = "heapq.heappush(self._heap, (entry.ts, entry.order, self._next(), entry))"
+new = "heapq.heappush(self._heap, (entry.ts, -entry.order, self._next(), entry))"
+tests = [
+    "tests/core/test_alarms.py::test_alarms_due_at_the_same_time_fire_in_the_order_they_were_set",
+]
+
+[[control]]
+describes = "a point arriving after its bar closed is late and changes nothing"
+path = "src/heliograph/core/bars.py"
+old = "        if closed or self._closes_at(start) <= point.ts:\n"
+new = "        if closed:\n"
+tests = [
+    "tests/core/test_bars.py::test_a_point_received_exactly_at_its_close_is_late_first_or_not",
+]
+
+[[control]]
+describes = "a bar waits its grace for points that happened before its end"
+path = "src/heliograph/core/bars.py"
+old = "        return Timestamp(start + self._spec.size + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size)\n"
+tests = ["tests/core/test_bars.py::test_grace_waits_for_points_that_happened_before_the_end"]
+
+[[control]]
+describes = "the wall clock holds still when the system clock steps back"
+path = "src/heliograph/core/clock.py"
+old = "        self._latest = Timestamp(max(self._latest, self._source()))\n"
+new = "        self._latest = Timestamp(self._source())\n"
+tests = ["tests/core/test_clock.py::test_wall_clock_holds_still_when_the_system_clock_steps_back"]
+
+[[control]]
+describes = "a naive datetime is refused"
+path = "src/heliograph/core/time.py"
+old = "    if moment.utcoffset() is None:\n"
+new = "    if False:\n"
+tests = ["tests/core/test_time.py::test_a_naive_datetime_is_refused"]
+
+[[control]]
+describes = "ISO text keeps digits seven to nine of the fraction"
+path = "src/heliograph/core/time.py"
+old = "        extra_nanos = int(digits[6:].ljust(3, \"0\"))\n"
+new = "        extra_nanos = 0\n"
+tests = ["tests/core/test_time.py::test_iso_fractions_are_kept_to_the_nanosecond"]
+
+[[control]]
+describes = "a venue may not contain a colon, so instrument keys stay unique"
+path = "src/heliograph/core/messages.py"
+old = "        if \":\" in self.venue:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_messages.py::test_a_venue_may_not_contain_a_colon_so_keys_stay_unique"]
+
+[[control]]
+describes = "a bar cannot be received before it closes"
+path = "src/heliograph/core/messages.py"
+old = "        if self.received_at is not None and self.received_at < self.end:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_messages.py::test_a_bar_cannot_be_received_before_it_closes"]
+
+[[control]]
+describes = "replay stops each run where the original stopped"
+path = "src/heliograph/core/journal.py"
+old = "            found.append((current, entry.message.ts))\n"
+new = "            found.append((current, None))\n"
+tests = [
+    "tests/core/test_journal.py::test_phase_1_gate_replaying_the_inputs_reproduces_the_journal",
+    "tests/plugins/test_sqlite_journal.py::test_phase_1_gate_a_replayed_journal_is_identical_byte_for_byte",
+]
+
+[[control]]
+describes = "a journal file is never overwritten"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "os.O_CREAT | os.O_EXCL | os.O_WRONLY"
+new = "os.O_CREAT | os.O_WRONLY"
+tests = [
+    "tests/plugins/test_sqlite_journal.py::test_a_journal_is_never_overwritten",
+    "tests/plugins/test_sqlite_journal.py::test_an_empty_file_or_a_folder_is_not_taken_for_a_new_journal",
+]
+
+[[control]]
+describes = "the journal's own header keys cannot be given by a caller"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "        clash = RESERVED_HEADER & set(header or {})\n"
+new = "        clash = RESERVED_HEADER & set()\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_reserved_header_keys_are_refused"]
+
+[[control]]
+describes = "a parameter default outside its own bounds is caught"
+path = "src/heliograph/plugins/manifest.py"
+old = "validate_default=True"
+new = "validate_default=False"
+tests = ["tests/plugins/test_manifest.py::test_a_default_outside_its_own_bounds_is_caught"]
+
+[[control]]
+describes = "two plug-ins cannot share a kind and name"
+path = "src/heliograph/plugins/registry.py"
+old = "        if existing is not None and existing is not plugin:\n"
+new = "        if False:\n"
+tests = [
+    "tests/plugins/test_registry.py::test_two_plugins_cannot_share_a_kind_and_name",
+    "tests/plugins/test_registry.py::test_discovery_refuses_a_name_already_taken",
+]
+
+[[control]]
+describes = "a time without an offset in run configuration is refused"
+path = "src/heliograph/app/config.py"
+old = "    if isinstance(value, datetime | time) and value.utcoffset() is None:\n"
+new = "    if False:\n"
+tests = ["tests/app/test_composition.py::test_a_time_without_an_offset_is_refused_where_it_is"]
+
+# The rules about the tests themselves (tests/meta/test_suite_rules.py), and
+# the harness of the determinism test. Each break disables a rule's check, and
+# the rule's own test of planted offences must then fail.
+
+[[control]]
+describes = "the emptiness rule flags all() with no guard on its collection"
+path = "tests/meta/test_suite_rules.py"
+old = "            if not guards:\n"
+new = "            if False:\n"
+tests = [
+    "tests/meta/test_suite_rules.py::test_the_emptiness_rule_needs_a_guard_on_the_same_collection",
+]
+
+[[control]]
+describes = "the conftest rule flags every spelling of a conftest import"
+path = "tests/meta/test_suite_rules.py"
+old = 'if any(name.split(".")[-1] == "conftest" for name in names):'
+new = "if False:"
+tests = ["tests/meta/test_suite_rules.py::test_the_conftest_rule_catches_every_spelling"]
+
+[[control]]
+describes = "the skip rule flags a bare skip decorator"
+path = "tests/meta/test_suite_rules.py"
+old = "for d in node.decorator_list if dotted(d) in SKIPS"
+new = "for d in node.decorator_list if False"
+tests = [
+    "tests/meta/test_suite_rules.py::test_the_skip_rule_catches_reasonless_skips_and_passes_reasoned_ones",
+]
+
+[[control]]
+describes = "the sleep rule flags sleep imported by name"
+path = "tests/meta/test_suite_rules.py"
+old = 'if isinstance(node, ast.ImportFrom) and any(a.name == "sleep" for a in node.names)'
+new = "if False"
+tests = ["tests/meta/test_suite_rules.py::test_the_sleep_rule_catches_every_spelling"]
+
+[[control]]
+describes = "the step rule flags any command in check.sh outside run"
+path = "tests/meta/test_suite_rules.py"
+old = "        if line and not line.startswith((\"#\", \"run \"))\n"
+new = "        if False\n"
+tests = ["tests/meta/test_suite_rules.py::test_the_step_rule_catches_any_command_outside_run"]
+
+[[control]]
+describes = "a failing step in check.sh fails the script"
+path = "scripts/check.sh"
+old = "        failed+=(\"${name}\")\n"
+new = "        :\n"
+tests = ["tests/meta/test_suite_rules.py::test_one_failing_step_fails_the_script_and_is_named"]
+
+[[control]]
+describes = "the determinism harness gives each process its own hash seed"
+path = "tests/determinism/test_across_processes.py"
+old = '"PYTHONHASHSEED": hash_seed,'
+new = '"PYTHONHASHSEED": "0",'
+tests = [
+    "tests/determinism/test_across_processes.py::test_the_comparison_sees_output_that_follows_the_hash_seed",
+]
+
+[[control]]
+describes = "the clean-tree check sees ignored files a test left behind"
+path = "scripts/check_clean_tree.sh"
+old = 'left="$(git status --porcelain --ignored | grep'
+new = 'left="$(git status --porcelain | grep'
+tests = [
+    "tests/meta/test_check_clean_tree.py::test_a_file_left_behind_is_caught_even_when_ignored",
+]
+
+[[control]]
+describes = "the determinism harness runs each process in its own time zone"
+path = "tests/determinism/test_across_processes.py"
+old = '"TZ": zone}'
+new = '"TZ": "UTC"}'
+tests = [
+    "tests/determinism/test_across_processes.py::test_the_comparison_sees_output_that_follows_the_time_zone",
+]
+
+# The controls script's own guarantees.
+
+[[control]]
+describes = "a control is silent unless every named test failed"
+path = "scripts/check_controls.py"
+old = "        return tuple(test for test in self.control.tests if not covers(test, self.failed))\n"
+new = "        return ()\n"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_break_its_tests_do_not_check_is_silent",
+    "tests/meta/test_check_controls.py::test_every_named_test_must_fail_not_just_one",
+]
+
+[[control]]
+describes = "a named test counts as failed only through its own parameters or inner tests"
+path = "scripts/check_controls.py"
+old = 'node.startswith((f"{test}[", f"{test}::"))'
+new = "node.startswith(test)"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_named_test_fails_through_its_parameters_or_the_tests_inside_it",
+]
+
+[[control]]
+describes = "a break that does not compile is refused"
+path = "scripts/check_controls.py"
+old = "    if path.suffix == \".py\":\n"
+new = "    if False:\n"
+tests = ["tests/meta/test_check_controls.py::test_a_break_that_does_not_compile_is_refused"]
+
+[[control]]
+describes = "a failure only because the broken code cannot run is the wrong reason"
+path = "scripts/check_controls.py"
+old = 'WRONG_REASONS = ("NameError", "ImportError", "ModuleNotFoundError", "SyntaxError")'
+new = 'WRONG_REASONS = ("NoSuchError",)'
+tests = [
+    "tests/meta/test_check_controls.py::test_a_test_failing_only_because_the_broken_code_cannot_run_is_the_wrong_reason",
+]
+
+[[control]]
+describes = "a break that matches more than once is refused"
+path = "scripts/check_controls.py"
+old = "    if count != 1:\n"
+new = "    if count < 1:\n"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_break_that_does_not_match_exactly_once_is_refused",
+]
+
+[[control]]
+describes = "the broken file is restored after its control runs"
+path = "scripts/check_controls.py"
+old = "        write(root / control.path, original)\n        record.unlink(missing_ok=True)\n"
+new = "        record.unlink(missing_ok=True)\n"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_break_its_test_catches_fires_and_the_file_is_restored",
+]
+
+[[control]]
+describes = "a break never runs bytecode cached from an earlier break"
+path = "scripts/check_controls.py"
+old = "    Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)\n"
+new = "\n"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_break_the_same_size_as_the_last_in_the_same_second_runs_its_own_code",
+]

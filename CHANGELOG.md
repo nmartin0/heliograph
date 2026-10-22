@@ -89,6 +89,9 @@ All notable changes to Heliograph are recorded here. The format follows
   no assertion about every item of a possibly empty collection, no imports
   from a conftest, no skip without a reason and none for a missing import, no
   sleeping, and every step of check.sh able to fail it.
+- Declared negative controls (tests/controls.toml) and
+  scripts/check_controls.py, which breaks each guarantee on purpose and fails
+  unless every test it names fails; CI runs them as their own job.
 
 ### Fixed
 

@@ -36,3 +36,6 @@ htmlcov/
 *.swp
 *~
 .DS_Store
+
+# A break check_controls.py has applied; the next run restores it
+.controls-in-progress.json
