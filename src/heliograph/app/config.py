@@ -5,10 +5,29 @@
 
 A run is described by a TOML file::
 
+    mode = "backtest"
+
     [[components]]
     kind = "filters"
     plugin = "moving_average"
     params = { period = 20 }
+
+    [mounts.btc]
+    source = "file"
+    params = { path = "data/btc.csv" }
+    kind = "trades"
+    start = 2026-01-01T00:00:00Z
+    end = 2026-02-01T00:00:00Z
+
+    [mounts.btc.instrument]
+    symbol = "BTC/USD"
+    venue = "kraken"
+    asset_class = "crypto"
+    quote_currency = "USD"
+
+A mount binds a name to a data source and says what to take from it. What
+can be checked from the text alone is checked here; whether the named source
+can serve each mount is checked at composition (app/mounts.py).
 
 The file is validated as a whole and fingerprinted, so every run and signal
 can record exactly which configuration produced it.
@@ -21,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -30,9 +49,12 @@ from pydantic import (
     ValidationError,
     field_serializer,
     field_validator,
+    model_validator,
 )
 
-from heliograph.core.errors import HeliographError
+from heliograph.core.errors import HeliographError, InvalidValueError
+from heliograph.core.messages import Instrument
+from heliograph.core.time import Timestamp, from_datetime, parse_span
 
 
 class ConfigError(HeliographError):
@@ -97,14 +119,7 @@ class ComponentConfig(BaseModel):
     @field_validator("params", mode="after")
     @classmethod
     def _freeze_params(cls, params: Mapping[str, Any]) -> Mapping[str, Any]:
-        naive = _naive_times(params, "params")
-        if naive:
-            raise ValueError(
-                "times need a UTC offset (Z or +hh:mm); local times name no instant: "
-                + ", ".join(naive)
-            )
-        frozen: Mapping[str, Any] = _freeze(params)
-        return frozen
+        return _frozen_params(params)
 
     @field_serializer("params")
     def _serialize_params(self, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -115,12 +130,156 @@ class ComponentConfig(BaseModel):
         return hash((self.kind, self.plugin, _hash_key(self.params)))
 
 
-class RunConfig(BaseModel):
-    """Everything needed to assemble one run."""
+def _frozen_params(params: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Plug-in parameters, deep-frozen, with every time naming an instant."""
+    naive = _naive_times(params, "params")
+    if naive:
+        raise ValueError(
+            "times need a UTC offset (Z or +hh:mm); local times name no instant: "
+            + ", ".join(naive)
+        )
+    frozen: Mapping[str, Any] = _freeze(params)
+    return frozen
+
+
+class InstrumentConfig(BaseModel):
+    """An instrument as written in configuration."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    symbol: str
+    venue: str
+    asset_class: str
+    quote_currency: str
+
+    @model_validator(mode="after")
+    def _valid_instrument(self) -> "InstrumentConfig":
+        try:
+            self.instrument()
+        except InvalidValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+    def instrument(self) -> Instrument:
+        return Instrument(
+            symbol=self.symbol,
+            venue=self.venue,
+            asset_class=self.asset_class,
+            quote_currency=self.quote_currency,
+        )
+
+
+_INT64 = 2**63
+
+
+class MountConfig(BaseModel):
+    """One mount: a data source, its parameters, and what to take from it.
+
+    ``bar_size`` (such as ``"1h"``) is given for bars and only for bars;
+    ``start`` and ``end`` bound a backtest's history. They are TOML
+    date-times (ISO 8601 text in JSON) with a UTC offset, never numbers,
+    whose unit would be a guess, and lie within the years 1678 to 2261,
+    which nanosecond timestamps can hold.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str
+    params: Mapping[str, Any] = Field(default_factory=dict)
+    instrument: InstrumentConfig
+    kind: Literal["trades", "bars"]
+    bar_size: str | None = None
+    start: Annotated[datetime | None, Field(strict=True)] = None
+    end: Annotated[datetime | None, Field(strict=True)] = None
+
+    @field_validator("params", mode="after")
+    @classmethod
+    def _freeze_params(cls, params: Mapping[str, Any]) -> Mapping[str, Any]:
+        return _frozen_params(params)
+
+    @field_serializer("params")
+    def _serialize_params(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        thawed: dict[str, Any] = _thaw(params)
+        return thawed
+
+    @field_validator("start", "end", mode="after")
+    @classmethod
+    def _an_instant(cls, moment: datetime | None) -> datetime | None:
+        if moment is None:
+            return None
+        if moment.utcoffset() is None:
+            raise ValueError(f"{moment.isoformat()} needs a UTC offset (Z or +hh:mm)")
+        if not -_INT64 <= from_datetime(moment) < _INT64:
+            raise ValueError(f"{moment.isoformat()} is outside what a timestamp can hold")
+        return moment
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "MountConfig":
+        if (self.kind == "bars") != (self.bar_size is not None):
+            raise ValueError("bar_size is given for bars, and only for bars")
+        if self.bar_size is not None:
+            try:
+                parse_span(self.bar_size)
+            except InvalidValueError as exc:
+                raise ValueError(str(exc)) from exc
+        if self.start is not None and self.end is not None and self.end <= self.start:
+            raise ValueError("end must be after start")
+        return self
+
+    @property
+    def bar_size_ns(self) -> int | None:
+        return None if self.bar_size is None else parse_span(self.bar_size)
+
+    @property
+    def start_ts(self) -> Timestamp | None:
+        return None if self.start is None else from_datetime(self.start)
+
+    @property
+    def end_ts(self) -> Timestamp | None:
+        return None if self.end is None else from_datetime(self.end)
+
+    def __hash__(self) -> int:
+        fields = (self.source, self.instrument, self.kind, self.bar_size, self.start, self.end)
+        return hash((fields, _hash_key(self.params)))
+
+
+class RunConfig(BaseModel):
+    """Everything needed to assemble one run.
+
+    In a backtest every mount needs ``start`` and ``end``; live, none may
+    have them, since live data starts now and runs until stopped.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: Literal["backtest", "live"] = "backtest"
     components: tuple[ComponentConfig, ...] = ()
+    mounts: Mapping[str, MountConfig] = Field(default_factory=dict)
+
+    @field_validator("mounts", mode="after")
+    @classmethod
+    def _freeze_mounts(cls, mounts: Mapping[str, MountConfig]) -> Mapping[str, MountConfig]:
+        return MappingProxyType(dict(mounts))
+
+    @field_serializer("mounts")
+    def _serialize_mounts(self, mounts: Mapping[str, MountConfig]) -> dict[str, Any]:
+        return {name: mount.model_dump() for name, mount in mounts.items()}
+
+    @model_validator(mode="after")
+    def _mounts_fit_the_mode(self) -> "RunConfig":
+        problems = []
+        for name, mount in self.mounts.items():
+            bounded = (mount.start is not None, mount.end is not None)
+            if self.mode == "backtest" and bounded != (True, True):
+                problems.append(f"mounts.{name}: a backtest needs start and end")
+            if self.mode == "live" and any(bounded):
+                problems.append(f"mounts.{name}: live data has no start or end")
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+    def __hash__(self) -> int:
+        return hash((self.mode, self.components, tuple(sorted(self.mounts.items()))))
 
 
 @dataclass(frozen=True, slots=True)

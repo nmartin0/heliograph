@@ -553,6 +553,58 @@ new = "        if ts <= now:\n"
 tests = ["tests/core/test_engine_state_machine.py::test_the_engine_matches_its_reference"]
 
 [[control]]
+describes = "a backtest cannot end after now"
+path = "src/heliograph/app/mounts.py"
+old = "    if end > now:  # ending"
+new = "    if end > now + 365 * 86_400 * 10**9:  # ending"
+tests = [
+    "tests/app/test_mounts.py::test_every_mount_a_source_cannot_serve_is_reported_at_once_and_nothing_is_bound",
+]
+
+[[control]]
+describes = "mounts on the same source and parameters share one instance"
+path = "src/heliograph/app/mounts.py"
+old = "        identity = (mount.source, params.model_dump_json())\n"
+new = "        identity = (name, params.model_dump_json())\n"
+tests = [
+    "tests/app/test_mounts.py::test_mounts_on_the_same_source_and_parameters_share_one_instance",
+]
+
+[[control]]
+describes = "nothing is bound to a throttle when any mount has a problem"
+path = "src/heliograph/app/mounts.py"
+old = """    if problems:
+        raise ConfigError("\\n".join(problems))
+
+    for source in instances.values():
+        source.bind(RateThrottle(source.capabilities, clock, sleep))
+"""
+new = """    for source in instances.values():
+        source.bind(RateThrottle(source.capabilities, clock, sleep))
+    if problems:
+        raise ConfigError("\\n".join(problems))
+"""
+tests = ["tests/app/test_mounts.py::test_when_any_mount_has_a_problem_no_source_is_bound"]
+
+[[control]]
+describes = "a backtest's reach is measured from now back to its start"
+path = "src/heliograph/app/mounts.py"
+old = "reach=now - start)"
+new = "reach=end - start)"
+tests = [
+    "tests/app/test_mounts.py::test_every_mount_a_source_cannot_serve_is_reported_at_once_and_nothing_is_bound",
+]
+
+[[control]]
+describes = "a live mount is checked against the source's live capabilities"
+path = "src/heliograph/app/mounts.py"
+old = "problems(mount.kind, live=True, bar_size=size)"
+new = "problems(mount.kind, live=False, bar_size=size)"
+tests = [
+    "tests/app/test_mounts.py::test_a_live_mount_on_a_source_whose_terms_forbid_live_use_is_refused",
+]
+
+[[control]]
 describes = "history of another bar size is refused"
 path = "src/heliograph/app/bridge.py"
 old = "        if _what(data) != asked:\n"
@@ -612,3 +664,44 @@ path = "scripts/check_controls.py"
 old = "            os.killpg(process.pid, signal.SIGKILL)\n"
 new = "            process.kill()\n"
 tests = ["tests/meta/test_check_controls.py::test_a_hung_control_kills_what_its_tests_started_too"]
+
+[[control]]
+describes = "a backtest may end exactly now"
+path = "src/heliograph/app/mounts.py"
+old = "    if end > now:  # ending"
+new = "    if end >= now:  # ending"
+tests = ["tests/app/test_mounts.py::test_a_backtest_may_end_exactly_now"]
+
+[[control]]
+describes = "unknown sources are reported with every other mount problem"
+path = "src/heliograph/app/mounts.py"
+old = """            resolved.append((name, mount, plugin, params))
+
+    instances"""
+new = """            resolved.append((name, mount, plugin, params))
+    if problems:
+        raise ConfigError("\\n".join(problems))
+
+    instances"""
+tests = ["tests/app/test_mounts.py::test_unknown_sources_and_bad_parameters_are_reported_with_every_other_problem"]
+
+[[control]]
+describes = "a mount's start and end are never numbers"
+path = "src/heliograph/app/config.py"
+old = "    start: Annotated[datetime | None, Field(strict=True)] = None"
+new = "    start: datetime | None = None"
+tests = ["tests/app/test_mounts.py::test_a_mount_that_cannot_be_right_is_refused_when_read"]
+
+[[control]]
+describes = "a mount's times must fit a timestamp"
+path = "src/heliograph/app/config.py"
+old = "        if not -_INT64 <= from_datetime(moment) < _INT64:"
+new = "        if False:"
+tests = ["tests/app/test_mounts.py::test_a_mount_that_cannot_be_right_is_refused_when_read"]
+
+[[control]]
+describes = "a source whose capabilities cannot be read is a reported problem"
+path = "src/heliograph/app/mounts.py"
+old = "        except InvalidValueError as exc:  # reading"
+new = "        except KeyError as exc:  # reading"
+tests = ["tests/app/test_mounts.py::test_a_source_whose_capabilities_cannot_be_read_is_reported_with_the_rest"]

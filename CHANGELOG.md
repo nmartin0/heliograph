@@ -106,6 +106,12 @@ All notable changes to Heliograph are recorded here. The format follows
   several sources is published in arrival order, stamped with the run clock.
 - A throttle built from each source declared rate limit and concurrency, which
   the source enters around every request.
+- A `[mounts]` table in the run configuration names, for each mount, a data
+  source, its parameters, an instrument and the data wanted (trades or bars of
+  a size; a span for a backtest). Every mount is checked against its source's
+  declared capabilities and terms, and every problem is reported at once
+  before any source is used. Mounts on the same source and parameters share
+  one instance, and so one rate limit.
 
 ### Fixed
 
