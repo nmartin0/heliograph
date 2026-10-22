@@ -161,6 +161,10 @@ All notable changes to Heliograph are recorded here. The format follows
   same instant. Every sample propagates, equal or not; a node without a sample
   stops propagation. One `IndicatorValues` message per instant carries every
   indicator's latest sample and which changed.
+- The first indicators, `sma` and `ema` (plug-ins of kind `indicators`):
+  moving averages one sample at a time, the simple one summed exactly, the
+  exponential one seeded from the simple average of its first period as TA-
+  Lib's is.
 
 ### Fixed
 

@@ -42,6 +42,10 @@ file = "heliograph.plugins.file_source:FileSource"
 ccxt = "heliograph.plugins.ccxt_source:CcxtSource"
 store = "heliograph.plugins.store:StoreSource"
 
+[project.entry-points."heliograph.indicators"]
+ema = "heliograph.plugins.indicators:Ema"
+sma = "heliograph.plugins.indicators:Sma"
+
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"
 

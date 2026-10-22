@@ -1241,3 +1241,38 @@ path = "src/heliograph/core/graph.py"
 old = "            if isinstance(sample, bool) or not math.isfinite(sample):\n"
 new = "            if isinstance(sample, bool):\n"
 tests = ["tests/core/test_graph.py::test_a_sample_that_is_not_a_finite_number_stops_the_run"]
+
+[[control]]
+describes = "the simple average waits for a full period"
+path = "src/heliograph/plugins/indicators.py"
+old = "        if len(window) < self.params.period:\n"
+new = "        if len(window) < self.params.period - 1:\n"
+tests = ["tests/plugins/test_indicators.py::test_the_simple_average_is_the_mean_of_the_last_period_samples"]
+
+[[control]]
+describes = "the exponential average starts from the simple average of its first period"
+path = "src/heliograph/plugins/indicators.py"
+old = "            self._value = math.fsum(self._first) / len(self._first)\n"
+new = "            self._value = self._first[-1]\n"
+tests = ["tests/plugins/test_indicators.py::test_the_exponential_average_starts_from_the_simple_one_then_weights_two_over_n_plus_one"]
+
+[[control]]
+describes = "the exponential average weights each sample two over period plus one"
+path = "src/heliograph/plugins/indicators.py"
+old = "        self._alpha = 2.0 / (params.period + 1)\n"
+new = "        self._alpha = 1.0 / params.period\n"
+tests = ["tests/plugins/test_indicators.py::test_the_exponential_average_starts_from_the_simple_one_then_weights_two_over_n_plus_one"]
+
+[[control]]
+describes = "an input without a sample changes no average"
+path = "src/heliograph/plugins/indicators.py"
+old = "        value = _one(\"sma\", inputs)\n"
+new = "        value = _one(\"sma\", inputs) or 0.0\n"
+tests = ["tests/plugins/test_indicators.py::test_an_input_without_a_sample_gives_none_and_changes_nothing"]
+
+[[control]]
+describes = "the simple average is summed exactly"
+path = "src/heliograph/plugins/indicators.py"
+old = "        return math.fsum(window) / len(window)\n"
+new = "        total = 0.0\n        for sample in window:\n            total += sample\n        return total / len(window)\n"
+tests = ["tests/plugins/test_indicators.py::test_the_simple_average_is_summed_exactly_whatever_the_magnitudes"]
