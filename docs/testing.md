@@ -12,7 +12,7 @@ section.
 - a 90% branch-coverage floor per file;
 - the cross-process determinism test (`tests/determinism`);
 - the suite rules (`tests/meta`);
-- 131 declared controls with their script and CI job;
+- 148 declared controls with their script and CI job;
 - the mutation wrapper;
 - a state machine for the engine and alarms.
 

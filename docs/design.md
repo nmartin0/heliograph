@@ -72,6 +72,11 @@ contract and a core purity test).
   row per message as deterministic msgspec JSON, so a replay is byte-for-byte
   identical; its header holds key–value pairs for code, plug-in and parameter
   versions, and reading it back takes an explicit list of message types.
+  A backtest run from configuration (`app/run.py`, D26) writes a new journal
+  whose header holds the configuration (its exact text and digest), each
+  mount's source, version and validated parameters, the store snapshots
+  read and the interval; `replay_backtest` rebuilds a complete run from
+  that journal alone.
 - **Indicator graph (planned).** Indicators form a dependency graph that is
   stabilised once per timestamp, after every input stamped at that time has
   arrived (Jane Street's Incremental idea). Nodes recompute in dependency
@@ -136,8 +141,8 @@ one resampler. The rules for streams of different sizes are below.
    inputs, so it can be rebuilt and compared byte for byte (`verify`). The
    `store` data source reads it, with the live delay and terms of the
    source the data came from, and refuses a request outside the intervals
-   its downloads covered. A run will record the snapshot it read (the
-   run from configuration, Phase 1's last item).
+   its downloads covered. A run records the snapshots it read in its
+   journal's header (D26).
 
 Files are Parquet, one per dataset (source, instrument, kind and bar size)
 in a snapshot (D25); partitioning by date, and queries with polars or

@@ -189,3 +189,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - D25 records the store's design; the roadmap marks batch C done and Phase 1's
   gate passing, with two items left: a run from configuration, journalled with
   its snapshot, and a first live check against Kraken.
+- D26 records how a run is journalled and replayed; the roadmap marks Phase 1
+  built with its gate passing, the first live check against Kraken left before
+  the tag.

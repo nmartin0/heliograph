@@ -277,3 +277,31 @@ vendor's correction without trade ids, which Kraken does not give.
   differ, and a rebuild could not be compared.
 - polars or DuckDB now: pyarrow alone covers one file per dataset.
 
+## D26 · A run is journalled with what produced it, and replays from its journal alone (2026-10-22)
+
+`run_backtest` writes every run to a new journal, never over an old one.
+The journal's header holds the configuration's exact text and digest (the
+text, because TOML's date-times would not survive a JSON form), each
+mount's source, plug-in version and validated parameters with their
+defaults, the ids of the store snapshots read, the interval asked for and
+where the run stopped (the end plus the longest live delay and grace, so
+the last trades arrive and the last bars close), and Heliograph's version.
+`replay_backtest` rebuilds a complete run from the journal alone, after
+checking the text against its digest, and writes entries identical to the
+original's. A failed or unfinished run is not replayed: it stopped where
+nothing recorded says.
+
+A configuration with components is refused until Phase 2's pipeline runs
+them. A stream's mount must be the only one delivering its instrument,
+since bars take every trade of their instrument on the bus.
+
+**Why:** a signal is only worth what can be traced: which data, read how,
+by which code. With the configuration and its inputs in the journal, a run
+can be reproduced and questioned without the files or settings it started
+from. Refusing components rather than ignoring them keeps a configuration
+from meaning something the run does not do.
+
+**Rejected:** recording only the configuration's digest (the text may be
+gone when the run is questioned); appending runs to one journal file (a
+file then mixes configurations).
+

@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (batch C done and the gate passing; left: a run from configuration, journalled with its snapshot, and a first live check against Kraken) |
+| 1 | Data | built, gate passing; left: the first live check against Kraken |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -100,10 +100,11 @@ Batch C:
 
 To finish the phase:
 
-- [ ] `feat(app)`: a backtest run assembled from its configuration (mounts,
+- [x] `feat(app)`: a backtest run assembled from its configuration (mounts,
       bridge, engine, journal), its journal header recording the
-      configuration's fingerprint and the snapshot it read. (The journal
-      plug-in is built; this wires it.)
+      configuration's fingerprint and the snapshot it read, and replayable
+      from the journal alone (D26). Added (not planned): `[[streams]]` in
+      the run configuration, the bars a run builds.
 - [ ] The live tests run once against Kraken from the owner's machine; the
       offline pages are corrected wherever Kraken answers otherwise.
 
