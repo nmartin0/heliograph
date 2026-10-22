@@ -201,6 +201,36 @@ old = "    if isinstance(value, datetime | time) and value.utcoffset() is None:\
 new = "    if False:\n"
 tests = ["tests/app/test_composition.py::test_a_time_without_an_offset_is_refused_where_it_is"]
 
+[[control]]
+describes = "history is known its declared delay after it happened"
+path = "src/heliograph/core/sources.py"
+old = "received_at=Timestamp(message.event_time + live_delay)"
+new = "received_at=Timestamp(message.event_time)"
+tests = ["tests/core/test_sources.py::test_history_is_known_its_declared_delay_after_it_happened"]
+
+[[control]]
+describes = "live use of a source whose terms forbid it is refused"
+path = "src/heliograph/core/sources.py"
+old = 'if live and "no_live_trading" in self.terms:'
+new = "if False:"
+tests = ["tests/core/test_sources.py::test_live_use_of_a_source_whose_terms_forbid_it_is_refused"]
+
+[[control]]
+describes = "history may reach back exactly as far as the source's lookback"
+path = "src/heliograph/core/sources.py"
+old = "reach > self.lookback"
+new = "reach >= self.lookback"
+tests = [
+    "tests/core/test_sources.py::test_a_lookback_limit_applies_only_to_history_and_only_when_declared",
+]
+
+[[control]]
+describes = "bars of a size the source does not offer are refused"
+path = "src/heliograph/core/sources.py"
+old = 'if kind == "bars" and bar_size not in self.bar_sizes:'
+new = 'if kind == "bars" and not self.bar_sizes:'
+tests = ["tests/core/test_sources.py::test_every_reason_a_request_cannot_be_served_is_named"]
+
 # The rules about the tests themselves (tests/meta/test_suite_rules.py), and
 # the harness of the determinism test. Each break disables a rule's check, and
 # the rule's own test of planted offences must then fail.

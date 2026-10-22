@@ -96,6 +96,11 @@ All notable changes to Heliograph are recorded here. The format follows
   cover it (mutmut, in a scratch copy) and lists every change no test noticed.
 - A state-machine test runs random sequences of alarm changes and runs against
   a slow reference model of the engine.
+- Data-source ports: DataSource and InstrumentProvider protocols with declared
+  capabilities (data kinds for history and live, bar sizes, lookback, live
+  delay, rate limit, concurrency, terms of use) and SourceUnavailableError.
+  History is stamped as known its declared delay after the event; live data
+  when it arrives.
 
 ### Fixed
 
