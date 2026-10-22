@@ -79,6 +79,9 @@ All notable changes to Heliograph are recorded here. The format follows
   bus message as deterministic JSON via msgspec; replaying a journal's inputs
   writes byte-identical rows. msgspec (BSD-3-Clause) is the second runtime
   dependency.
+- Tests run in a random order each time, printing the seed, and every source
+  file must reach 90% branch coverage; CI fails if the checks leave changes in
+  the working tree.
 
 ### Fixed
 

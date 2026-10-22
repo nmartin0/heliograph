@@ -21,10 +21,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "coverage>=7.16",
     "hypothesis>=6.140",
     "import-linter>=2.15",
     "mypy>=1.18",
     "pytest>=8.4",
+    "pytest-randomly>=5.0",
     "ruff>=0.14",
 ]
 
@@ -120,3 +122,15 @@ layers = ["heliograph.app", "heliograph.plugins", "heliograph.core"]
 # Package = "URL", where its metadata has no useful project link.
 pydantic-core = "https://github.com/pydantic/pydantic-core"
 typing-extensions = "https://github.com/python/typing_extensions"
+
+[tool.heliograph.coverage]
+# Branch coverage each source file must reach; scripts/coverage_floor.py.
+floor = 90
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["heliograph"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

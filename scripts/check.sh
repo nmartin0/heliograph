@@ -26,8 +26,9 @@ run "lint"                uv run --frozen ruff check .
 run "format"              uv run --frozen ruff format --check .
 run "types"               uv run --frozen mypy
 run "layers"              uv run --frozen lint-imports
-run "tests"               uv run --frozen pytest
-run "tests (non-UTC)"     env TZ=America/St_Johns uv run --frozen pytest -q
+run "tests"               uv run --frozen coverage run -m pytest
+run "coverage per file"   uv run --frozen python scripts/coverage_floor.py
+run "tests (non-UTC)"     env TZ=America/St_Johns uv run --frozen pytest
 
 if ((${#failed[@]})); then
     echo

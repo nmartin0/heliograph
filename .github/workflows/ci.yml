@@ -31,3 +31,7 @@ jobs:
         run: uv sync --frozen
       - name: Run all checks
         run: ./scripts/check.sh
+      # Nothing a test does may outlive it (docs/testing.md): a file a test
+      # left behind, ignored or not, or a tool rewriting a tracked one, fails.
+      - name: The checks changed nothing in the working tree
+        run: ./scripts/check_clean_tree.sh
