@@ -101,6 +101,9 @@ All notable changes to Heliograph are recorded here. The format follows
   delay, rate limit, concurrency, terms of use) and SourceUnavailableError.
   History is stamped as known its declared delay after the event; live data
   when it arrives.
+- The asyncio bridge: history from a source becomes an ordinary, lazily read
+  engine feed, checked and stamped with the source delay; live data from
+  several sources is published in arrival order, stamped with the run clock.
 
 ### Fixed
 

@@ -231,9 +231,42 @@ old = 'if kind == "bars" and bar_size not in self.bar_sizes:'
 new = 'if kind == "bars" and not self.bar_sizes:'
 tests = ["tests/core/test_sources.py::test_every_reason_a_request_cannot_be_served_is_named"]
 
-# The rules about the tests themselves (tests/meta/test_suite_rules.py), and
-# the harness of the determinism test. Each break disables a rule's check, and
-# the rule's own test of planted offences must then fail.
+[[control]]
+describes = "the bridge stamps history with the source's delay"
+path = "src/heliograph/app/bridge.py"
+old = "return known_in_history(self._checked(message), self._delay)"
+new = "return self._checked(message)"
+tests = ["tests/app/test_bridge.py::test_history_is_stamped_with_the_sources_declared_delay"]
+
+[[control]]
+describes = "history that goes back in time is refused"
+path = "src/heliograph/app/bridge.py"
+old = "if self._previous is not None and happened < self._previous:"
+new = "if False:"
+tests = ["tests/app/test_bridge.py::test_history_a_source_should_not_have_sent_is_refused"]
+
+[[control]]
+describes = "a history feed closes the source's stream when the engine stops early"
+path = "src/heliograph/app/bridge.py"
+old = "self._loop.run(_close(self._stream))"
+new = "pass"
+tests = [
+    "tests/app/test_bridge.py::test_the_engine_reads_a_history_feed_lazily_and_closes_it_when_it_stops",
+]
+
+[[control]]
+describes = "live data is stamped with the run's clock on arrival"
+path = "src/heliograph/app/bridge.py"
+old = "publish(known_now(data, clock.now()))"
+new = "publish(data)"
+tests = ["tests/app/test_bridge.py::test_live_data_is_stamped_by_the_runs_clock_not_the_venues"]
+
+[[control]]
+describes = "a failing live source raises its own error, not a group"
+path = "src/heliograph/app/bridge.py"
+old = "raise failures.exceptions[0] from failures"
+new = "raise failures"
+tests = ["tests/app/test_bridge.py::test_the_first_source_to_fail_stops_the_others_with_its_own_error"]
 
 [[control]]
 describes = "the emptiness rule flags all() with no guard on its collection"
@@ -473,3 +506,43 @@ path = "src/heliograph/core/alarms.py"
 old = "        if ts < now:\n"
 new = "        if ts <= now:\n"
 tests = ["tests/core/test_engine_state_machine.py::test_the_engine_matches_its_reference"]
+
+[[control]]
+describes = "history of another bar size is refused"
+path = "src/heliograph/app/bridge.py"
+old = "        if _what(data) != asked:\n"
+new = "        if _what(data)[:2] != asked[:2]:\n"
+tests = ["tests/app/test_bridge.py::test_history_of_another_kind_or_bar_size_is_refused"]
+
+[[control]]
+describes = "live data a source was not subscribed to is refused"
+path = "src/heliograph/app/bridge.py"
+old = "if _what(data) not in wanted:"
+new = "if _what(data) in wanted and False:"
+tests = ["tests/app/test_bridge.py::test_live_data_a_source_was_not_subscribed_to_is_refused"]
+
+[[control]]
+describes = "a live bar beyond the skew is refused as partial"
+path = "src/heliograph/app/bridge.py"
+old = "    if early > skew:\n"
+new = "    if early > skew * 10**9:\n"
+tests = ["tests/app/test_bridge.py::test_a_live_bar_arriving_long_before_it_closed_is_refused_as_partial"]
+
+[[control]]
+describes = "a live bar within the skew is held until it closes"
+path = "src/heliograph/app/bridge.py"
+old = "while (now := clock.now()) < bar.end:"
+new = "while (now := clock.now()) < bar.end - skew:"
+tests = ["tests/app/test_bridge.py::test_a_live_bar_from_a_venue_clock_slightly_ahead_is_held_until_it_closes"]
+
+[[control]]
+describes = "a live stream is closed when its task ends"
+path = "src/heliograph/app/bridge.py"
+old = """        finally:
+            await _close(stream)
+            await queue.put(None)
+"""
+new = """        finally:
+            await queue.put(None)
+"""
+tests = ["tests/app/test_bridge.py::test_a_stream_cancelled_because_another_source_failed_is_closed"]
