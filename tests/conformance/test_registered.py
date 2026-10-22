@@ -43,6 +43,7 @@ def test_every_installed_plugin_is_in_the_kit() -> None:
         "data_sources/file",
         "data_sources/store",
         "exits/trailing_stop",
+        "fills/next_open",
         "forecasters/ewmac",
         "forecasters/linear",
         "gates/threshold",

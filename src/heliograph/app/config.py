@@ -53,6 +53,7 @@ fields. A strategy assembles them (core/pipeline.py)::
     sizer = "vol"
     exits = ["stop"]                 # optional
     risk_gates = ["limits"]          # optional
+    fills = "costs"                  # optional: a fill model, so signals are filled
 
 Each stage belongs to one strategy, and each must be used by one.
 
@@ -134,7 +135,7 @@ def _hash_key(value: Any) -> Any:
 
 GRAPH_KINDS = frozenset({"indicators", "forecasters", "gates"})
 """Kinds whose plug-ins are nodes of the indicator graph."""
-STAGE_KINDS = frozenset({"combiners", "sizers", "exits", "risk_gates"})
+STAGE_KINDS = frozenset({"combiners", "sizers", "exits", "risk_gates", "fills"})
 """Kinds whose plug-ins are a strategy's stages."""
 
 
@@ -343,6 +344,7 @@ class StrategyConfig(BaseModel):
     sizer: str
     exits: tuple[str, ...] = ()
     risk_gates: tuple[str, ...] = ()
+    fills: str | None = None
 
     def stages(self) -> dict[str, tuple[str, ...]]:
         """The names this strategy uses, by the kind each must be."""
@@ -353,6 +355,7 @@ class StrategyConfig(BaseModel):
             "sizers": (self.sizer,),
             "exits": self.exits,
             "risk_gates": self.risk_gates,
+            "fills": () if self.fills is None else (self.fills,),
         }
 
 

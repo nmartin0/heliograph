@@ -1693,7 +1693,7 @@ tests = ["tests/core/test_pipeline.py::test_a_refused_signal_is_journalled_and_t
 [[control]]
 describes = "the position held follows the signals"
 path = "src/heliograph/core/pipeline.py"
-old = "        self._held = target\n"
+old = "        if not spec.filled:\n            self._held = target\n"
 new = ""
 tests = ["tests/core/test_pipeline.py::test_nothing_is_decided_until_every_forecaster_and_gate_has_a_sample", "tests/core/test_pipeline.py::test_a_gate_at_or_below_zero_vetoes_and_the_strategy_goes_flat"]
 
@@ -1990,3 +1990,166 @@ path = "src/heliograph/plugins/stages.py"
 old = "        self._sent.append(proposal.ts)\n"
 new = "        pass\n"
 tests = ["tests/plugins/test_stages.py::test_limits_count_only_signals_sent_in_any_24_hours"]
+
+# -- D4b: simulated fills and the report (D31) --------------------------------------------
+
+[[control]]
+describes = "the broker fills only at a bar after the one the signal was made on"
+path = "src/heliograph/core/broker.py"
+old = "        if pending is None or bar.start < self._after:\n"
+new = "        if pending is None:\n"
+tests = ["tests/core/test_broker.py::test_only_a_later_bar_of_its_own_stream_fills_a_signal"]
+
+[[control]]
+describes = "with a grace period, the next bar fills a signal although it started before it"
+path = "src/heliograph/core/broker.py"
+old = "            self._after = signal.ts if self._ended is None else self._ended\n"
+new = "            self._after = signal.ts\n"
+tests = ["tests/core/test_broker.py::test_with_a_grace_period_the_next_bar_started_before_the_signal_and_fills_it", "tests/app/test_report.py::test_with_a_grace_period_the_same_fills_come_a_minute_later"]
+
+[[control]]
+describes = "the broker fills only at a bar of its instrument"
+path = "src/heliograph/core/broker.py"
+old = "        if bar.instrument != self._instrument or bar.end - bar.start != self._size:\n"
+new = "        if bar.end - bar.start != self._size:\n"
+tests = ["tests/core/test_broker.py::test_only_a_later_bar_of_its_own_stream_fills_a_signal"]
+
+[[control]]
+describes = "the broker fills only at a bar of its size"
+path = "src/heliograph/core/broker.py"
+old = "        if bar.instrument != self._instrument or bar.end - bar.start != self._size:\n"
+new = "        if bar.instrument != self._instrument:\n"
+tests = ["tests/core/test_broker.py::test_only_a_later_bar_of_its_own_stream_fills_a_signal"]
+
+[[control]]
+describes = "a later signal replaces one not yet filled"
+path = "src/heliograph/core/broker.py"
+old = "            self._pending = signal  # a later signal replaces one not yet filled\n"
+new = "            self._pending = self._pending or signal\n"
+tests = ["tests/core/test_broker.py::test_a_later_signal_replaces_one_not_yet_filled_and_no_trade_fills_nothing"]
+
+[[control]]
+describes = "no trade, no fill"
+path = "src/heliograph/core/broker.py"
+old = "        if quantity == 0:\n            return\n"
+new = ""
+tests = ["tests/core/test_broker.py::test_a_later_signal_replaces_one_not_yet_filled_and_no_trade_fills_nothing"]
+
+[[control]]
+describes = "the broker trades the difference from the position held"
+path = "src/heliograph/core/broker.py"
+old = "        quantity = pending.target - self._position\n"
+new = "        quantity = pending.target\n"
+tests = ["tests/core/test_broker.py::test_the_broker_trades_the_difference_and_sells_below_the_open"]
+
+[[control]]
+describes = "a fill happened at the bar's open"
+path = "src/heliograph/core/broker.py"
+old = "            event_time=bar.start,\n"
+new = "            event_time=bar.ts,\n"
+tests = ["tests/core/test_broker.py::test_a_signal_is_filled_at_the_next_bars_open_when_that_bar_is_known"]
+
+[[control]]
+describes = "the broker fills only its own strategy's signals"
+path = "src/heliograph/core/broker.py"
+old = "        if signal.strategy == self._strategy:\n"
+new = "        if True:\n"
+tests = ["tests/core/test_broker.py::test_signals_of_another_strategy_are_not_filled"]
+
+[[control]]
+describes = "listeners hear each fill"
+path = "src/heliograph/core/broker.py"
+old = "            listener(fill)\n"
+new = "            pass\n"
+tests = ["tests/core/test_broker.py::test_listeners_hear_each_fill"]
+
+[[control]]
+describes = "a fill's price is positive"
+path = "src/heliograph/core/broker.py"
+old = "        if self.price <= 0:\n"
+new = "        if self.price < 0:\n"
+tests = ["tests/core/test_broker.py::test_a_fill_that_cannot_be_is_refused_as_it_is_made"]
+
+[[control]]
+describes = "a fill's commission is not negative"
+path = "src/heliograph/core/broker.py"
+old = "        if self.commission < 0:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_broker.py::test_a_fill_that_cannot_be_is_refused_as_it_is_made"]
+
+[[control]]
+describes = "a fill's values are finite"
+path = "src/heliograph/core/broker.py"
+old = "            if not math.isfinite(getattr(self, name)):\n"
+new = "            if False:\n"
+tests = ["tests/core/test_broker.py::test_a_fill_that_cannot_be_is_refused_as_it_is_made"]
+
+[[control]]
+describes = "next_open charges the spread and slippage against the trader both ways"
+path = "src/heliograph/plugins/fills.py"
+old = "        return open_ * (1 + math.copysign(worse, quantity))\n"
+new = "        return open_ * (1 + worse)\n"
+tests = ["tests/plugins/test_fills.py::test_buying_pays_and_selling_receives_half_the_spread_and_the_slippage"]
+
+[[control]]
+describes = "next_open charges commission on sales too"
+path = "src/heliograph/plugins/fills.py"
+old = "        return self.params.commission * abs(quantity) * price\n"
+new = "        return self.params.commission * quantity * price\n"
+tests = ["tests/plugins/test_fills.py::test_the_commission_is_a_fraction_of_the_value_traded_either_way"]
+
+[[control]]
+describes = "with a broker, the strategy holds what was filled"
+path = "src/heliograph/core/pipeline.py"
+old = "        if not spec.filled:\n            self._held = target\n"
+new = "        self._held = target\n"
+tests = ["tests/core/test_pipeline.py::test_with_a_broker_the_position_held_is_what_has_been_filled"]
+
+[[control]]
+describes = "a run tells each strategy what its broker filled"
+path = "src/heliograph/app/run.py"
+old = "                    broker.on_fill(_holding(running))\n"
+new = ""
+tests = ["tests/app/test_report.py::test_signals_are_filled_at_the_next_open_less_half_the_spread"]
+
+[[control]]
+describes = "the report counts closes in the market"
+path = "src/heliograph/app/report.py"
+old = "        self.exposed += self.position != 0\n"
+new = "        self.exposed += 1\n"
+tests = ["tests/app/test_report.py::test_the_figures_are_the_ones_worked_out_by_hand"]
+
+[[control]]
+describes = "the report counts what sales paid beyond the open"
+path = "src/heliograph/app/report.py"
+old = "    book.slipped += (fill.price - book.opened[1]) * fill.quantity\n"
+new = "    book.slipped += (fill.price - book.opened[1]) * abs(fill.quantity)\n"
+tests = ["tests/app/test_report.py::test_the_figures_are_the_ones_worked_out_by_hand"]
+
+[[control]]
+describes = "the report takes commission from cash"
+path = "src/heliograph/app/report.py"
+old = "    book.cash -= fill.quantity * fill.price + fill.commission\n"
+new = "    book.cash -= fill.quantity * fill.price\n"
+tests = ["tests/app/test_report.py::test_the_figures_are_the_ones_worked_out_by_hand"]
+
+[[control]]
+describes = "the report marks equity only at closes of the strategy's stream"
+path = "src/heliograph/app/report.py"
+old = "        if self.close is None:\n            return\n"
+new = "        if self.close is None:\n            self.equity.append(self.cash)\n            return\n"
+tests = ["tests/app/test_report.py::test_the_figures_are_the_ones_worked_out_by_hand"]
+
+[[control]]
+describes = "next_open refuses costs at which a sale fetches nothing"
+path = "src/heliograph/plugins/fills.py"
+old = "        if self.spread / 2 + self.slippage >= 1:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_fills.py::test_a_sale_always_fetches_something"]
+
+[[control]]
+describes = "the report does not invent a result for a strategy that was not simulated"
+path = "src/heliograph/app/report.py"
+old = "    if not f.filled:\n"
+new = "    if False:\n"
+tests = ["tests/app/test_report.py::test_a_strategy_without_fills_reports_its_signals_and_no_result"]

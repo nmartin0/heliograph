@@ -55,6 +55,9 @@ weighted = "heliograph.plugins.stages:Weighted"
 [project.entry-points."heliograph.exits"]
 trailing_stop = "heliograph.plugins.stages:TrailingStop"
 
+[project.entry-points."heliograph.fills"]
+next_open = "heliograph.plugins.fills:NextOpen"
+
 [project.entry-points."heliograph.forecasters"]
 ewmac = "heliograph.plugins.forecasters:Ewmac"
 linear = "heliograph.plugins.forecasters:Linear"

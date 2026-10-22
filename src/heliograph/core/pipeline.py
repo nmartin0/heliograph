@@ -28,9 +28,10 @@ its forecasters and gates has a sample, and its sizer can size, it decides
 nothing. A veto takes it flat whatever the sizer's buffer. When the target
 differs from the position held (the sizer's no-trade buffer keeps small
 changes from trading), the strategy publishes a ``Signal``; if a risk gate refuses it, a
-``SignalRefused`` instead, and the position held stays as it was. In this
-first cut the position held is the last signalled target: simulated fills
-come with the backtester's fill model (D4b).
+``SignalRefused`` instead, and the position held stays as it was. With a
+simulated broker (core/broker.py, D31), the position held is what has been
+filled, which the broker tells it (``hold``); without one, it is the last
+target signalled.
 """
 
 import hashlib
@@ -206,6 +207,8 @@ class StrategySpec:
     forecasters: tuple[str, ...]
     gates: tuple[str, ...] = ()
     scope: str = ""
+    filled: bool = False
+    """True when a broker fills the signals and reports the position (``Strategy.hold``)."""
     combiner: Combiner
     sizer: Sizer
     exits: tuple[tuple[str, Exit, tuple[str, ...]], ...] = ()
@@ -243,8 +246,12 @@ class Strategy:
 
     @property
     def held(self) -> float:
-        """The position held: the last target signalled."""
+        """The position held: what has been filled, or else the last target signalled."""
         return self._held
+
+    def hold(self, position: float) -> None:
+        """The position a broker has filled; the strategy decides from it."""
+        self._held = position
 
     def _decide(self, ts: Timestamp, changed: frozenset[str]) -> None:
         spec = self._spec
@@ -329,4 +336,5 @@ class Strategy:
                 exit=exit_name,
             )
         )
-        self._held = target
+        if not spec.filled:
+            self._held = target

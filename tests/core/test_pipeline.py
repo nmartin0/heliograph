@@ -12,6 +12,7 @@ import pytest
 from heliograph.app.run import JOURNALLED
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bars import TimeBars
+from heliograph.core.broker import Fill, SimulatedBroker
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.graph import Graph
 from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
@@ -26,6 +27,7 @@ from heliograph.core.pipeline import (
 )
 from heliograph.core.streams import BarSpec, StreamSpec
 from heliograph.core.time import NANOS_PER_HOUR, Timestamp
+from heliograph.plugins.fills import NextOpen, NextOpenParams
 from heliograph.plugins.sqlite_journal import SqliteJournal, SqliteJournalParams, read_entries
 from tests.support.world import BTC, World, points, world
 
@@ -367,3 +369,26 @@ def test_a_signal_with_a_value_that_is_not_finite_is_refused_as_it_is_made() -> 
             price=float("nan"),
             forecast=0.0,
         )
+
+
+def test_with_a_broker_the_position_held_is_what_has_been_filled() -> None:
+    """Unfilled, a strategy keeps asking from where it was; filled at the next open, it holds."""
+    w, _, strategy, seen = setup({"f": [5.0, 5.0, 7.0]}, filled=True)
+    run(w, [100, 101, 102])
+    sent = [s for s in seen if isinstance(s, Signal)]
+    assert [(s.target, s.held) for s in sent] == [(5.0, 0.0), (5.0, 0.0), (7.0, 0.0)]
+    assert strategy.held == 0.0
+
+    w, _, strategy, seen = setup({"f": [5.0, 5.0, 7.0]}, filled=True)
+    broker = SimulatedBroker("s", BTC, HOUR, NextOpen(NextOpenParams()), w.bus)
+    broker.on_fill(lambda fill: strategy.hold(fill.position))
+    fills = w.record(Fill)
+    run(w, [100, 101, 102, 103])
+    # Filled at the open of the next bar, known at its close: held before that close's decision.
+    sent = [s for s in seen if isinstance(s, Signal)]
+    assert [(s.target, s.held) for s in sent] == [(5.0, 0.0), (7.0, 5.0)]
+    assert [(f.quantity, f.price) for f in fills if isinstance(f, Fill)] == [
+        (5.0, 101.0),
+        (2.0, 103.0),
+    ]
+    assert strategy.held == 7.0

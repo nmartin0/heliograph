@@ -41,7 +41,7 @@ refused rather than run without them.
 
 import json
 import sys
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -64,6 +64,7 @@ from heliograph.app.limits import Sleep
 from heliograph.app.mounts import Mount, build_mounts
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bars import TimeBars
+from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import Clock, SimulatedClock
 from heliograph.core.engine import BacktestEngine
@@ -94,7 +95,17 @@ from heliograph.plugins.sqlite_journal import (
     read_header,
 )
 
-JOURNALLED = (Point, Bar, AlarmFired, Settled, RunEnded, IndicatorValues, Signal, SignalRefused)
+JOURNALLED = (
+    Point,
+    Bar,
+    AlarmFired,
+    Settled,
+    RunEnded,
+    IndicatorValues,
+    Signal,
+    SignalRefused,
+    Fill,
+)
 """Every message type a backtest run journals."""
 
 
@@ -166,6 +177,8 @@ _NEEDS = {
     "exits": ("adjust", "an exit (it has no adjust)"),
     "risk_gates": ("check", "a risk gate (it has no check)"),
     "risk_gates/sent": ("sent", "a risk gate (it has no sent)"),
+    "fills": ("price", "a fill model (it has no price)"),
+    "fills/commission": ("commission", "a fill model (it has no commission)"),
 }
 
 
@@ -192,6 +205,8 @@ def _components(config: RunConfig, registry: Registry) -> Built:
             needs = [_NEEDS[component.kind]]
             if component.kind == "risk_gates":
                 needs.append(_NEEDS["risk_gates/sent"])
+            if component.kind == "fills":
+                needs.append(_NEEDS["fills/commission"])
             lacking = [
                 noun for method, noun in needs if not callable(getattr(plugin, method, None))
             ]
@@ -368,10 +383,31 @@ def _assembled(
                 graph.add(
                     component.name, indicator, [config.input_name(r) for r in component.inputs]
                 )
+            models = {c.name: p for c, p in components if c.kind == "fills"}
             for strategy in config.strategies:
                 spec_ = _strategy_spec(config, strategy, components, header["config_digest"])
-                Strategy(spec_, graph, bus)
+                running = Strategy(spec_, graph, bus)
+                if strategy.fills is not None:
+                    found = config.stream_field(strategy.price)
+                    assert found is not None  # RunConfig requires it
+                    broker = SimulatedBroker(
+                        strategy.name,
+                        spec_.instrument,
+                        found[1].bar_spec().size,
+                        cast(FillModel, models[strategy.fills]),
+                        bus,
+                    )
+                    broker.on_fill(_holding(running))
         yield engine
+
+
+def _holding(strategy: Strategy) -> Callable[[Fill], None]:
+    """What tells ``strategy`` the position each fill leaves it with."""
+
+    def hold(fill: Fill) -> None:
+        strategy.hold(fill.position)
+
+    return hold
 
 
 def _strategy_spec(
@@ -392,6 +428,7 @@ def _strategy_spec(
         forecasters=strategy.forecasters,
         gates=strategy.gates,
         scope=scope,
+        filled=strategy.fills is not None,
         combiner=combiner,
         sizer=cast(Sizer, stages[strategy.sizer][1]),
         exits=tuple(
