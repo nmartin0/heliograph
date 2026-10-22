@@ -8,7 +8,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
 | 1 | Data | built, gate passing; left: the first live check against Kraken |
-| 2 | Backtest engine and strategy pipeline | in progress (D1 the indicator graph and D2 the conformance kit done) |
+| 2 | Backtest engine and strategy pipeline | in progress (D1 the indicator graph, D2 the conformance kit and D3 library indicators done) |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
 | 5 | Research tools | planned |
@@ -137,8 +137,11 @@ example strategy and the gate.
       wait for a scripted source per adapter.
 - Scenario tests after LEAN's regression algorithms: recorded counts,
   statistics and signals; reports compared as text with inline-snapshot.
-- Indicator nodes wrapping TA-Lib streams and talipp; a first set of
-  indicators. Bars built from finer bars where an indicator needs them.
+- [x] Indicator nodes wrapping TA-Lib streams and talipp (D29); a first
+      set: `rsi`, `atr`, `macd`, `bbands`, `stddev` on TA-Lib, `hma` and
+      `alma` on talipp, `zlema` in plain Python (D3).
+- Bars built from finer bars where an indicator needs them: moved to D4,
+  with the first strategy that needs it.
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
 - Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate; the

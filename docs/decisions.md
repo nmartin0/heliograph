@@ -350,3 +350,34 @@ run agree, so it runs in a fresh interpreter); a gaps check feeding None to
 every input at once (the graph never does; it updates an indicator only when
 some input has a sample).
 
+## D29 · Library indicators: TA-Lib streams opened on retry, one node per output, talipp bounded (2026-10-22)
+
+TA-Lib indicators hold a TA-Lib 0.8 stream (`talib.stream`). Samples are
+kept until the stream opens on them, trying each new one and taking
+`InsufficientHistory` as "not yet", as TA-Lib's own documentation asks;
+the first try waits for the function's lookback plus one, so the warm-up
+costs one opening rather than one per sample. From then on each sample is
+one O(1) `update`, bit-identical to the Function API. A function with several
+outputs (MACD, Bollinger Bands) is one plug-in instance per output, chosen
+by an `output` parameter, so every node of the graph is one series and
+nothing downstream unpacks tuples. talipp indicators drop their oldest
+values (`purge_oldest`) once they hold twice what they keep, which is far
+more than any of them reads. Reference values for TA-Lib indicators come
+from its batch functions over a fixed series; for talipp, from the
+definitions worked by hand. The zero-lag average is our own, in plain
+Python: talipp rounds its lag half to even, so for periods of 4, 8, 12...
+it lags one sample more than the definition most tools use.
+
+**Why:** a stream per node is O(1) per sample and matches TA-Lib's batch
+values exactly, so a backtest and its live run agree with each other and
+with any chart built on TA-Lib. talipp keeps every value it sees; a run of
+years would otherwise grow without end.
+
+**Rejected:** recomputing a window per sample with the batch functions
+(O(lookback) each, and the warm-up length computed by us rather than
+asked of TA-Lib); one node returning several outputs (the graph carries
+one float per node, and a strategy reading "the MACD" should name which
+line); trying to open a stream on every sample (O(n²) over the warm-up: 19 s
+for a MACD at its bounds); talipp for indicators TA-Lib has (TA-Lib's streams are exact
+against its batch values and faster); talipp unbounded.
+

@@ -172,6 +172,19 @@ within each section.
 - **Test what the caller really does.** The gaps check fed None to every
   input at once, which the graph never does, and missed the case it does
   (one input sampled, another not).
+- **Compute reference values; never type them.** The first draft of the
+  TA-Lib references held plausible numbers written from memory, and three
+  hand-worked talipp values were wrong too; the kit's reference check
+  caught every one. Generate literals from the source the reference names,
+  and check hand-worked ones against the implementation before committing.
+- **A non-greedy regex can still span a file.** Replacing each reference's
+  list with `\[\n(.*?)\],\n "RSI",` matched from the first list to the
+  last name and deleted every class between. Mark each place to fill with
+  a unique token and replace the token.
+- **Libraries differ from textbooks at the edges.** talipp's Hull average
+  drops its first sqrt(n) - 1 differences, so starts later than the
+  definition allows; where both give a value they agree. Write the
+  library's convention into the reference and say why.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

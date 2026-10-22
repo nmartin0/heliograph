@@ -235,3 +235,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - D28 records where the conformance kit lives and how plug-ins declare what it
   expects; testing.md and the roadmap mark the kit built, the adapters' own
   checks still to come.
+- D29 records how library indicators are wrapped (TA-Lib streams opened on
+  retry, one node per output, talipp bounded); the roadmap marks D3 done and
+  moves bars built from finer bars to D4.
