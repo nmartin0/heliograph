@@ -56,6 +56,93 @@ the server so a module whose `permission` the person lacks is absent.
 "Proposed" is the Elysium team's recommendation to its owner, not a
 commitment.
 
+## Round two: a code-level review (2026-10-22)
+
+Our second request document, "Heliograph → Elysium: API requests, round 2"
+(<https://claude.ai/artifact/S4qXYSwjjBcbruZG6PFkov>), was written after
+reading Elysium `dev` at `8922134` subsystem by subsystem. It gives endpoint
+shapes for each request. The facts that shape our own design:
+
+- **Timers** (`core/timers.py`, `core/timer_rules.py`, `api/timer_service.py`).
+  - **What they do:**
+    - durable rows keyed `(kind, key)`, set by upsert;
+    - every N minutes (at least 5), or weekdays at HH:MM in an IANA zone,
+      handling daylight saving, with an optional end;
+    - delivered at least once, with an `occurrence_key`;
+    - a missed run fires once, flagged `missed` with an `also_missed` count;
+    - retried every 300 s, at most 5 times;
+    - one worker fires at a time, under a file lock;
+    - precise to about 1 s in-process, 60 s otherwise; seconds are dropped.
+  - **Gaps for an add-on:**
+    - kinds are hard-coded (`api/app.py:272-275`) and an unknown kind is
+      dropped when due;
+    - handlers run serially under the lock with no timeout;
+    - a repeating timer that fails 5 times is deleted;
+    - only `/api/reminders` is reachable over HTTP.
+- **Inbox** (`core/notifications.py`).
+  - In-product rows only, by design: no email, push or webhook (DEV_UI
+    §16.5 allows email as escalation for the most urgent tier).
+  - `dedupe_key` makes a repeat a no-op, and its index is global, so keys
+    need an add-on prefix.
+  - No priority, expiry or response beyond "seen".
+- **Live updates** (`/api/events`): SSE whose events carry no records, have
+  no ids and so cannot resume, and end after 600 s. Heliograph streams from
+  its own server through the planned proxy.
+- **Alerting building blocks.**
+  - Freshness verdicts warn at 1.1 × and fail at 2.1 × the sync interval.
+  - A once-per-lapse dead man's switch exists for the mirror, checked only
+    on read.
+  - `unusual.py` is a modified z-score above 3.5 within groups of at least
+    20 records.
+  - `forecasts.py` uses exponential smoothing over at least 12 periods,
+    refusing when it does no better than naive.
+- **Identity and secrets.**
+  - Only browser sessions plus CSRF; no tokens or service accounts.
+  - "Running as the system" is ruled out (SECURITY_ARCHITECTURE.md:320-323).
+  - Grant names are a closed set.
+  - No secret store: credentials come from `${VAR}` in the environment.
+- **Config and backups.** History, diff, restore and reload exist for
+  Elysium's own six YAML files only. Backups seal a fixed list
+  (`OWNED_DATABASES`); add-on data is not covered.
+- **Data types.** Times are microseconds, and an integer epoch is not read as
+  a time. Decimals are 38 digits with 9 decimal places. Bronze and silver keep
+  about 7 days of history, and tables are rewritten whole per sync. Not a tick
+  store.
+- **Agent.**
+  - Functions are a hard-coded dict of in-process Python classes, with
+    free-text parameter types.
+  - Add-on tools are not planned.
+  - The MCP server was declined (18 October).
+- **Kit.**
+  - ECharts 6, with bar, graph, line and pie registered only; no candlestick
+    or zoom.
+  - Every update replaces the whole chart.
+  - `apiFetch` is not exported.
+  - No toasts or virtualised table.
+  - BLOCKING.md names "a trading chart" as something a module bundles
+    privately.
+- **Simulator.**
+  - REST sources with paging, expiring tokens, 429s, injected 5xx,
+    latency, outages, a seeded clock and an operator channel.
+  - Simulated time starts at 2026-01-01 and runs at 60×.
+  - Business data, not prices.
+- **Licence.** Elysium is "All rights reserved", Nicholas Martin: the same
+  owner as Heliograph. Copying its code is the owner's call, not a licence
+  question; our default is to copy ideas, not files.
+
+What this changes for Heliograph:
+- A scheduler port whose shape matches the timer request, with a local
+  implementation first. A timer firing enters Heliograph as an input message,
+  so it is journalled and replays; the engine's own alarms stay in the core.
+- Our own alert sinks first; an Elysium Inbox sink later, with the signal id
+  as `dedupe_key`.
+- Staleness and rate alerts computed in Heliograph until Elysium heartbeats
+  exist.
+- The engine process built to the lifecycle contract as described.
+- Our own SSE stream with event ids and resume.
+- A published SQLite (written to a new file, then renamed) of signals, runs
+  and coarse bars, which Elysium can mirror today.
+
 ## Time series in Elysium
 
 - `POST /api/objects/{type}/aggregate` with `period` = day, ISO week or month:
@@ -134,4 +221,13 @@ is sign-in, users, shell and Inbox, not charting.
   `api/routes.py`, `ui/packages/app-browse/src/OverTimeChart.tsx`
 - "Building Heliograph for Elysium", the Elysium team's reply, 2026-10-21
   (PDF from the owner)
+- Elysium `dev` at `8922134` (round two): `core/timers.py`,
+  `core/timer_rules.py`, `api/timer_service.py`, `api/app.py:265-280`,
+  `core/notifications.py`, `api/live_updates.py`,
+  `core/mirror/health_condition.py`, `core/mirror/freshness.py`,
+  `core/unusual.py`, `core/forecasts.py`, `core/secret_references.py`,
+  `core/config_history.py`, `scripts/backup_deployment.py`,
+  `core/ontology/field_types.py`, `core/functions/registry.py`,
+  `ui/packages/shell-api/src/components/Chart.tsx`, `core/modules.py`,
+  `BLOCKING.md` lines 333–649
 - <https://github.com/nmartin0/elysium/tree/dev>
