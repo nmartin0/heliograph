@@ -126,6 +126,13 @@ All notable changes to Heliograph are recorded here. The format follows
 - A `static` instrument provider: listings written out in its parameters, each
   with the venue's own symbol and optional price and size increments. An
   instrument listed twice, or two sharing one venue symbol, is refused.
+- The data store: each download kept as a raw Parquet file named by its hash
+  and never edited; clean data computed from the raw files by rule (a later
+  download replaces an earlier one over its interval; failing rows quarantined
+  with their reason); published snapshots, audited, whose id is the hash of
+  their inputs. `verify` rebuilds a snapshot from its raw files and compares
+  bytes (the Phase 1 gate), and the `store` data source reads a snapshot on
+  the live delay and terms of the source its data came from.
 
 ### Fixed
 

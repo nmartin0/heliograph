@@ -38,6 +38,7 @@ sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
 
 [project.entry-points."heliograph.data_sources"]
 file = "heliograph.plugins.file_source:FileSource"
+store = "heliograph.plugins.store:StoreSource"
 
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"

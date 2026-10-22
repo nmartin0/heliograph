@@ -820,3 +820,143 @@ path = "src/heliograph/plugins/static_instruments.py"
 old = "            if where in venue_symbols:\n"
 new = "            if where in venue_symbols and False:\n"
 tests = ["tests/plugins/test_static_instruments.py::test_two_instruments_with_one_venue_symbol_are_refused"]
+
+[[control]]
+describes = "a later download replaces what an earlier one said about its interval"
+path = "src/heliograph/plugins/store.py"
+old = "        kept = [k for k in kept if not download.start <= k.time < download.end]\n"
+new = "        kept = [k for k in kept if True]\n"
+tests = ["tests/plugins/test_store.py::test_a_later_download_replaces_what_an_earlier_said_about_its_interval"]
+
+[[control]]
+describes = "clean rows are in time order, trades at one instant in arrival order"
+path = "src/heliograph/plugins/store.py"
+old = "    kept.sort(key=lambda k: (k.time, k.arrival))\n"
+new = "    kept.sort(key=lambda k: (k.time, -k.arrival))\n"
+tests = ["tests/plugins/test_store.py::test_clean_rows_are_in_time_order_and_trades_at_one_instant_keep_theirs"]
+
+[[control]]
+describes = "a raw row outside its download's interval is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "    if not download.start <= happened < download.end:\n"
+new = "    if not download.start <= happened:\n"
+tests = ["tests/plugins/test_store.py::test_a_trade_that_fails_a_check_is_quarantined_with_where_it_came_from_and_why"]
+
+[[control]]
+describes = "a trade whose price is not positive is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "        if price <= 0:\n"
+new = "        if price < 0:\n"
+tests = ["tests/plugins/test_store.py::test_a_trade_that_fails_a_check_is_quarantined_with_where_it_came_from_and_why"]
+
+[[control]]
+describes = "a trade with a negative size is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "        if size is not None and size < 0:\n"
+new = "        if size is not None and size < -1:\n"
+tests = ["tests/plugins/test_store.py::test_a_trade_that_fails_a_check_is_quarantined_with_where_it_came_from_and_why"]
+
+[[control]]
+describes = "a bar not one bar size long is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "    if length != dataset.bar_size:\n"
+new = "    if length > 2 * dataset.bar_size:\n"
+tests = ["tests/plugins/test_store.py::test_a_bar_that_fails_a_check_is_quarantined"]
+
+[[control]]
+describes = "an overlapping or duplicate bar is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "        if kept and bar.time < kept[-1].row[\"end\"]:\n"
+new = "        if kept and bar.time < kept[-1].row[\"start\"]:\n"
+tests = ["tests/plugins/test_store.py::test_a_bar_that_fails_a_check_is_quarantined"]
+
+[[control]]
+describes = "a raw file whose bytes changed is refused"
+path = "src/heliograph/plugins/store.py"
+old = "_sha256(path.read_bytes())[:16] != match[\"hash\"]"
+new = "_sha256(path.read_bytes())[:16] == ''"
+tests = ["tests/plugins/test_store.py::test_a_raw_file_that_was_edited_is_refused"]
+
+[[control]]
+describes = "a snapshot with a dataset left empty by cleaning is not published"
+path = "src/heliograph/plugins/store.py"
+old = "        if entry[\"rows\"] == 0:\n"
+new = "        if entry[\"rows\"] < 0:\n"
+tests = ["tests/plugins/test_store.py::test_a_snapshot_that_fails_its_audit_is_not_published"]
+
+[[control]]
+describes = "verify compares a snapshot's files with their rebuild"
+path = "src/heliograph/plugins/store.py"
+old = "            elif path.read_bytes() != data:\n"
+new = "            elif len(path.read_bytes()) < 0:\n"
+tests = ["tests/plugins/test_store.py::test_verify_names_every_way_a_snapshot_no_longer_matches_its_raw_files"]
+
+[[control]]
+describes = "a snapshot carries the live delay of the source its data came from"
+path = "src/heliograph/plugins/store.py"
+old = "            \"live_delay\": max(d.live_delay for d in downloads),\n"
+new = "            \"live_delay\": 0,\n"
+tests = ["tests/plugins/test_store.py::test_the_store_source_reads_a_snapshot_on_its_sources_terms"]
+
+[[control]]
+describes = "a snapshot carries the terms of the source its data came from"
+path = "src/heliograph/plugins/store.py"
+old = "            \"terms\": sorted(set().union(*(d.terms for d in downloads))),\n"
+new = "            \"terms\": [],\n"
+tests = ["tests/plugins/test_store.py::test_the_store_source_reads_a_snapshot_on_its_sources_terms"]
+
+[[control]]
+describes = "the store source refuses a published file that no longer matches"
+path = "src/heliograph/plugins/store.py"
+old = "    if _sha256(path.read_bytes()) != sha256:\n"
+new = "    if _sha256(path.read_bytes()) == '':\n"
+tests = ["tests/plugins/test_store.py::test_the_store_source_refuses_what_the_snapshot_does_not_hold_or_no_longer_matches"]
+
+[[control]]
+describes = "the store source delivers the request's interval only"
+path = "src/heliograph/plugins/store.py"
+old = "                    if happened >= request.end:\n                        return\n"
+new = "                    if happened >= request.end + 10**12:\n                        return\n"
+tests = ["tests/plugins/test_store.py::test_the_store_source_reads_a_snapshot_on_its_sources_terms"]
+
+[[control]]
+describes = "a publish that loses a race returns the snapshot already in place"
+path = "src/heliograph/plugins/store.py"
+old = "                if not (self.published / snapshot_id / \"manifest.json\").is_file():\n"
+new = "                if True:\n"
+tests = ["tests/plugins/test_store.py::test_two_publishes_of_one_snapshot_at_once_leave_it_whole"]
+
+[[control]]
+describes = "the store source refuses a request beyond what was downloaded"
+path = "src/heliograph/plugins/store.py"
+old = "        if not any(s <= request.start and request.end <= e for s, e in entry[\"covered\"]):\n"
+new = "        if not any(s <= request.start for s, e in entry[\"covered\"]):\n"
+tests = ["tests/plugins/test_store.py::test_the_store_source_refuses_a_request_beyond_what_was_downloaded"]
+
+[[control]]
+describes = "a trade value named like the time column is refused"
+path = "src/heliograph/plugins/store.py"
+old = "        if \"event_time\" in message.values:\n"
+new = "        if \"event_time\" in message.values and False:\n"
+tests = ["tests/plugins/test_store.py::test_a_trade_value_named_like_the_time_column_is_refused"]
+
+[[control]]
+describes = "a bar ending after its download's interval is quarantined"
+path = "src/heliograph/plugins/store.py"
+old = "    if dataset.kind == \"bars\" and row[\"end\"] > download.end:\n"
+new = "    if dataset.kind == \"bars\" and row[\"start\"] > download.end:\n"
+tests = ["tests/plugins/test_store.py::test_a_bar_ending_after_its_downloads_interval_is_quarantined"]
+
+[[control]]
+describes = "two instruments sharing a key are refused, not mixed"
+path = "src/heliograph/plugins/store.py"
+old = "            if download.dataset != dataset:\n"
+new = "            if download.dataset.name != dataset.name:\n"
+tests = ["tests/plugins/test_store.py::test_two_instruments_sharing_a_key_are_refused_not_mixed"]
+
+[[control]]
+describes = "the audit compares rows read with rows declared"
+path = "src/heliograph/plugins/store.py"
+old = "        if entry[\"raw_rows\"] != entry[\"declared_rows\"]:\n"
+new = "        if entry[\"raw_rows\"] < 0:\n"
+tests = ["tests/plugins/test_store.py::test_the_audit_compares_rows_read_with_rows_the_raw_files_declare"]
