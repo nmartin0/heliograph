@@ -155,6 +155,12 @@ All notable changes to Heliograph are recorded here. The format follows
   the version. `replay_backtest` rebuilds a run from its journal alone, entry
   for entry. Configurations with components are refused until Phase 2 runs
   them.
+- The indicator graph (core/graph.py): bar-field inputs and indicators that
+  read earlier nodes, updated once per instant when it settles, in dependency
+  order, so a 1h indicator reading a 4h one sees the 4h value ending at the
+  same instant. Every sample propagates, equal or not; a node without a sample
+  stops propagation. One `IndicatorValues` message per instant carries every
+  indicator's latest sample and which changed.
 
 ### Fixed
 
