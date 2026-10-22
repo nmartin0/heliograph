@@ -269,6 +269,35 @@ new = "raise failures"
 tests = ["tests/app/test_bridge.py::test_the_first_source_to_fail_stops_the_others_with_its_own_error"]
 
 [[control]]
+describes = "a request may start exactly one period after the oldest in the window"
+path = "src/heliograph/app/limits.py"
+old = "self._starts[0] <= now - limit.period"
+new = "self._starts[0] < now - limit.period"
+tests = ["tests/app/test_limits.py::test_requests_start_at_most_n_per_period"]
+
+[[control]]
+describes = "no more requests are in flight than the declared concurrency"
+path = "src/heliograph/app/limits.py"
+old = "            self._slots = asyncio.Semaphore(self._concurrency)\n"
+new = "            self._slots = asyncio.Semaphore(self._concurrency + 1)\n"
+tests = [
+    "tests/app/test_limits.py::test_no_more_requests_are_in_flight_than_the_declared_concurrency",
+]
+
+[[control]]
+describes = "a request cancelled while waiting for the rate frees its slot"
+path = "src/heliograph/app/limits.py"
+old = "            # Cancelled or failed while waiting: the slot was never used.\n            slots.release()\n"
+new = "            # Cancelled or failed while waiting: the slot was never used.\n"
+tests = [
+    "tests/app/test_limits.py::test_a_request_cancelled_while_waiting_for_the_rate_frees_its_slot",
+]
+
+# The rules about the tests themselves (tests/meta/test_suite_rules.py), and
+# the harness of the determinism test. Each break disables a rule's check, and
+# the rule's own test of planted offences must then fail.
+
+[[control]]
 describes = "the emptiness rule flags all() with no guard on its collection"
 path = "tests/meta/test_suite_rules.py"
 old = "            if not guards:\n"
@@ -298,6 +327,13 @@ describes = "the sleep rule flags sleep imported by name"
 path = "tests/meta/test_suite_rules.py"
 old = 'if isinstance(node, ast.ImportFrom) and any(a.name == "sleep" for a in node.names)'
 new = "if False"
+tests = ["tests/meta/test_suite_rules.py::test_the_sleep_rule_catches_every_spelling"]
+
+[[control]]
+describes = "the sleep rule allows only sleep(0), which waits for nothing"
+path = "tests/meta/test_suite_rules.py"
+old = "len(call.args) == 1 and isinstance(call.args[0], ast.Constant) and call.args[0].value == 0"
+new = "True"
 tests = ["tests/meta/test_suite_rules.py::test_the_sleep_rule_catches_every_spelling"]
 
 [[control]]
@@ -546,3 +582,17 @@ new = """        finally:
             await queue.put(None)
 """
 tests = ["tests/app/test_bridge.py::test_a_stream_cancelled_because_another_source_failed_is_closed"]
+
+[[control]]
+describes = "a throttle makes its slots anew for a new event loop"
+path = "src/heliograph/app/limits.py"
+old = "        if loop is not self._loop:\n"
+new = "        if self._loop is None:\n"
+tests = ["tests/app/test_limits.py::test_a_throttle_serves_one_event_loop_after_another"]
+
+[[control]]
+describes = "a throttle in use on one loop is refused on another"
+path = "src/heliograph/app/limits.py"
+old = "            if self._users:\n"
+new = "            if self._users and False:\n"
+tests = ["tests/app/test_limits.py::test_a_throttle_in_use_on_one_loop_is_refused_on_another"]

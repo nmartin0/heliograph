@@ -104,6 +104,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - The asyncio bridge: history from a source becomes an ordinary, lazily read
   engine feed, checked and stamped with the source delay; live data from
   several sources is published in arrival order, stamped with the run clock.
+- A throttle built from each source declared rate limit and concurrency, which
+  the source enters around every request.
 
 ### Fixed
 

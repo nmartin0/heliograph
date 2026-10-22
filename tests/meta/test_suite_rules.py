@@ -247,12 +247,21 @@ def test_the_skip_rule_catches_reasonless_skips_and_passes_reasoned_ones() -> No
 # -- 4. tests do not wait on the wall clock ---------------------------------------
 
 
+def _yields_only(call: ast.Call) -> bool:
+    """``sleep(0)``: a coroutine handing the loop to others, which waits for nothing."""
+    return (
+        len(call.args) == 1 and isinstance(call.args[0], ast.Constant) and call.args[0].value == 0
+    )
+
+
 def sleeps(tree: ast.AST) -> list[int]:
-    """Lines calling anything named sleep, or importing sleep by name."""
+    """Lines calling anything named sleep, except ``sleep(0)``, or importing sleep by name."""
     found = [
         node.lineno
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and dotted(node.func).split(".")[-1] == "sleep"
+        if isinstance(node, ast.Call)
+        and dotted(node.func).split(".")[-1] == "sleep"
+        and not _yields_only(node)
     ]
     found += [
         node.lineno
@@ -276,7 +285,9 @@ def test_the_sleep_rule_catches_every_spelling() -> None:
         "from time import sleep as pause",
     ):
         assert sleeps(_parse(source)), source
+    assert sleeps(_parse("import asyncio\nasyncio.sleep(0.1)"))
     assert sleeps(_parse("import time\ntime.monotonic()")) == []
+    assert sleeps(_parse("import asyncio\nasyncio.sleep(0)")) == []
 
 
 # -- 5. every step of check.sh can fail it ------------------------------------------
