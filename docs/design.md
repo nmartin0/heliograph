@@ -124,14 +124,25 @@ one resampler. The rules for streams of different sizes are below.
 
 **Storage tiers** (from Elysium's bronze/silver/gold):
 
-1. *Raw*: exactly what the source returned; never edited.
-2. *Clean*: types standardised, checks applied (positive prices, high ≥ low,
-   ascending unique timestamps); failing rows quarantined with the reason.
-3. *Published*: the snapshot runs read, published only after it passes its
-   audit. A run records the snapshot it read.
+1. *Raw* (built): exactly what the source yielded for one request, one
+   Parquet file per download, named by the hash of its bytes; never edited.
+2. *Clean* (built): computed from the raw files, never kept. A later
+   download replaces an earlier one over the interval it covers; rows that
+   fail a check (outside their interval, invalid, a non-positive price, a
+   negative size, a bar of the wrong length or overlapping the one before)
+   are quarantined with the reason and where they came from.
+3. *Published* (built): a snapshot of datasets' clean data and quarantine
+   with a manifest, written once after an audit; its id is the hash of its
+   inputs, so it can be rebuilt and compared byte for byte (`verify`). The
+   `store` data source reads it, with the live delay and terms of the
+   source the data came from, and refuses a request outside the intervals
+   its downloads covered. A run will record the snapshot it read (the
+   run from configuration, Phase 1's last item).
 
-Files are Parquet partitioned by source, instrument and date, queried with
-polars or DuckDB. Signals, runs and the trial registry live in SQLite.
+Files are Parquet, one per dataset (source, instrument, kind and bar size)
+in a snapshot (D25); partitioning by date, and queries with polars or
+DuckDB, wait for datasets large enough to need them. Signals, runs and the
+trial registry live in SQLite.
 
 ## Indicators on other timeframes
 

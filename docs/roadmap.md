@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (batch C1 done: ports, bridge, throttle, mounts, file source; C2 next: store, CCXT) |
+| 1 | Data | in progress (batch C done and the gate passing; left: a run from configuration, journalled with its snapshot, and a first live check against Kraken) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -89,16 +89,31 @@ Batch C:
 - [x] `feat(app)`: mount table in the run configuration, checked against
       capabilities and terms flags.
 - [x] `feat(plugins)`: CSV and Parquet source; static instrument provider.
-- [ ] `feat(plugins)`: raw, clean and published store with quarantine.
-- [ ] `feat(plugins)`: CCXT source, history and live (D21); the exchange is
-      a parameter of the mount.
+- [x] `feat(plugins)`: raw, clean and published store with quarantine
+      (D25), and the `store` source that reads a snapshot. Added (not
+      planned): a `refactor(plugins)` sharing the batch reader, and
+      `feat(app)`: downloading a backtest's mounts into the store and
+      publishing them.
+- [x] `feat(plugins)`: CCXT source, history and live (D21); the exchange is
+      a parameter of the mount. Offline tests on pages written in CCXT's
+      format; `tests/live` checks Kraken itself (`uv run pytest -m live`).
+
+To finish the phase:
+
+- [ ] `feat(app)`: a backtest run assembled from its configuration (mounts,
+      bridge, engine, journal), its journal header recording the
+      configuration's fingerprint and the snapshot it read. (The journal
+      plug-in is built; this wires it.)
+- [ ] The live tests run once against Kraken from the owner's machine; the
+      offline pages are corrected wherever Kraken answers otherwise.
 
 **Gate:** a 4h value ending at T is visible to the 1h consumer at T and never
 earlier, in a test (passing: `tests/core/test_bars.py`); replaying a journal
 reproduces the run byte for byte (passing:
 `tests/plugins/test_sqlite_journal.py`), and in a fresh process with a
 different hash seed and time zone (testing batch); a published snapshot
-rebuilds exactly from its raw files (Batch C).
+rebuilds exactly from its raw files (passing: `tests/plugins/test_store.py`,
+and across processes in `tests/determinism`).
 
 The first market is crypto through CCXT (D21). The engine runs as its own
 process (D18).

@@ -134,6 +134,26 @@ within each section.
   Python (TOML) and ISO text from JSON.
 - **`pkill -f pattern` matches the shell running it** when the pattern is in
   the command line, and kills it. Write the pattern as `[s]ignal\.pause`.
+- **Kraken counts a page of trades from the whole second, then CCXT drops
+  what precedes `since`** (`filter_by_since_limit`), so a page can be short
+  and still leave trades behind; how full a page is says nothing. A page
+  repeats the trades at the last instant delivered: drop those copy by copy.
+  When nothing new comes, ask for the newest trade, and fail if it is later.
+  CCXT also gives each page's last Kraken trade an id and the others none,
+  so ids cannot tell a repeat from a new trade.
+- **A fake must answer as the real library does, not as its documentation
+  suggests.** Our first fake sent back the whole second unfiltered; every
+  paging test passed while real CCXT would have lost or doubled trades. Read
+  the library's code for the path the fake stands in for.
+- **Kraken keeps only the latest 720 candles** and answers an older start
+  with those, silently. A first candle a bar or more after the start is the
+  only sign.
+- **CCXT triggers an aiohttp `DeprecationWarning` on Python 3.13**
+  (`enable_cleanup_closed`), which "warnings are errors" turns into a
+  failure. Ignore that message by name, never the category.
+- **The TOML literal-string trap struck twice more** in one batch. The
+  controls script catches it (a break that matches nothing is refused);
+  write every control with basic (double-quoted) strings.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

@@ -175,3 +175,6 @@ All notable changes to Heliograph are recorded here. The format follows
   the engine runs as a supervisable process behind a JSON API, times cross
   JSON as ISO strings, and Heliograph stays standalone until Elysium's
   module API settles; a draft Elysium manifest is in `integrations/elysium/`.
+- D25 records the store's design; the roadmap marks batch C done and Phase 1's
+  gate passing, with two items left: a run from configuration, journalled with
+  its snapshot, and a first live check against Kraken.

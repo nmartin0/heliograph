@@ -248,3 +248,32 @@ one arriving earlier is refused as a partial bar.
 none for our clock); a per-source stamping rule (the same rule written N
 times).
 
+## D25 · The store: raw files by hash, clean computed, snapshots named by their inputs (2026-10-22)
+
+Each download is one raw Parquet file, named by the hash of its bytes and
+never edited. Clean data is a pure function of a dataset's raw files, so it
+is computed, not kept: downloads apply in the order they were made, a later
+one replacing an earlier one over its interval, and failing rows are
+quarantined, never dropped or repaired. A published snapshot is written once
+after an audit, and its id is the hash of its inputs (the raw files' names,
+the store's format and cleaning rules, and the pyarrow version that writes
+the Parquet). Its manifest records the intervals its downloads covered, and
+reading outside them is an error, so a gap between downloads is never a
+quiet hole. A snapshot is staged in a directory of its own and renamed into
+place whole.
+
+**Why:** the Phase 1 gate asks that a snapshot rebuild exactly from its raw
+files. With clean computed and the id derived from the inputs, a rebuild is
+`verify`: compute again, compare bytes. pyarrow writes byte-identical
+Parquet for the same table within one version (measured across processes,
+hash seeds and time zones), which is why its version is part of the id.
+"Later replaces earlier over its interval" handles both a re-download and a
+vendor's correction without trade ids, which Kraken does not give.
+
+**Rejected:**
+- Keeping the clean tier on disk: a second copy that can drift from raw.
+- Deduplicating trades by id across downloads: not every exchange sends ids.
+- Ids from publication time: two publications of the same data would
+  differ, and a rebuild could not be compared.
+- polars or DuckDB now: pyarrow alone covers one file per dataset.
+

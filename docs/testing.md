@@ -12,7 +12,7 @@ section.
 - a 90% branch-coverage floor per file;
 - the cross-process determinism test (`tests/determinism`);
 - the suite rules (`tests/meta`);
-- 99 declared controls with their script and CI job;
+- 131 declared controls with their script and CI job;
 - the mutation wrapper;
 - a state machine for the engine and alarms.
 
@@ -131,7 +131,8 @@ is part of the work.
 
 ### Live tests
 
-- They are marked `live` and excluded by default.
+- They are marked `live` and excluded by default (`-m "not live"` in
+  pytest's options; `uv run pytest -m live` overrides it).
 - They are run on request and on a schedule against the exchange named in the
   mount.
 - Offline tests use responses recorded to files.
