@@ -59,7 +59,10 @@ def test_a_stream_names_a_mount_and_how_its_bars_are_cut() -> None:
     [
         (['mount = "nowhere"\nbars = "1h"'], "streams\\[0\\]: no mount named 'nowhere'"),
         (['mount = "daily"\nbars = "1d"'], "streams build bars from trades"),
-        (['mount = "btc"\nbars = "1h"', 'mount = "btc"\nbars = "1h"'], "the same stream as"),
+        (
+            ['mount = "btc"\nbars = "1h"', 'mount = "btc"\nbars = "1h"'],
+            "mounts.btc already has 1h bars",
+        ),
         (['mount = "btc"\nbars = "1 hour"'], "is not a span"),
         (['mount = "btc"\nbars = "1h"\ngrace = "1h"'], "grace must be"),
         (['mount = "btc"\nbars = "1h"\ngaps = "fill"'], "gaps"),
@@ -70,6 +73,9 @@ def test_a_stream_that_cannot_be_built_is_refused_when_read(tables: list[str], r
         parse_config(streams(*tables))
 
 
-def test_two_streams_of_one_size_but_different_grace_are_two_streams() -> None:
+def test_two_streams_of_one_size_on_one_mount_are_refused_even_with_different_grace() -> None:
+    """Bars say their instrument and size, not their grace: such streams could not be
+    told apart by what reads them."""
     text = streams('mount = "btc"\nbars = "1h"', 'mount = "btc"\nbars = "1h"\ngrace = "1m"')
-    assert len(parse_config(text).config.streams) == 2
+    with pytest.raises(ConfigError, match=r"mounts\.btc already has 1h bars"):
+        parse_config(text)

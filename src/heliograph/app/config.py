@@ -43,6 +43,7 @@ can record exactly which configuration produced it.
 """
 
 import hashlib
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -114,10 +115,13 @@ def _hash_key(value: Any) -> Any:
 
 
 class ComponentConfig(BaseModel):
-    """One plug-in to build: its kind, its name, and its raw parameters.
+    """One plug-in to build: its kind, its plug-in name, its raw parameters, and for an
+    indicator its own ``name`` and the ``inputs`` it reads.
 
-    The parameters are frozen all the way down, so a loaded configuration
-    always matches the digest recorded for it.
+    An input is a stream's bar field, written ``<mount>@<size>.<field>`` (such
+    as ``btc@1h.close``), or the name of an indicator defined earlier. The
+    parameters are frozen all the way down, so a loaded configuration always
+    matches the digest recorded for it.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -125,6 +129,8 @@ class ComponentConfig(BaseModel):
     kind: str
     plugin: str
     params: Mapping[str, Any] = Field(default_factory=dict)
+    name: str | None = None
+    inputs: tuple[str, ...] = ()
 
     @field_validator("params", mode="after")
     @classmethod
@@ -137,7 +143,7 @@ class ComponentConfig(BaseModel):
         return thawed
 
     def __hash__(self) -> int:
-        return hash((self.kind, self.plugin, _hash_key(self.params)))
+        return hash((self.kind, self.plugin, _hash_key(self.params), self.name, self.inputs))
 
 
 def _frozen_params(params: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -180,6 +186,10 @@ class InstrumentConfig(BaseModel):
 
 
 _INT64 = 2**63
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
+"""A mount's or an indicator's name: letters, digits, underscores and hyphens."""
+_REF = re.compile(r"(?P<mount>[A-Za-z_][A-Za-z0-9_-]*)@(?P<size>[0-9a-z]+)\.(?P<field>[a-z]+)")
+_BAR_FIELDS = frozenset({"open", "high", "low", "close", "volume"})
 
 
 class MountConfig(BaseModel):
@@ -313,6 +323,12 @@ class RunConfig(BaseModel):
     @field_validator("mounts", mode="after")
     @classmethod
     def _freeze_mounts(cls, mounts: Mapping[str, MountConfig]) -> Mapping[str, MountConfig]:
+        bad = [name for name in mounts if not _NAME.fullmatch(name)]
+        if bad:
+            raise ValueError(
+                f"mount names {bad} must be letters, digits, underscores and hyphens, "
+                "starting with a letter or underscore"
+            )
         return MappingProxyType(dict(mounts))
 
     @field_serializer("mounts")
@@ -359,13 +375,82 @@ class RunConfig(BaseModel):
                     f"{where}: mounts {', '.join(sharing)} all deliver {key}; "
                     "a stream needs its mount to be the only one"
                 )
-            identity = (stream.mount, stream.bar_spec().identity())
+            # Bars say their instrument and size, not their grace or gap policy,
+            # so two streams of one size on one mount could not be told apart.
+            identity = (stream.mount, stream.bar_spec().label())
             if identity in seen:
-                problems.append(f"{where}: the same stream as streams[{seen[identity]}]")
+                problems.append(
+                    f"{where}: mounts.{stream.mount} already has {stream.bars} bars "
+                    f"(streams[{seen[identity]}])"
+                )
             seen.setdefault(identity, index)
         if problems:
             raise ValueError("; ".join(problems))
         return self
+
+    @model_validator(mode="after")
+    def _indicators_read_what_exists(self) -> "RunConfig":
+        problems = []
+        graces: dict[str, set[int]] = {}  # each indicator's inputs' graces, all the way down
+        for index, component in enumerate(self.components):
+            where = f"components[{index}] ({component.plugin})"
+            if component.kind != "indicators":
+                if component.name is not None or component.inputs:
+                    problems.append(f"{where}: only indicators take a name and inputs")
+                continue
+            if not component.name:
+                problems.append(f"{where}: an indicator needs a name")
+                continue
+            if not _NAME.fullmatch(component.name) or component.name in graces:
+                problems.append(
+                    f"{where}: the name {component.name!r} is taken, or not letters, digits, "
+                    "underscores and hyphens"
+                )
+            if not component.inputs:
+                problems.append(f"{where}: an indicator needs inputs")
+            read_graces: set[int] = set()
+            for read in component.inputs:
+                found = self.stream_field(read)
+                if read in graces:
+                    read_graces |= graces[read]
+                elif found is not None:
+                    read_graces.add(found[1].bar_spec().grace)
+                else:
+                    problems.append(
+                        f"{where}: reads {read!r}, which is neither an indicator defined "
+                        "before it nor a stream's field (<mount>@<size>.<field>)"
+                    )
+            if len(read_graces) > 1:
+                problems.append(
+                    f"{where}: reads streams of different grace; its inputs would close at "
+                    "different instants, so it would see one of them late"
+                )
+            graces[component.name] = read_graces
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+    def stream_field(self, ref: str) -> tuple[str, StreamConfig, str] | None:
+        """The mount, stream and bar field ``ref`` names (``btc@1h.close``), or None."""
+        match = _REF.fullmatch(ref)
+        if match is None or match["field"] not in _BAR_FIELDS:
+            return None
+        try:
+            size = parse_span(match["size"])
+        except InvalidValueError:
+            return None
+        for stream in self.streams:
+            if stream.mount == match["mount"] and stream.bar_spec().size == size:
+                return match["mount"], stream, match["field"]
+        return None
+
+    def input_name(self, ref: str) -> str:
+        """The one name of what ``ref`` reads: ``btc@60m.close`` is ``btc@1h.close``."""
+        found = self.stream_field(ref)
+        if found is None:
+            return ref
+        mount, stream, bar_field = found
+        return f"{mount}@{stream.bar_spec().label()}.{bar_field}"
 
     def __hash__(self) -> int:
         mounts = tuple(sorted(self.mounts.items()))

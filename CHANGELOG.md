@@ -165,6 +165,12 @@ All notable changes to Heliograph are recorded here. The format follows
   moving averages one sample at a time, the simple one summed exactly, the
   exponential one seeded from the simple average of its first period as TA-
   Lib's is.
+- Indicators in a run: `[[components]]` of kind `indicators` name an indicator
+  and its inputs (a stream's bar field such as `btc@1h.close`, or an indicator
+  defined earlier); a run computes them through the indicator graph, journals
+  their values, and records each one's plug-in, version, parameters and inputs
+  in its header. A replay refuses an indicator of another version than the run
+  used.
 
 ### Fixed
 
@@ -202,3 +208,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - D26 records how a run is journalled and replayed; the roadmap marks Phase 1
   built with its gate passing, the first live check against Kraken left before
   the tag.
+- A mount carries at most one stream of each bar size: bars say their
+  instrument and size, not their grace, so two such streams could not be told
+  apart by what reads them.

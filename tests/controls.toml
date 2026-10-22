@@ -1079,19 +1079,19 @@ new = "            if mount.kind == \"quotes\":\n"
 tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
 
 [[control]]
-describes = "the same stream twice is refused, streams differing in grace are not"
+describes = "one stream per mount and bar size, whatever its grace"
 path = "src/heliograph/app/config.py"
-old = "            identity = (stream.mount, stream.bar_spec().identity())\n"
-new = "            identity = (stream.mount, stream.bar_spec().label())\n"
-tests = ["tests/app/test_streams_config.py::test_two_streams_of_one_size_but_different_grace_are_two_streams"]
-
+old = "            identity = (stream.mount, stream.bar_spec().label())\n"
+new = "            identity = (stream.mount, stream.bar_spec().identity())\n"
+tests = [
+    "tests/app/test_streams_config.py::test_two_streams_of_one_size_on_one_mount_are_refused_even_with_different_grace",
+]
 [[control]]
-describes = "a backtest with components is refused, not run without them"
+describes = "a backtest with components it cannot run yet is refused, not run without them"
 path = "src/heliograph/app/run.py"
-old = "    if config.components:\n"
-new = "    if config.components and False:\n"
+old = "    if later:\n"
+new = "    if False:\n"
 tests = ["tests/app/test_run.py::test_what_a_backtest_cannot_run_is_refused"]
-
 [[control]]
 describes = "a run never writes over a journal"
 path = "src/heliograph/app/run.py"
@@ -1167,8 +1167,8 @@ tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_d
 [[control]]
 describes = "the header records each mount's validated parameters, defaults included"
 path = "src/heliograph/app/run.py"
-old = "        params = plugin.params.model_dump(mode=\"json\")\n"
-new = "        params = plugin.params.model_dump(mode=\"json\", exclude_defaults=True)\n"
+old = "        params = plugin.params.model_dump(mode=\"json\")\n        described[mount.name] = {\n"
+new = "        params = plugin.params.model_dump(mode=\"json\", exclude_defaults=True)\n        described[mount.name] = {\n"
 tests = ["tests/app/test_run.py::test_the_header_records_each_mounts_validated_parameters_and_plugin_version"]
 
 [[control]]
@@ -1276,3 +1276,108 @@ path = "src/heliograph/plugins/indicators.py"
 old = "        return math.fsum(window) / len(window)\n"
 new = "        total = 0.0\n        for sample in window:\n            total += sample\n        return total / len(window)\n"
 tests = ["tests/plugins/test_indicators.py::test_the_simple_average_is_summed_exactly_whatever_the_magnitudes"]
+
+[[control]]
+describes = "a run refuses components it cannot run yet, but runs indicators"
+path = "src/heliograph/app/run.py"
+old = "    later = sorted({c.kind for c in config.components if c.kind != \"indicators\"})\n"
+new = "    later = sorted({c.kind for c in config.components})\n"
+tests = ["tests/app/test_run_indicators.py::test_a_run_computes_its_indicators_and_journals_their_values"]
+
+[[control]]
+describes = "an indicator given another number of inputs than it reads is refused before the run"
+path = "src/heliograph/app/run.py"
+old = "        elif len(component.inputs) != arity:\n"
+new = "        elif False:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_that_cannot_run_is_refused_before_anything_is_written"]
+
+[[control]]
+describes = "a component of kind indicators that is not one is refused"
+path = "src/heliograph/app/run.py"
+old = "        if not callable(getattr(plugin, \"update\", None)) or not isinstance(arity, int):\n"
+new = "        if False:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_that_cannot_run_is_refused_before_anything_is_written"]
+
+[[control]]
+describes = "a replay refuses an indicator of another version than the run used"
+path = "src/heliograph/app/run.py"
+old = "        if entry.get(\"version\") != installed:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_run_indicators.py::test_a_replay_refuses_an_indicator_of_another_version_than_the_run_used"]
+
+[[control]]
+describes = "an indicator reads only indicators defined before it or streams' fields"
+path = "src/heliograph/app/config.py"
+old = "                    read_graces.add(found[1].bar_spec().grace)\n                else:\n"
+new = "                    read_graces.add(found[1].bar_spec().grace)\n                elif False:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_what_does_not_exist_is_refused_when_read"]
+
+[[control]]
+describes = "a stream field names a stream of that size"
+path = "src/heliograph/app/config.py"
+old = "            if stream.mount == match[\"mount\"] and stream.bar_spec().size == size:\n"
+new = "            if stream.mount == match[\"mount\"]:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_what_does_not_exist_is_refused_when_read"]
+
+[[control]]
+describes = "an indicator needs a name"
+path = "src/heliograph/app/config.py"
+old = "            if not component.name:\n"
+new = "            if component.name == \"\":\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_what_does_not_exist_is_refused_when_read"]
+
+[[control]]
+describes = "two spellings of one stream field read one input"
+path = "src/heliograph/app/run.py"
+old = "                reads = [config.input_name(read) for read in component.inputs]\n"
+new = "                reads = list(component.inputs)\n"
+tests = ["tests/app/test_run_indicators.py::test_two_spellings_of_one_stream_field_read_the_same_input"]
+
+[[control]]
+describes = "an indicator reading streams of different grace is refused"
+path = "src/heliograph/app/config.py"
+old = "            if len(read_graces) > 1:\n"
+new = "            if len(read_graces) > 2:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_streams_of_different_grace_is_refused"]
+
+[[control]]
+describes = "a mount's name can be read back in a stream field"
+path = "src/heliograph/app/config.py"
+old = "        bad = [name for name in mounts if not _NAME.fullmatch(name)]\n"
+new = "        bad: list[str] = []\n"
+tests = ["tests/app/test_run_indicators.py::test_names_that_cannot_be_read_back_are_refused"]
+
+[[control]]
+describes = "only indicators take a name and inputs"
+path = "src/heliograph/app/config.py"
+old = "                if component.name is not None or component.inputs:\n"
+new = "                if False:\n"
+tests = ["tests/app/test_run_indicators.py::test_names_that_cannot_be_read_back_are_refused"]
+
+[[control]]
+describes = "an indicator's name is letters, digits, underscores and hyphens"
+path = "src/heliograph/app/config.py"
+old = "            if not _NAME.fullmatch(component.name) or component.name in graces:\n"
+new = "            if component.name in graces:\n"
+tests = ["tests/app/test_run_indicators.py::test_names_that_cannot_be_read_back_are_refused"]
+
+[[control]]
+describes = "a replay refuses an indicator whose parameters would now differ"
+path = "src/heliograph/app/run.py"
+old = "        if entry.get(\"params\") != params:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_run_indicators.py::test_a_replay_refuses_an_indicator_whose_defaults_have_changed"]
+
+[[control]]
+describes = "a journal written before indicators ran still replays"
+path = "src/heliograph/app/run.py"
+old = "    recorded = json.loads(written.get(\"components\", \"{}\"))\n"
+new = "    recorded = json.loads(written[\"components\"])\n"
+tests = ["tests/app/test_run_indicators.py::test_a_journal_written_before_indicators_ran_still_replays"]
+
+[[control]]
+describes = "two bars of one input known at one instant are refused, not one dropped"
+path = "src/heliograph/core/graph.py"
+old = "                if node.pending is not None:\n"
+new = "                if False:\n"
+tests = ["tests/core/test_graph.py::test_two_bars_of_one_input_known_at_one_instant_are_refused_not_one_dropped"]

@@ -171,7 +171,7 @@ def test_a_replay_from_the_journal_alone_reproduces_it_byte_for_byte(
     text, _ = published(tmp_path, registry)
     original = tmp_path / "run.sqlite"
     run(text, registry, original)
-    replayed = replay_backtest(original, tmp_path / "replay.sqlite")
+    replayed = replay_backtest(original, tmp_path / "replay.sqlite", registry)
     assert raw_rows(replayed.journal) == raw_rows(original)
     assert read_header(replayed.journal) == read_header(original)
 
@@ -201,11 +201,14 @@ def test_a_source_failing_mid_run_leaves_a_journal_saying_so(
     ("text", "reason"),
     [
         ('mode = "live"\n[mounts.btc]\nsource = "file"\nkind = "trades"\n' + INSTRUMENT, "is live"),
-        ('[[components]]\nkind = "filters"\nplugin = "sma"\n', "components are not run yet"),
+        (
+            '[[components]]\nkind = "filters"\nplugin = "sma"\n',
+            "components of kind filters are not run yet",
+        ),
         (
             '[[components]]\nkind = "filters"\nplugin = "sma"\n'
             f'[mounts.btc]\nsource = "file"\nkind = "trades"\n{SPAN}{INSTRUMENT}',
-            "components are not run yet",
+            "components of kind filters are not run yet",
         ),
         ("", "at least one mount"),
     ],
@@ -227,7 +230,7 @@ def test_a_run_never_writes_over_a_journal(tmp_path: Path, registry: Registry) -
     original = tmp_path / "original.sqlite"
     run(text, registry, original)
     with pytest.raises(InvalidValueError, match="exists; a replay writes a new journal"):
-        replay_backtest(original, journal)
+        replay_backtest(original, journal, registry)
 
 
 # -- found by review -------------------------------------------------------------------
@@ -293,7 +296,7 @@ def test_a_failed_run_does_not_replay(tmp_path: Path, registry: Registry) -> Non
     with pytest.raises(SourceUnavailableError):
         run(text, registry, journal)
     with pytest.raises(InvalidValueError, match=r"did not finish \(failed"):
-        replay_backtest(journal, tmp_path / "replay.sqlite")
+        replay_backtest(journal, tmp_path / "replay.sqlite", registry)
     assert not (tmp_path / "replay.sqlite").exists()
 
 
@@ -315,7 +318,7 @@ def test_a_journal_whose_header_cannot_be_trusted_does_not_replay(
         db.execute(change)
     db.close()
     with pytest.raises(InvalidValueError, match=reason):
-        replay_backtest(journal, tmp_path / "replay.sqlite")
+        replay_backtest(journal, tmp_path / "replay.sqlite", registry)
 
 
 class DatedParams(Params):
@@ -364,7 +367,7 @@ def test_a_configuration_with_typed_parameters_replays_from_its_exact_text(
     header = read_header(journal)
     assert header["config_text"] == text
     assert json.loads(header["mounts"])["btc"]["params"]["noted"] == "2026-10-01T00:00:00+02:00"
-    replayed = replay_backtest(journal, tmp_path / "replay.sqlite")
+    replayed = replay_backtest(journal, tmp_path / "replay.sqlite", registry)
     assert raw_rows(replayed.journal) == raw_rows(journal)
 
 
