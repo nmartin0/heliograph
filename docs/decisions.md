@@ -327,3 +327,26 @@ simpler than putting stream identity on every bar.
 silently drops samples); a stream key on `Bar` (every source and journal
 would carry it for a case nobody needs yet).
 
+## D28 · The conformance kit lives in the package; plug-ins declare what it expects (2026-10-22)
+
+The kit is `heliograph.testkit`, shipped with the package (pytest as the
+`testkit` extra), not a copy in `tests/`, so plug-ins written elsewhere run
+the same checks. Its checks are plain functions; pytest only wraps them. A
+plug-in states what the kit should expect in a class attribute,
+`conformance = Conformance(...)`, defined in `plugins/conformance.py`, below
+the kit in the layers, so no plug-in imports the kit.
+
+**Why:** common behaviour tested once and inherited, never copied (the
+design Elysium agreed for its modules). The settings belong to the plug-in,
+next to the code they excuse, where a reviewer sees them.
+
+**Rejected:** settings in a central file (they drift from the plug-ins they
+describe); skipping softened checks (the suite allows skips only for
+platform facts: `off` checks are left out and reported instead); a
+no-peeking check that only compares a run alone with a longer one (a cache
+shared between instances and warmed by an earlier run passes it); running
+that check in the test process (a cache filled by another check makes every
+run agree, so it runs in a fresh interpreter); a gaps check feeding None to
+every input at once (the graph never does; it updates an indicator only when
+some input has a sample).
+

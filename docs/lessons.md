@@ -164,6 +164,14 @@ within each section.
 - **`str.replace` replaces every occurrence.** A test that edited a
   configuration's `[[streams]]` defined an indicator twice, and passed for
   the wrong reason; a control that did not fire found it. Pass a count.
+- **A check that compares runs only catches what differs between them.** The
+  first no-peeking check compared five runs in one process; a cache filled
+  once, by any earlier check, made all five agree, and the result depended
+  on test order. An independent review found it with pytest-randomly seeds.
+  Checks of hidden state run in a fresh interpreter.
+- **Test what the caller really does.** The gaps check fed None to every
+  input at once, which the graph never does, and missed the case it does
+  (one input sampled, another not).
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

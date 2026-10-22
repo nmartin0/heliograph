@@ -225,3 +225,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - D27 records the indicator graph's cutoff (a missing sample, not an equal
   value) and one stream per mount and size; the roadmap plans Phase 2 in four
   batches and moves session calendars to Phase 4.
+- D28 records where the conformance kit lives and how plug-ins declare what it
+  expects; testing.md and the roadmap mark the kit built, the adapters' own
+  checks still to come.

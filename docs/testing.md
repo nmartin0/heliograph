@@ -12,12 +12,16 @@ section.
 - a 90% branch-coverage floor per file;
 - the cross-process determinism test (`tests/determinism`);
 - the suite rules (`tests/meta`);
-- 176 declared controls with their script and CI job;
+- 190 declared controls with their script and CI job;
 - the mutation wrapper;
-- a state machine for the engine and alarms.
+- a state machine for the engine and alarms;
+- live tests for the CCXT source (`tests/live`, on request);
+- the conformance kit (`heliograph.testkit`, `tests/conformance`): every
+  plug-in's build and parameters, and every indicator's no-peeking, edge
+  case and reference checks.
 
-Conformance kits and scenarios come in Phase 2, outside-in tests in Phase 3,
-and live tests with the CCXT source.
+The adapters' own conformance checks and the scenarios come later in Phase 2,
+outside-in tests in Phase 3.
 
 ## What a test is for
 
@@ -44,7 +48,7 @@ Three corollaries:
 | Properties | beside the unit tests | a rule over every input (Hypothesis `@given`) | every check |
 | State machines | beside the unit tests | a component equals a slow reference model after any sequence of operations (`RuleBasedStateMachine`) | every check |
 | Determinism | `tests/determinism` | the same inputs give the same journal (entry rows byte for byte, and header) in separate processes with different hash seeds and time zones | every check |
-| Conformance | `tests/conformance` (Phase 2) | every registered plug-in of a kind meets the kind's contract | every check |
+| Conformance | `tests/conformance` | every registered plug-in of a kind meets the kind's contract | every check |
 | Scenarios | `tests/scenarios` (Phase 2) | a whole backtest still gives its recorded counts, statistics and signals | every check |
 | Outside-in | `tests/process` (Phase 3) | the engine process, started as a person would start it, serves what it should through its API; imports nothing from `heliograph` | every check |
 | Live | `tests/live`, marker `live` | an adapter still matches the real service (CCXT exchanges) | on request and on a schedule |
@@ -93,25 +97,47 @@ tested once and inherited, never copied.
 - **One kit per plug-in kind.** It runs on every plug-in registered through
   entry points, on by default. A new plug-in is tested the moment it is
   registered.
-- **Checks for indicators and forecasters:**
-  - no peeking: appending data never changes earlier output;
-  - edge cases: warm-up, gaps, repeated timestamps, a single point;
-  - reference values (TA-Lib or a published example);
-  - a manifest check;
-  - a parameter schema that round-trips.
-- **Checks for adapters:** declared capabilities match behaviour, rate limits
-  hold, and `SourceUnavailableError` is raised rather than an empty answer.
-- **Each check is `error`, `todo` or `off`, set in the plug-in's
-  configuration.** The narrowest setting wins. `todo` and `off` need a
-  written reason. A plug-in may supply a check's inputs, or replace a check
-  with a named stronger test, which the kit confirms exists. One report
-  lists every softened or replaced check.
-- **The kit is tested itself.** A deliberately broken sample plug-in of each
-  kind must fail each check. The roadmap's Phase 2 gate is one instance:
-  "the conformance kit fails on a deliberately peeking indicator".
-- **Plug-ins written outside this repository run the same kit** through a
-  pytest plugin, `heliograph.testkit` (an optional extra). Until a kit
-  exists, shared builders stay in `tests/support`.
+- **Checks for every plug-in** (built): it builds from the parameters the kit
+  is given, its schema renders, its parameters survive JSON. The kit builds
+  in an empty temporary folder and closes what it builds.
+- **Checks for indicators** (built; forecasters will follow the same
+  pattern). Inputs are random walks, or consistent random bars for an
+  indicator that names the bar fields it reads (`fields=("high", "low",
+  "close")`):
+  - no peeking: in a fresh interpreter, the same 400-update beginning,
+    followed by different 1000-update futures in turn and alone, gives the
+    same outputs every time, and those outputs hold a value. The fresh
+    interpreter matters: a cache filled by another check would make every
+    run agree. A peek further than 1000 updates ahead, or a warm-up longer
+    than 400, is beyond the check;
+  - warm-up: only finite values or None, and a value within 160 updates;
+  - gaps: while some input has had no sample yet (the graph passes None for
+    it), no value. A one-input indicator is never updated without a sample;
+  - a constant input, and a single update;
+  - reference values (TA-Lib, a published example, or worked by hand).
+- **Checks for adapters** (planned; they need a scripted source per adapter):
+  declared capabilities match behaviour, rate limits hold, and
+  `SourceUnavailableError` is raised rather than an empty answer.
+- **Each check is `error`, `todo`, `off` or `replaced`, set in the
+  plug-in's `conformance = Conformance(...)`** (`plugins/conformance.py`).
+  The narrowest setting wins: a check's own over the plug-in's default, and
+  the default covers only the kind's checks, never `manifest` and `params`.
+  A `todo` is a strict expected failure: anything the plug-in raises counts
+  as the failure, and the run fails once the check passes. `todo`, `off`
+  and `replaced` need a written reason; `replaced` names a test, which the
+  kit finds by parsing the file, from the project root (the nearest
+  pyproject.toml). One report lists every softened or replaced check.
+- **The kit is tested itself.** For every check there is a sample indicator
+  broken in just that way, and the check must fail on it
+  (`tests/conformance/test_kit.py`). The roadmap's Phase 2 gate is one
+  instance: "the conformance kit fails on a deliberately peeking indicator",
+  run with its cache empty and filled by other checks.
+- **Every kind registered through entry points is in the kit**
+  (`tests/conformance/test_registered.py` reads the installed groups).
+- **Plug-ins written outside this repository run the same kit**: install
+  the `testkit` extra and write a three-line test with `cases` and `run`
+  (the docstring of `heliograph.testkit`). Shared test builders for this
+  repository's own tests stay in `tests/support`.
 
 ### Scenarios (Phase 2)
 

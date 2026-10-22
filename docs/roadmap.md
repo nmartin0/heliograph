@@ -8,7 +8,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
 | 1 | Data | built, gate passing; left: the first live check against Kraken |
-| 2 | Backtest engine and strategy pipeline | in progress (D1: the indicator graph and indicators in runs) |
+| 2 | Backtest engine and strategy pipeline | in progress (D1 the indicator graph and D2 the conformance kit done) |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
 | 5 | Research tools | planned |
@@ -129,11 +129,12 @@ example strategy and the gate.
       indicators in a run from configuration, journalled, recorded in the
       header and replayed; first indicators `sma` and `ema` (D1). Observers
       (skipping what nothing reads) wait for strategies, the first readers.
-- Conformance kits (no peeking, edge cases, reference values, manifest) run
-  on every registered plug-in by default; each check `error`, `todo` or
-  `off` with a reason; a broken sample plug-in per kind; a softened-checks
-  report; `heliograph.testkit` as a pytest plugin for outside plug-ins
-  ([testing.md](testing.md)).
+- [x] Conformance kits (no peeking, edge cases, reference values, manifest)
+      run on every registered plug-in by default; each check `error`,
+      `todo`, `off` or `replaced` with a reason; a broken sample plug-in per
+      check; a softened-checks report; `heliograph.testkit` for outside
+      plug-ins ([testing.md](testing.md)) (D2). The adapters' own checks
+      wait for a scripted source per adapter.
 - Scenario tests after LEAN's regression algorithms: recorded counts,
   statistics and signals; reports compared as text with inline-snapshot.
 - Indicator nodes wrapping TA-Lib streams and talipp; a first set of
