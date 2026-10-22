@@ -185,6 +185,27 @@ within each section.
   drops its first sqrt(n) - 1 differences, so starts later than the
   definition allows; where both give a value they agree. Write the
   library's convention into the reference and say why.
+- **`git checkout` cannot restore a file git does not track yet.** Checking
+  two controls by hand on a new module, the second break landed on top of
+  the first, which `git checkout -q ... || true` had silently failed to
+  undo. Check controls with `scripts/check_controls.py`, which restores from
+  its own record, or copy the file aside first.
+- **A test whose case never exercises the guard passes without it.** The
+  first "decides only at price closes" test put the strategy on the faster
+  stream, so every instant was a price close; the "waits for every gate"
+  test never had a gate warming while the forecasts were ready. The
+  declared controls found both.
+- **A risk check must never block taking risk off.** The first `limits`
+  gate refused a stop-out because the price had jumped, and a move to flat
+  because the day's signals were spent: the very cases it exists for. Risk
+  gates now see only proposals that add risk. An independent review found
+  it, with six other defects in the same batch.
+- **`sum()` turns -0.0 into 0.0** (it starts from the integer 0), so a test
+  feeding -0.0 through a summing stand-in never produced one; the declared
+  control said so.
+- **Check a published default before copying a design from memory.**
+  Carver's buffer trades to its nearest edge (`buffer_trade_to_edge: True`
+  in pysystemtrade's defaults.yaml), not to the optimal position.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

@@ -123,12 +123,15 @@ process (D18).
 
 In four batches: D1 the indicator graph and indicators in runs; D2 the
 conformance kits; D3 indicators on TA-Lib and talipp; D4 the pipeline, the
-example strategy and the gate.
+example strategy and the gate, in three parts: D4a the pipeline, D4b
+simulated fills, costs and a report, D4c the example strategy, scenario
+tests and the gate.
 
 - [x] Indicator graph with stabilisation per timestamp and cutoffs (D27);
       indicators in a run from configuration, journalled, recorded in the
-      header and replayed; first indicators `sma` and `ema` (D1). Observers
-      (skipping what nothing reads) wait for strategies, the first readers.
+      header and replayed; first indicators `sma` and `ema` (D1). Graph
+      observers, which strategies are, came in D4a; skipping nodes nothing
+      reads waits until it is measured to matter.
 - [x] Conformance kits (no peeking, edge cases, reference values, manifest)
       run on every registered plug-in by default; each check `error`,
       `todo`, `off` or `replaced` with a reason; a broken sample plug-in per
@@ -144,8 +147,11 @@ example strategy and the gate.
   with the first strategy that needs it.
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
-- Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate; the
-  `Signal` record and its lifecycle types.
+- [x] Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate;
+      the `Signal` and `SignalRefused` records; strategies in a run from
+      configuration, journalled and replayed; a first plug-in per stage
+      (D30, D4a). The signal's lifecycle (taken, skipped, expired) waits for
+      paper trading in Phase 4.
 - One example strategy; simulated fills and cost model; a text report.
 - `heliograph.sdk` first cut.
 

@@ -87,8 +87,12 @@ contract and a core purity test).
   instants). Indicators are series, so every sample propagates, equal or not;
   the cutoff is a node producing no sample. One `IndicatorValues` per
   instant carries every indicator's latest sample and which changed. A run
-  builds its indicators from `[[components]]` (D26, D27). Skipping nodes
-  nothing reads waits for strategies, the first readers.
+  builds its indicators from `[[components]]` (D26, D27). After each
+  stabilisation the graph tells its observers which nodes took a sample.
+- **Strategy pipeline (built; `core/pipeline.py`, D30).** Forecasters and
+  gates are graph nodes; a strategy observes the graph and, at each close of
+  its price stream, combines, sizes, exits and checks; see "Strategy
+  pipeline" below.
 
 ## Plug-ins
 
@@ -194,6 +198,17 @@ strategy may also be written as one class.
 | Exit | position, prices | target override | Stop, trailing stop, take-profit, time limit (triple barrier) |
 | Risk gate | targets, signals | allowed or refused | Independent checks: stale data, signal rate, price sanity, market hours, halt |
 | Signal | everything above | `Signal` record | The product |
+
+How it runs (D30): forecasters and gates are nodes of the indicator graph,
+so their values are journalled, replayed and checked by the conformance kit
+like any indicator's. A strategy observes the graph and decides at each close
+of its price stream, once every forecaster and gate has a sample: a veto
+makes the combined forecast 0; the sizer sees every close, so it can follow
+the price while forecasts warm up; exits run in order and the one that sets
+the target is named; risk gates see only proposals that add risk (taking it
+off always leaves), and the first to refuse stops the signal, which is
+journalled as `SignalRefused`. In the first cut the position a strategy
+holds is the last target it signalled; fills come with the simulated broker.
 
 Optional: meta-labelling as a sizer that scales a forecast by the probability
 it pays off. The design is Carver's, with MQL5's veto, pattern mask and invert

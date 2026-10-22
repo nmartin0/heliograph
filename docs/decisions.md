@@ -381,3 +381,52 @@ line); trying to open a stream on every sample (O(n²) over the warm-up: 19 s
 for a MACD at its bounds); talipp for indicators TA-Lib has (TA-Lib's streams are exact
 against its batch values and faster); talipp unbounded.
 
+## D30 · Forecasters and gates are graph nodes; a strategy observes the graph (2026-10-22)
+
+A forecaster or a gate is an `Indicator`: it reads graph nodes and gives one
+sample per instant, so it runs in the indicator graph, its samples are
+journalled in `IndicatorValues`, and the conformance kit checks it with the
+indicator checks. The per-strategy stages (combiner, sizer, exits, risk
+gates) are plain objects a `Strategy` calls. The strategy observes the graph
+(`Graph.observe`): after each stabilisation it hears which nodes took a
+sample, and decides when its price stream's close is among them, so every
+value it reads is the latest known then. It decides nothing until every
+forecaster and gate has a sample. A gate passes above 0; any veto makes the
+combined forecast 0 and the target flat, whatever the sizer's buffer.
+Forecasts are capped at ±20 each and once combined; a combined forecast that
+is not finite stops the run. A signal is published only when the target
+differs from the position held (the sizer's buffer keeps small changes from
+trading). Risk gates guard against adding risk: a proposal that only takes
+risk off (to flat, or smaller on the same side) never reaches them, so a
+stop or a veto always leaves. A gate that refuses is published as
+`SignalRefused`, and the position held stays; every gate hears of each signal
+sent (`sent`), so one counting signals counts only those that left, and sees
+the previous close of the price stream. A signal's id hashes the
+configuration's digest, the strategy, the instant and the target (−0.0 as
+0.0), so the same decision always has the same id and runs do not share
+ids. Each stage belongs to one strategy, since it keeps state; every stage
+must be used. The position held is the last signalled target until the
+simulated broker (D4b) reports fills.
+
+In the configuration, `[[strategies]]` name their price stream (a price
+field, not a volume) and stages; stages are `[[components]]` with names, and
+only exits read inputs (graph nodes or streams' fields). A strategy with one
+forecaster needs no combiner. The sizer trades to the nearest edge of its
+no-trade buffer, as pysystemtrade does by default (`buffer_trade_to_edge:
+True`).
+
+**Why:** forecasters are series over indicator values, the same shape as
+indicators; the graph already gives them stabilisation, journalling, replay
+and the kit's no-peeking check. Observing the graph rather than
+`IndicatorValues` lets a strategy decide at every close of its price
+stream, including instants at which no indicator produced a sample.
+
+**Rejected:** forecasters as their own engine stage (a second scheduler
+with the graph's guarantees rebuilt); deciding on `IndicatorValues`
+(published only when an indicator produced, so a strategy would miss
+closes); risk gates seeing every proposal (a jump or rate limit then blocked
+the stop-out it exists to allow, found in review); MQL5's averaged vote with
+silent filters diluting (D8); signalling
+every bar whatever the target (idempotent delivery would hide it, but the
+journal and the person would drown).
+

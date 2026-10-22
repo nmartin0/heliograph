@@ -251,3 +251,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - D29 records how library indicators are wrapped (TA-Lib streams opened on
   retry, one node per output, talipp bounded); the roadmap marks D3 done and
   moves bars built from finer bars to D4.
+- D30 records how strategies run (forecasters and gates as graph nodes, a
+  strategy observing the graph); design.md and the roadmap describe the
+  pipeline as built, and D4 is split into three parts.
