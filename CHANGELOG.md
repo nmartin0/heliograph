@@ -211,3 +211,6 @@ All notable changes to Heliograph are recorded here. The format follows
 - A mount carries at most one stream of each bar size: bars say their
   instrument and size, not their grace, so two such streams could not be told
   apart by what reads them.
+- D27 records the indicator graph's cutoff (a missing sample, not an equal
+  value) and one stream per mount and size; the roadmap plans Phase 2 in four
+  batches and moves session calendars to Phase 4.

@@ -305,3 +305,25 @@ from meaning something the run does not do.
 gone when the run is questioned); appending runs to one journal file (a
 file then mixes configurations).
 
+## D27 · The graph's cutoff is a missing sample, not an equal value; one stream per mount and size (2026-10-22)
+
+Every sample a node produces is passed on, even one equal to the last; a
+node that produces none leaves what reads it untouched. One stream per
+mount and bar size, however its size is written (`btc@1h.close` and
+`btc@60m.close` are one input). An indicator may not read streams of
+different grace, which close at different instants. Two bars of one input
+known at one instant are refused, never one of them dropped. A replay
+refuses an indicator whose installed version or parameters, defaults
+included, are not the ones the run recorded.
+
+**Why:** indicators are stateful series, not formulas. Incremental's
+cutoff on equality suits pure functions, but a 20-bar average must count a
+close equal to the one before, or it averages the wrong bars. Bars carry
+their instrument and size, not their grace or gap policy, so two streams of
+one size on one mount could not be told apart by an input; refusing them is
+simpler than putting stream identity on every bar.
+
+**Rejected:** equality cutoffs with `isclose` (the design's first plan; it
+silently drops samples); a stream key on `Bar` (every source and journal
+would carry it for a case nobody needs yet).
+

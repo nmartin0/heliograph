@@ -77,11 +77,18 @@ contract and a core purity test).
   mount's source, version and validated parameters, the store snapshots
   read and the interval; `replay_backtest` rebuilds a complete run from
   that journal alone.
-- **Indicator graph (planned).** Indicators form a dependency graph that is
-  stabilised once per timestamp, after every input stamped at that time has
-  arrived (Jane Street's Incremental idea). Nodes recompute in dependency
-  order, stop propagating when a value is unchanged (cutoff), and are skipped
-  when nothing observes them. Nodes are whole series, not scalars.
+- **Indicator graph (built; `core/graph.py`, D27).** Inputs take one field of
+  the bars of one instrument and size; indicators read earlier nodes. The
+  graph stabilises once per instant, on `Settled`, after every bar closing
+  then has arrived (Jane Street's Incremental idea): each node with a changed
+  input is updated once, in dependency order, which is the order nodes were
+  added in; inputs closing at one instant are read together (a run refuses an
+  indicator reading streams of different grace, which close at different
+  instants). Indicators are series, so every sample propagates, equal or not;
+  the cutoff is a node producing no sample. One `IndicatorValues` per
+  instant carries every indicator's latest sample and which changed. A run
+  builds its indicators from `[[components]]` (D26, D27). Skipping nodes
+  nothing reads waits for strategies, the first readers.
 
 ## Plug-ins
 

@@ -154,6 +154,16 @@ within each section.
 - **The TOML literal-string trap struck twice more** in one batch. The
   controls script catches it (a break that matches nothing is refused);
   write every control with basic (double-quoted) strings.
+- **Python 3.12's built-in `sum` is compensated for floats** (Neumaier):
+  `sum([1e16, 1.0, -1e16])` is 1.0. A control meant to show what `fsum`
+  saves had to break to a naive left-to-right loop instead; the control
+  that did not fire said so.
+- **Equality cutoffs suit formulas, not series.** The planned graph would
+  have dropped a close equal to the last and averaged the wrong bars; a
+  test of three equal closes caught the plan before the code (D27).
+- **`str.replace` replaces every occurrence.** A test that edited a
+  configuration's `[[streams]]` defined an indicator twice, and passed for
+  the wrong reason; a control that did not fire found it. Pass a count.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

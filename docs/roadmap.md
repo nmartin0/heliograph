@@ -8,7 +8,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
 | 1 | Data | built, gate passing; left: the first live check against Kraken |
-| 2 | Backtest engine and strategy pipeline | planned |
+| 2 | Backtest engine and strategy pipeline | in progress (D1: the indicator graph and indicators in runs) |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
 | 5 | Research tools | planned |
@@ -121,7 +121,14 @@ process (D18).
 
 ## Phase 2 · Backtest engine and strategy pipeline
 
-- Indicator graph with stabilisation per timestamp, cutoffs and observers.
+In four batches: D1 the indicator graph and indicators in runs; D2 the
+conformance kits; D3 indicators on TA-Lib and talipp; D4 the pipeline, the
+example strategy and the gate.
+
+- [x] Indicator graph with stabilisation per timestamp and cutoffs (D27);
+      indicators in a run from configuration, journalled, recorded in the
+      header and replayed; first indicators `sma` and `ema` (D1). Observers
+      (skipping what nothing reads) wait for strategies, the first readers.
 - Conformance kits (no peeking, edge cases, reference values, manifest) run
   on every registered plug-in by default; each check `error`, `todo` or
   `off` with a reason; a broken sample plug-in per kind; a softened-checks
@@ -131,8 +138,8 @@ process (D18).
   statistics and signals; reports compared as text with inline-snapshot.
 - Indicator nodes wrapping TA-Lib streams and talipp; a first set of
   indicators. Bars built from finer bars where an indicator needs them.
-- Session calendars (exchange_calendars) for local days and market hours,
-  needed by Alpaca in Phase 4.
+- Session calendars (exchange_calendars) for local days and market hours:
+  moved to Phase 4, where Alpaca first needs them.
 - Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate; the
   `Signal` record and its lifecycle types.
 - One example strategy; simulated fills and cost model; a text report.
@@ -167,6 +174,8 @@ code written for it.
 - Optional: a published-records sink writing signals, simulated fills and
   daily equity to a separate SQLite file that Elysium reads as a silo (D20).
 - The second live source: Alpaca, for US stocks (D21).
+- Session calendars (exchange_calendars) for local days and market hours,
+  which Alpaca's stocks need (moved from Phase 2).
 - Paper broker on live data; took-it/skipped journal.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
 
