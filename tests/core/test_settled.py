@@ -64,7 +64,7 @@ def test_a_handler_may_act_on_settled_at_the_same_instant() -> None:
 def test_a_settled_instant_cannot_be_given_another_alarm() -> None:
     clock, bus, engine, _ = build()
     bus.subscribe(Settled, lambda s: engine.scheduler.at(clock.now(), "too-late"))
-    with pytest.raises(ClockError, match="already settled"):
+    with pytest.raises(ClockError, match="an alarm was set for 4, an instant that has already"):
         engine.run(ticks(4))
 
 

@@ -126,3 +126,17 @@ def test_malformed_spans_are_refused(text: str) -> None:
 @given(st.integers(1, 10**18))
 def test_any_positive_span_round_trips(nanos: int) -> None:
     assert parse_span(format_span(nanos)) == nanos
+
+
+def test_the_longest_span_is_exactly_the_largest_int64() -> None:
+    longest = 2**63 - 1
+    assert parse_span(f"{longest}ns") == longest
+    assert parse_span(format_span(longest)) == longest
+    with pytest.raises(InvalidValueError, match="longer than"):
+        parse_span(f"{longest + 1}ns")
+
+
+@pytest.mark.parametrize("nanos", [0, -1, 2**63, 1.5, True])
+def test_only_a_positive_int64_count_can_be_written_as_a_span(nanos: object) -> None:
+    with pytest.raises(InvalidValueError, match="positive int64"):
+        format_span(nanos)  # type: ignore[arg-type]

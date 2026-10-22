@@ -155,6 +155,57 @@ def test_moving_one_alarm_on_every_message_does_not_grow_memory() -> None:
     assert len(queue) == 2
     assert queue.heap_size() <= 2 * len(queue) + 17
     assert queue.next_due() == 10_000
+    # The clean-up must keep every live alarm, not just the one being moved.
+    bus = MessageBus(clock)
+    fired: list[AlarmFired] = []
+    bus.subscribe(AlarmFired, fired.append)
+    BacktestEngine(clock, bus, queue).run(until=Timestamp(10**9))
+    assert fired == [
+        AlarmFired(ts=Timestamp(10_000), key="watchdog"),
+        AlarmFired(ts=Timestamp(10**9), key="session-close"),
+    ]
+
+
+def test_cancelling_an_alarm_that_is_not_set_does_nothing() -> None:
+    _, _, engine, seen = build()
+    engine.scheduler.at(Timestamp(5), "kept")
+    engine.scheduler.cancel("never-set")
+    engine.run(until=Timestamp(10))
+    assert seen == [AlarmFired(ts=Timestamp(5), key="kept")]
+
+
+def test_an_engine_uses_the_alarm_queue_it_is_given_on_its_own_clock() -> None:
+    clock = SimulatedClock(Timestamp(0))
+    queue = AlarmQueue(clock)
+    engine = BacktestEngine(clock, MessageBus(clock), queue)
+    engine.scheduler.at(Timestamp(5), "a")
+    assert len(queue) == 1
+
+
+class SmallLimit(BacktestEngine):
+    MAX_ALARMS_PER_INSTANT = 3
+
+
+def small_limit() -> tuple[SimulatedClock, MessageBus, SmallLimit]:
+    clock = SimulatedClock(Timestamp(0))
+    bus = MessageBus(clock)
+    return clock, bus, SmallLimit(clock, bus)
+
+
+def test_the_alarm_limit_counts_alarms_at_one_instant_up_to_and_including_it() -> None:
+    _, _, engine = small_limit()
+    for i in range(3):
+        engine.scheduler.at(Timestamp(5), f"five-{i}")
+        engine.scheduler.at(Timestamp(6), f"six-{i}")
+    engine.run(until=Timestamp(10))  # three at 5, then three at 6: within the limit
+
+
+def test_one_alarm_past_the_limit_at_one_instant_stops_the_run() -> None:
+    _, _, engine = small_limit()
+    for i in range(4):
+        engine.scheduler.at(Timestamp(5), f"five-{i}")
+    with pytest.raises(AlarmLoopError, match="more than 3 alarms"):
+        engine.run(until=Timestamp(10))
 
 
 def test_until_stops_the_run_at_that_instant() -> None:
@@ -181,3 +232,20 @@ def test_a_handler_that_keeps_re_setting_an_alarm_now_stops_the_run() -> None:
 def test_components_can_set_alarms_but_not_fire_them() -> None:
     _, _, engine, _ = build()
     assert not hasattr(engine.scheduler, "pop_due")
+
+
+def test_the_queue_gives_an_alarm_only_once_it_is_due() -> None:
+    queue = AlarmQueue(SimulatedClock(Timestamp(0)))
+    assert queue.pop_due(Timestamp(100)) is None
+    queue.at(Timestamp(10), "a")
+    assert queue.pop_due(Timestamp(9)) is None
+    assert queue.pop_due(Timestamp(10)) == AlarmFired(ts=Timestamp(10), key="a")
+    assert queue.pop_due(Timestamp(100)) is None
+
+
+def test_a_key_can_be_claimed_by_one_owner_only() -> None:
+    queue = AlarmQueue(SimulatedClock(Timestamp(0)))
+    queue.claim("bars:btc")
+    queue.claim("bars:eth")
+    with pytest.raises(InvalidValueError, match="bars:btc"):
+        queue.claim("bars:btc")

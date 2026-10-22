@@ -310,3 +310,25 @@ def test_bars_match_an_oracle_under_delays_and_grace(
     assert [(b.start, b.open, b.high, b.close) for _, b in seen] == expected
     assert builder.late_points == late
     assert all(at == bar.ts and bar.ts >= bar.end for at, bar in seen)
+
+
+def test_every_late_point_is_counted() -> None:
+    _, _, engine, (builder,) = build(BarSpec.of("1h"))
+    late = [point(30, 999, delay=40), point(40, 999, delay=40), point(50, 999, delay=40)]
+    engine.run([point(10, 100), *sorted(late, key=lambda p: p.ts)], until=Timestamp(3 * HOUR))
+    assert builder.late_points == 3
+
+
+def test_without_a_volume_value_every_bar_has_zero_volume() -> None:
+    clock, bus, engine, _ = build(BarSpec.of("1h", volume=None))
+    seen = collect(bus, clock)
+    engine.run([point(10, 100, 5), point(70, 101, 7)], until=Timestamp(2 * HOUR))
+    assert [bar.volume for _, bar in seen] == [0.0, 0.0]
+
+
+def test_a_bar_closed_at_its_end_carries_no_separate_received_time() -> None:
+    """On time, a bar is known at its end; with grace, at the later moment it closed."""
+    clock, bus, engine, _ = build(BarSpec.of("1h"), BarSpec.of("1h", grace=2 * MIN))
+    seen = collect(bus, clock)
+    engine.run([point(10, 100)], until=Timestamp(2 * HOUR))
+    assert [bar.received_at for _, bar in seen] == [None, HOUR + 2 * MIN]

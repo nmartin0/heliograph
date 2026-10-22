@@ -49,6 +49,20 @@ def test_larger_bars_can_be_built_only_from_finer_bars_that_tile_them() -> None:
     assert not four.can_be_built_from(BarSpec.of("1h", anchor=Timestamp(30 * NANOS_PER_MINUTE)))
 
 
+def test_shifted_bars_tile_when_the_anchors_differ_by_whole_finer_bars() -> None:
+    """Edges line up when the anchors are a whole number of finer bars apart, not only equal."""
+    minutes = [Timestamp(m * NANOS_PER_MINUTE) for m in (15, 75, 45)]
+    hour_from_quarter = BarSpec.of("1h", anchor=minutes[0])
+    assert BarSpec.of("4h", anchor=minutes[0]).can_be_built_from(hour_from_quarter)
+    assert BarSpec.of("4h", anchor=minutes[1]).can_be_built_from(hour_from_quarter)
+    assert not BarSpec.of("4h", anchor=minutes[2]).can_be_built_from(hour_from_quarter)
+
+
+def test_both_gap_policies_are_accepted() -> None:
+    assert BarSpec(size=10, gaps="skip").gaps == "skip"
+    assert BarSpec(size=10, gaps="carry").gaps == "carry"
+
+
 @pytest.mark.parametrize(
     ("fields", "reason"),
     [

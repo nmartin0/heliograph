@@ -348,3 +348,84 @@ path = "scripts/mutation_test.py"
 old = 'if name and status and status != "killed":'
 new = 'if name and status == "survived":'
 tests = ["tests/meta/test_mutation_test.py::test_every_mutant_not_killed_is_listed_with_its_status"]
+
+# Found by mutation testing on 2026-10-22, closed by tests, kept as controls.
+
+[[control]]
+describes = "the heap clean-up keeps every live alarm"
+path = "src/heliograph/core/alarms.py"
+old = "if id(item[3]) in live]"
+new = "if id(None) in live]"
+tests = ["tests/core/test_alarms.py::test_moving_one_alarm_on_every_message_does_not_grow_memory"]
+
+[[control]]
+describes = "the queue gives an alarm only once it is due"
+path = "src/heliograph/core/alarms.py"
+old = "        if not self._heap or self._heap[0][0] > limit:\n"
+new = "        if not self._heap:\n"
+tests = ["tests/core/test_alarms.py::test_the_queue_gives_an_alarm_only_once_it_is_due"]
+
+[[control]]
+describes = "the alarm limit allows exactly its number of alarms at one instant"
+path = "src/heliograph/core/engine.py"
+old = "                if fired_here > self.MAX_ALARMS_PER_INSTANT:\n"
+new = "                if fired_here >= self.MAX_ALARMS_PER_INSTANT:\n"
+tests = [
+    "tests/core/test_alarms.py::test_the_alarm_limit_counts_alarms_at_one_instant_up_to_and_including_it",
+]
+
+[[control]]
+describes = "the alarm limit counts each instant afresh"
+path = "src/heliograph/core/engine.py"
+old = "fired_here + 1 if alarm.ts == instant else 1"
+new = "fired_here + 1"
+tests = [
+    "tests/core/test_alarms.py::test_the_alarm_limit_counts_alarms_at_one_instant_up_to_and_including_it",
+]
+
+[[control]]
+describes = "a run cannot start from any handler, inside a run or not"
+path = "src/heliograph/core/engine.py"
+old = "        if self._running or self._bus.dispatching:\n"
+new = "        if self._running and self._bus.dispatching:\n"
+tests = [
+    "tests/core/test_engine.py::test_a_run_cannot_start_from_a_handler_even_outside_a_run",
+    "tests/core/test_engine.py::test_a_run_cannot_start_while_a_feed_is_being_read",
+]
+
+[[control]]
+describes = "a run may stop exactly where the clock already is"
+path = "src/heliograph/core/engine.py"
+old = "        if until is not None and until < self._clock.now():\n"
+new = "        if until is not None and until <= self._clock.now():\n"
+tests = ["tests/core/test_engine.py::test_a_run_may_stop_exactly_where_the_clock_already_is"]
+
+[[control]]
+describes = "every late point is counted"
+path = "src/heliograph/core/bars.py"
+old = "            self._late += 1\n"
+new = "            self._late = 1\n"
+tests = ["tests/core/test_bars.py::test_every_late_point_is_counted"]
+
+[[control]]
+describes = "without a volume value bars have zero volume"
+path = "src/heliograph/core/bars.py"
+old = "        volume = 0.0 if spec.volume is None else"
+new = "        volume = 1.0 if spec.volume is None else"
+tests = ["tests/core/test_bars.py::test_without_a_volume_value_every_bar_has_zero_volume"]
+
+[[control]]
+describes = "a bar closed at its end carries no separate received time"
+path = "src/heliograph/core/bars.py"
+old = "                received_at=None if now == end else now,\n"
+new = "                received_at=now,\n"
+tests = ["tests/core/test_bars.py::test_a_bar_closed_at_its_end_carries_no_separate_received_time"]
+
+[[control]]
+describes = "a message published straight to the bus is journalled as input"
+path = "src/heliograph/core/bus.py"
+old = 'def publish(self, message: Message, *, origin: Origin = "input") -> None:'
+new = 'def publish(self, message: Message, *, origin: Origin = "engine") -> None:'
+tests = [
+    "tests/core/test_journal.py::test_a_message_published_straight_to_the_bus_is_journalled_as_input",
+]

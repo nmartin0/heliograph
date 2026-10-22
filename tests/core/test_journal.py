@@ -104,3 +104,11 @@ def test_a_message_the_journal_refuses_uses_no_sequence_number() -> None:
         bus.publish(Crossed(Timestamp(2), 1.0))
     bus.publish(Settled(Timestamp(3)))
     assert [e.seq for e in journal.entries] == [1, 2]
+
+
+def test_a_message_published_straight_to_the_bus_is_journalled_as_input() -> None:
+    """What a live source publishes outside the engine is an input, and is replayed."""
+    journal = MemoryJournal()
+    bus = MessageBus(SimulatedClock(Timestamp(5)), journal)
+    bus.publish(Settled(Timestamp(5)))
+    assert [entry.origin for entry in journal.entries] == ["input"]

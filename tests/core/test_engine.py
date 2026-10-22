@@ -152,3 +152,32 @@ def test_feeds_are_read_at_most_one_message_ahead() -> None:
 
     bus.subscribe(Tick, deliver)
     assert engine.run(*(feed(i) for i in range(feed_count))) == 200
+
+
+def test_a_run_cannot_start_from_a_handler_even_outside_a_run() -> None:
+    """A message published straight to the bus is in hand just as one the engine delivers."""
+    _, bus, engine = build()
+
+    def start_a_run(tick: Tick) -> None:
+        engine.run([])
+
+    bus.subscribe(Tick, start_a_run)
+    with pytest.raises(ReentrancyError):
+        bus.publish(Tick(Timestamp(0), 0, 0))
+
+
+def test_a_run_cannot_start_while_a_feed_is_being_read() -> None:
+    _, _, engine = build()
+
+    def feed() -> Iterator[Tick]:
+        engine.run([])
+        yield Tick(Timestamp(1), 0, 0)
+
+    with pytest.raises(ReentrancyError):
+        engine.run(feed())
+
+
+def test_a_run_may_stop_exactly_where_the_clock_already_is() -> None:
+    clock, _, engine = build(start=7)
+    engine.run(until=Timestamp(7))
+    assert clock.now() == 7
