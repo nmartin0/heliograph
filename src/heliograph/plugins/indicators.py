@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Nicholas Martin
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
-"""The first indicators: moving averages, in plain Python, one sample at a time.
+"""Moving averages in plain Python, one sample at a time: simple, exponential, zero-lag.
 
 Each is a plug-in of kind ``indicators`` and an ``Indicator`` for the graph
 (core/graph.py): it reads one input and produces a sample once it has seen
@@ -107,3 +107,49 @@ class Ema(Plugin[PeriodParams]):
             return self._value
         self._value += self._alpha * (value - self._value)
         return self._value
+
+
+class ZeroLag(Plugin[PeriodParams]):
+    """The zero-lag exponential average: an EMA of 2·x(t) - x(t - lag), lag = (period - 1) // 2.
+
+    The EMA is seeded, like ``Ema``, from the simple average of its first
+    ``period`` values. The lag is rounded down, as Ehlers and most charting
+    tools do (talipp rounds half to even, so differs for periods of 4, 8, 12...).
+    """
+
+    manifest = Manifest(
+        kind="indicators",
+        name="zlema",
+        version="1",
+        summary="Zero-lag exponential moving average",
+        params=PeriodParams,
+    )
+    conformance = Conformance(
+        params={"period": 4},
+        references=[
+            Reference(
+                inputs=[[1.0], [3.0], [2.0], [6.0], [4.0], [8.0]],
+                outputs=[None, None, None, None, 4.5, 7.5],
+                source=(
+                    "worked by hand: lag (4-1)//2 = 1, so 5, 1, 10, 2, 12; "
+                    "seed (5+1+10+2)/4, then 0.4·12 + 0.6·4.5"
+                ),
+            )
+        ],
+    )
+    arity = 1
+
+    def __init__(self, params: PeriodParams) -> None:
+        super().__init__(params)
+        self._lag = (params.period - 1) // 2
+        self._recent: deque[float] = deque(maxlen=self._lag + 1)
+        self._ema = Ema(params)
+
+    def update(self, inputs: Sequence[float | None]) -> float | None:
+        value = _one("zlema", inputs)
+        if value is None:
+            return None
+        self._recent.append(value)
+        if len(self._recent) <= self._lag:
+            return None
+        return self._ema.update([2 * value - self._recent[0]])

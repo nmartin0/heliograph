@@ -17,8 +17,11 @@ classifiers = [
 dependencies = [
     "ccxt>=4.5,<5",
     "msgspec>=0.19,<1",
+    "numpy>=2,<3",
     "pyarrow>=22,<27",
     "pydantic>=2.11,<3",
+    "ta-lib>=0.8.2,<0.9",
+    "talipp>=2.7,<3",
 ]
 
 [project.optional-dependencies]
@@ -47,8 +50,16 @@ ccxt = "heliograph.plugins.ccxt_source:CcxtSource"
 store = "heliograph.plugins.store:StoreSource"
 
 [project.entry-points."heliograph.indicators"]
+alma = "heliograph.plugins.talipp_indicators:Alma"
+atr = "heliograph.plugins.talib_indicators:Atr"
+bbands = "heliograph.plugins.talib_indicators:Bands"
 ema = "heliograph.plugins.indicators:Ema"
+hma = "heliograph.plugins.talipp_indicators:Hull"
+macd = "heliograph.plugins.talib_indicators:Macd"
+rsi = "heliograph.plugins.talib_indicators:Rsi"
 sma = "heliograph.plugins.indicators:Sma"
+stddev = "heliograph.plugins.talib_indicators:StdDev"
+zlema = "heliograph.plugins.indicators:ZeroLag"
 
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"
@@ -112,8 +123,8 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-# CCXT ships no type information; its objects are Any to mypy.
-module = ["ccxt", "ccxt.*"]
+# CCXT and talipp ship no type information; their objects are Any to mypy.
+module = ["ccxt", "ccxt.*", "talipp", "talipp.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -154,6 +165,9 @@ multidict = "Apache-2.0"
 # winloop: Windows only, so not installed here to read; PyPI's metadata for
 # 0.6.3 states the MIT License.
 winloop = "MIT"
+# ta-lib 0.8.2: the licence field is empty; its LICENSE file is BSD 2-Clause,
+# and the TA-Lib C library its wheels bundle is BSD 3-Clause.
+ta-lib = "BSD-2-Clause AND BSD-3-Clause"
 
 [tool.heliograph.licences.exceptions]
 # Package = "reason", for a denied licence accepted case by case.
@@ -161,6 +175,7 @@ winloop = "MIT"
 [tool.heliograph.licences.projects]
 # Package = "URL", where its metadata has no useful project link.
 pydantic-core = "https://github.com/pydantic/pydantic-core"
+ta-lib = "https://github.com/TA-Lib/ta-lib-python"
 typing-extensions = "https://github.com/python/typing_extensions"
 winloop = "https://github.com/Vizonex/Winloop"
 

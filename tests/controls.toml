@@ -1535,3 +1535,94 @@ path = "src/heliograph/testkit/__init__.py"
 old = "            if setting.level == \"off\":\n"
 new = "            if False:\n"
 tests = ["tests/conformance/test_kit.py::test_an_off_check_is_not_run_and_is_reported", "tests/conformance/test_kit.py::test_a_check_setting_is_narrower_than_the_plugins_default"]
+
+[[control]]
+describes = "a TA-Lib indicator waits until every input has a sample"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "        if any(value is None for value in inputs):\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_talib_indicators.py::test_an_input_without_a_sample_gives_nothing_and_is_not_kept", "tests/conformance/test_registered.py::test_conformance"]
+
+[[control]]
+describes = "a TA-Lib indicator lets go of its warm-up history once its stream opens"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "        self._history = []  # the stream holds what it needs from here on\n"
+new = "        pass\n"
+tests = ["tests/plugins/test_talib_indicators.py::test_the_history_held_while_warming_up_is_let_go_once_the_stream_opens"]
+
+[[control]]
+describes = "a multi-output TA-Lib indicator gives the output it is set to"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "out[self._output]"
+new = "out[0]"
+tests = ["tests/plugins/test_talib_indicators.py::test_every_indicator_and_output_equals_ta_libs_batch_values_bit_for_bit"]
+
+[[control]]
+describes = "a TA-Lib indicator refuses another number of inputs"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "        if len(inputs) != arity:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_talib_indicators.py::test_an_indicator_given_another_number_of_inputs_is_refused"]
+
+[[control]]
+describes = "MACD refuses a fast average that is not faster"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "        if self.fast >= self.slow:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_talib_indicators.py::test_a_macd_whose_fast_average_is_not_faster_is_refused"]
+
+[[control]]
+describes = "MACD's signal line reads its own period"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "\"signalperiod\": params.signal"
+new = "\"signalperiod\": params.fast"
+tests = ["tests/plugins/test_talib_indicators.py::test_every_indicator_and_output_equals_ta_libs_batch_values_bit_for_bit"]
+
+[[control]]
+describes = "a talipp indicator drops its oldest values"
+path = "src/heliograph/plugins/talipp_indicators.py"
+old = "        if len(indicator) > 2 * self._keep:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_talipp_indicators.py::test_dropping_old_values_changes_no_value_and_keeps_memory_bounded"]
+
+[[control]]
+describes = "a talipp indicator keeps enough values for every output"
+path = "src/heliograph/plugins/talipp_indicators.py"
+old = "    return 4 * period + 64\n"
+new = "    return 1\n"
+tests = ["tests/plugins/test_talipp_indicators.py::test_dropping_old_values_changes_no_value_and_keeps_memory_bounded"]
+
+[[control]]
+describes = "a talipp indicator adds nothing for an input without a sample"
+path = "src/heliograph/plugins/talipp_indicators.py"
+old = "        if value is None:\n            return None\n        indicator = self._indicator\n"
+new = "        indicator = self._indicator\n"
+tests = ["tests/plugins/test_talipp_indicators.py::test_an_input_without_a_sample_gives_nothing_and_adds_nothing"]
+
+[[control]]
+describes = "a talipp indicator refuses another number of inputs"
+path = "src/heliograph/plugins/talipp_indicators.py"
+old = "        if len(inputs) != 1:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_talipp_indicators.py::test_an_indicator_given_another_number_of_inputs_is_refused"]
+
+[[control]]
+describes = "a TA-Lib stream is opened once its lookback is held, not tried on every sample"
+path = "src/heliograph/plugins/talib_indicators.py"
+old = "        if len(self._history) < self._needed:\n            return None\n"
+new = ""
+tests = ["tests/plugins/test_talib_indicators.py::test_a_stream_is_opened_once_its_lookback_is_held_not_tried_on_every_sample"]
+
+[[control]]
+describes = "the zero-lag average rounds its lag down"
+path = "src/heliograph/plugins/indicators.py"
+old = "        self._lag = (params.period - 1) // 2\n"
+new = "        self._lag = round((params.period - 1) / 2)\n"
+tests = ["tests/plugins/test_indicators.py::test_the_zero_lag_rounds_its_lag_down", "tests/plugins/test_indicators.py::test_the_zero_lag_average_follows_its_definition"]
+
+[[control]]
+describes = "the zero-lag average takes away the lagged sample"
+path = "src/heliograph/plugins/indicators.py"
+old = "        return self._ema.update([2 * value - self._recent[0]])\n"
+new = "        return self._ema.update([value])\n"
+tests = ["tests/plugins/test_indicators.py::test_the_zero_lag_average_follows_its_definition"]

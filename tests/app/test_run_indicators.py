@@ -8,7 +8,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
+import talib
 
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest
@@ -300,5 +302,28 @@ def test_a_journal_written_before_indicators_ran_still_replays(
     with db:
         db.execute("DELETE FROM header WHERE key = 'components'")
     db.close()
+    replayed = replay_backtest(original, tmp_path / "replay.sqlite", registry)
+    assert raw_rows(replayed.journal) == raw_rows(original)
+
+
+def test_library_indicators_read_bar_fields_and_choose_an_output_in_a_run(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """ATR reads three fields of one stream; MACD gives the line its output names."""
+    atr = indicator("atr", ["btc@1h.high", "btc@1h.low", "btc@1h.close"], name="range", period=2)
+    macd = (
+        '[[components]]\nkind = "indicators"\nplugin = "macd"\nname = "hist"\n'
+        'inputs = ["btc@1h.close"]\n'
+        'params = { fast = 2, slow = 3, signal = 2, output = "histogram" }\n'
+    )
+    original = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), atr + macd), registry, original)
+    values = journalled_values(original)
+    # One trade an hour, so every bar is flat: high = low = close, rising by 1 an hour.
+    # The true range is then the step from the last close, 1; ATR(2) of it is 1.
+    assert values[3]["range"] == 1.0
+    closes = np.array([100.0 + h for h in range(8)])
+    histogram = talib.MACD(closes, fastperiod=2, slowperiod=3, signalperiod=2)[2]
+    assert values[8]["hist"] == float(histogram[7])
     replayed = replay_backtest(original, tmp_path / "replay.sqlite", registry)
     assert raw_rows(replayed.journal) == raw_rows(original)

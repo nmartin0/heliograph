@@ -23,6 +23,7 @@ test runner) are not distributed and are not listed here.
 | idna | 3.18 | BSD-3-Clause | permissive | https://github.com/kjd/idna |
 | msgspec | 0.22.0 | BSD-3-Clause | permissive | https://github.com/msgspec/msgspec |
 | multidict | 6.9.1 | Apache-2.0 | permissive | https://github.com/aio-libs/multidict |
+| numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | permissive | https://github.com/numpy/numpy |
 | orjson | 3.13.0 | MPL-2.0 AND (Apache-2.0 OR MIT) | copyleft | https://github.com/ijl/orjson |
 | propcache | 0.5.2 | Apache-2.0 | permissive | https://github.com/aio-libs/propcache |
 | pyarrow | 26.0.0 | Apache-2.0 | permissive | https://github.com/apache/arrow |
@@ -30,6 +31,8 @@ test runner) are not distributed and are not listed here.
 | pydantic | 2.14.1 | MIT | permissive | https://github.com/pydantic/pydantic |
 | pydantic-core | 2.50.1 | MIT | permissive | https://github.com/pydantic/pydantic-core |
 | requests | 2.34.2 | Apache-2.0 | permissive | https://github.com/psf/requests |
+| ta-lib | 0.8.2 | BSD-2-Clause AND BSD-3-Clause | permissive | https://github.com/TA-Lib/ta-lib-python |
+| talipp | 2.7.0 | MIT | permissive | https://github.com/nardew/talipp |
 | typing-extensions | 4.16.0 | PSF-2.0 | permissive | https://github.com/python/typing_extensions |
 | typing-inspection | 0.4.4 | MIT | permissive | https://github.com/pydantic/typing-inspection |
 | urllib3 | 2.8.0 | MIT | permissive |  |

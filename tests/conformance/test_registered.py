@@ -42,8 +42,16 @@ def test_every_installed_plugin_is_in_the_kit() -> None:
         "data_sources/file",
         "data_sources/store",
         "instrument_providers/static",
+        "indicators/alma",
+        "indicators/atr",
+        "indicators/bbands",
         "indicators/ema",
+        "indicators/hma",
+        "indicators/macd",
+        "indicators/rsi",
         "indicators/sma",
+        "indicators/stddev",
+        "indicators/zlema",
         "journals/sqlite",
     }
 

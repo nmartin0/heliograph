@@ -182,6 +182,13 @@ All notable changes to Heliograph are recorded here. The format follows
   hold a check as `todo`, `off` or `replaced` with a reason; the report
   lists them all. A deliberately broken plug-in fails each check, the peeking
   one being Phase 2's gate.
+- Indicators on TA-Lib's streams: `rsi`, `atr` (reading high, low and close),
+  `macd` and `bbands` (one line or band each, chosen by `output`) and
+  `stddev`, one sample at a time and bit-identical to TA-Lib's batch values.
+  On talipp, for averages TA-Lib lacks: `hma` (Hull) and `alma` (Arnaud
+  Legoux), their memory bounded however long the run. And `zlema` (zero lag)
+  in plain Python, its lag rounded down as most tools round it. TA-Lib 0.8
+  and talipp 2.7 are new dependencies (BSD and MIT); numpy is now declared.
 
 ### Fixed
 
