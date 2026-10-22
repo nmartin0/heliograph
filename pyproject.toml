@@ -39,6 +39,9 @@ sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
 [project.entry-points."heliograph.data_sources"]
 file = "heliograph.plugins.file_source:FileSource"
 
+[project.entry-points."heliograph.instrument_providers"]
+static = "heliograph.plugins.static_instruments:StaticInstruments"
+
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"

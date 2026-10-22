@@ -117,6 +117,9 @@ All notable changes to Heliograph are recorded here. The format follows
   Parquet timestamp). A row that cannot be read, or that goes back in time,
   stops the read naming the file and row. Adds pyarrow (Apache-2.0) as a
   dependency.
+- A `static` instrument provider: listings written out in its parameters, each
+  with the venue's own symbol and optional price and size increments. An
+  instrument listed twice is refused.
 
 ### Fixed
 
