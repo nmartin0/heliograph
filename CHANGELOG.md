@@ -171,6 +171,17 @@ All notable changes to Heliograph are recorded here. The format follows
   their values, and records each one's plug-in, version, parameters and inputs
   in its header. A replay refuses an indicator of another version than the run
   used.
+- The conformance kit (`heliograph.testkit`, with the `testkit` extra for
+  plug-ins written elsewhere): every registered plug-in is checked by default.
+  Every kind: it builds (in an empty temporary folder, and is closed), and its
+  parameters survive JSON. Indicators also: no peeking (in a fresh
+  interpreter, the same beginning answered alike whatever future follows),
+  warm-up, gaps as the graph makes them, constant input, one update alone,
+  and reference values. A plug-in declares `conformance = Conformance(...)`
+  to give parameters, references or the bar fields its inputs are, or to
+  hold a check as `todo`, `off` or `replaced` with a reason; the report
+  lists them all. A deliberately broken plug-in fails each check, the peeking
+  one being Phase 2's gate.
 
 ### Fixed
 

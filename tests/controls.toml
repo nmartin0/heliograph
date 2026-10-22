@@ -1381,3 +1381,157 @@ path = "src/heliograph/core/graph.py"
 old = "                if node.pending is not None:\n"
 new = "                if False:\n"
 tests = ["tests/core/test_graph.py::test_two_bars_of_one_input_known_at_one_instant_are_refused_not_one_dropped"]
+
+[[control]]
+describes = "the kit catches an indicator that sees the future"
+path = "src/heliograph/testkit/checks.py"
+old = "            if not _same(a, b):\n"
+new = "            if False:\n"
+tests = ["tests/conformance/test_kit.py::test_phase_2_gate_the_kit_fails_on_a_deliberately_peeking_indicator", "tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit looks for peeking in a fresh interpreter, where no earlier run filled a cache"
+path = "src/heliograph/testkit/checks.py"
+old = "        return pool.submit(_fresh, plugin.__module__, plugin.__qualname__, name).result()\n"
+new = "        return cast(str, globals()[name](plugin))\n"
+tests = ["tests/conformance/test_kit.py::test_phase_2_gate_the_kit_fails_on_a_deliberately_peeking_indicator"]
+
+[[control]]
+describes = "the kit refuses to judge peeking from outputs that are all None"
+path = "src/heliograph/testkit/checks.py"
+old = "    if all(value is None for value in first):\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit feeds an indicator reading related fields bars that agree"
+path = "src/heliograph/testkit/checks.py"
+old = "    return bars(fields, length, seed) if fields else walk(indicator(plugin).arity, length, seed)\n"
+new = "    return walk(indicator(plugin).arity, length, seed)\n"
+tests = ["tests/conformance/test_kit.py::test_an_indicator_reading_related_fields_is_fed_bars_that_agree"]
+
+[[control]]
+describes = "the kit reports anything a plug-in raises as a failed check, so a todo can expect a crash"
+path = "src/heliograph/testkit/checks.py"
+old = "        except Exception as exc:\n            raise CheckFailedError(f\"fails with"
+new = "        except KeyError as exc:\n            raise CheckFailedError(f\"fails with"
+tests = ["tests/conformance/test_kit.py::test_a_todo_check_is_an_expected_failure_that_fails_once_it_passes"]
+
+[[control]]
+describes = "the kit closes what it builds"
+path = "src/heliograph/testkit/checks.py"
+old = "        _close(built)\n"
+new = "        pass\n"
+tests = ["tests/conformance/test_kit.py::test_the_kit_closes_what_it_builds"]
+
+[[control]]
+describes = "the kit catches a value while some input has had no sample"
+path = "src/heliograph/testkit/checks.py"
+old = "        if any(value is not None for value in got[:lead]):\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit catches an indicator that never produces a value"
+path = "src/heliograph/testkit/checks.py"
+old = "    if all(value is None for value in produced):\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit catches an output that is not finite"
+path = "src/heliograph/testkit/checks.py"
+old = "            finite = not isinstance(value, bool) and math.isfinite(value)\n"
+new = "            finite = True\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit catches an indicator failing on one update, as a failed check"
+path = "src/heliograph/testkit/checks.py"
+old = "    except Exception as exc:\n        raise CheckFailedError(f\"one update alone fails"
+new = "    except KeyError as exc:\n        raise CheckFailedError(f\"one update alone fails"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit compares outputs with the reference values"
+path = "src/heliograph/testkit/checks.py"
+old = "                same = math.isclose(have, want, rel_tol=1e-9, abs_tol=1e-12)\n"
+new = "                same = True\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit requires reference values or a softened check"
+path = "src/heliograph/testkit/checks.py"
+old = "    if not references:\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit catches parameters that change through JSON"
+path = "src/heliograph/testkit/checks.py"
+old = "    if again != params:\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit builds every plug-in from the parameters it is given"
+path = "src/heliograph/testkit/checks.py"
+old = "        built = build(plugin)\n"
+new = "        built = plugin  # type: ignore[assignment]\n"
+tests = ["tests/conformance/test_kit.py::test_each_check_fails_on_a_plugin_broken_in_its_way"]
+
+[[control]]
+describes = "the kit refuses settings for checks the kind does not have"
+path = "src/heliograph/testkit/__init__.py"
+old = "    if unknown:\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_a_setting_for_a_check_the_kind_does_not_have_is_refused"]
+
+[[control]]
+describes = "a replaced check passes only when its test exists"
+path = "src/heliograph/testkit/__init__.py"
+old = "    if not any(isinstance(n, kinds) and n.name == function for n in scope):\n"
+new = "    if False:\n"
+tests = ["tests/conformance/test_kit.py::test_a_replaced_check_passes_only_when_its_test_exists", "tests/conformance/test_kit.py::test_a_replacing_test_is_found_as_pytest_names_it"]
+
+[[control]]
+describes = "a replacing test inside a class is found only in that class"
+path = "src/heliograph/testkit/__init__.py"
+old = "        scope = found[0].body\n"
+new = "        pass\n"
+tests = ["tests/conformance/test_kit.py::test_a_replacing_test_is_found_as_pytest_names_it"]
+
+[[control]]
+describes = "a replacing test must lie inside the project"
+path = "src/heliograph/testkit/__init__.py"
+old = "not file.is_relative_to(root.resolve())"
+new = "False"
+tests = ["tests/conformance/test_kit.py::test_a_replacing_test_is_found_as_pytest_names_it"]
+
+[[control]]
+describes = "replacing tests are found from the project root, not the working directory"
+path = "src/heliograph/testkit/__init__.py"
+old = "    for folder in (here, *here.parents):\n"
+new = "    for folder in (here,):\n"
+tests = ["tests/conformance/test_kit.py::test_replacing_tests_are_found_from_the_project_root_wherever_pytest_runs"]
+
+[[control]]
+describes = "a plug-in-wide default does not hold the checks every plug-in meets"
+path = "src/heliograph/plugins/conformance.py"
+old = "        if check in COMMON:\n"
+new = "        if False:\n"
+tests = ["tests/conformance/test_kit.py::test_the_plugin_wide_default_does_not_hold_the_checks_every_plugin_meets"]
+
+[[control]]
+describes = "a todo check is a strict expected failure"
+path = "src/heliograph/testkit/__init__.py"
+old = "            if setting.level == \"todo\":\n"
+new = "            if False:\n"
+tests = ["tests/conformance/test_kit.py::test_a_todo_check_is_an_expected_failure_that_fails_once_it_passes"]
+
+[[control]]
+describes = "an off check is not run"
+path = "src/heliograph/testkit/__init__.py"
+old = "            if setting.level == \"off\":\n"
+new = "            if False:\n"
+tests = ["tests/conformance/test_kit.py::test_an_off_check_is_not_run_and_is_reported", "tests/conformance/test_kit.py::test_a_check_setting_is_narrower_than_the_plugins_default"]

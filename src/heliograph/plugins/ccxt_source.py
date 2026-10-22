@@ -63,6 +63,7 @@ from heliograph.core.sources import (
     Throttle,
 )
 from heliograph.core.time import NANOS_PER_MILLISECOND, Timestamp, format_span, parse_span
+from heliograph.plugins.conformance import Conformance
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 MS = NANOS_PER_MILLISECOND
@@ -114,6 +115,7 @@ class CcxtSource(Plugin[CcxtParams]):
         summary="Crypto history and live trades through CCXT",
         params=CcxtParams,
     )
+    conformance = Conformance(params={"exchange": "kraken"})  # contacts nothing when built
 
     def __init__(self, params: CcxtParams) -> None:
         super().__init__(params)

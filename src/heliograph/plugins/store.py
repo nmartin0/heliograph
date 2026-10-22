@@ -89,6 +89,7 @@ from heliograph.core.sources import (
 )
 from heliograph.core.time import NANOS_PER_SECOND, Timestamp, format_span, to_datetime
 from heliograph.plugins.batches import off_loop
+from heliograph.plugins.conformance import Conformance
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 FORMAT = 1
@@ -742,6 +743,9 @@ class StoreSource(Plugin[StoreSourceParams]):
         version="1",
         summary="History from a published snapshot of the data store",
         params=StoreSourceParams,
+    )
+    conformance = Conformance(  # nothing is read when it is built
+        params={"root": "store", "snapshot": "0123456789abcdef", "source": "file"}
     )
 
     def __init__(self, params: StoreSourceParams) -> None:

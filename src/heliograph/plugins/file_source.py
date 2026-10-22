@@ -54,6 +54,7 @@ from heliograph.core.time import (
     parse_span,
 )
 from heliograph.plugins.batches import off_loop
+from heliograph.plugins.conformance import Conformance
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 type TimeUnit = Literal["iso", "s", "ms", "us", "ns"]
@@ -124,6 +125,7 @@ class FileSource(Plugin[FileSourceParams]):
         summary="History from a CSV or Parquet file",
         params=FileSourceParams,
     )
+    conformance = Conformance(params={"path": "conformance.csv"})  # not opened when built
 
     def __init__(self, params: FileSourceParams) -> None:
         super().__init__(params)

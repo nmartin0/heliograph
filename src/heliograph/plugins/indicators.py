@@ -15,6 +15,7 @@ from collections import deque
 from collections.abc import Sequence
 
 from heliograph.core.errors import InvalidValueError
+from heliograph.plugins.conformance import Conformance, Reference
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 
@@ -37,6 +38,16 @@ class Sma(Plugin[PeriodParams]):
         version="1",
         summary="Simple moving average",
         params=PeriodParams,
+    )
+    conformance = Conformance(
+        params={"period": 3},
+        references=[
+            Reference(
+                inputs=[[1.0], [2.0], [3.0], [4.0], [10.0]],
+                outputs=[None, None, 2.0, 3.0, 17 / 3],
+                source="worked by hand",
+            )
+        ],
     )
     arity = 1
 
@@ -65,6 +76,16 @@ class Ema(Plugin[PeriodParams]):
         version="1",
         summary="Exponential moving average",
         params=PeriodParams,
+    )
+    conformance = Conformance(
+        params={"period": 3},
+        references=[
+            Reference(
+                inputs=[[1.0], [2.0], [3.0], [4.0], [10.0]],
+                outputs=[None, None, 2.0, 3.0, 6.5],
+                source="worked by hand: seed (1+2+3)/3, then weight 2/(3+1)",
+            )
+        ],
     )
     arity = 1
 

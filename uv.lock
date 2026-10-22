@@ -827,6 +827,11 @@ dependencies = [
     { name = "pydantic" },
 ]
 
+[package.optional-dependencies]
+testkit = [
+    { name = "pytest" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
@@ -846,7 +851,9 @@ requires-dist = [
     { name = "msgspec", specifier = ">=0.19,<1" },
     { name = "pyarrow", specifier = ">=22,<27" },
     { name = "pydantic", specifier = ">=2.11,<3" },
+    { name = "pytest", marker = "extra == 'testkit'", specifier = ">=8.4" },
 ]
+provides-extras = ["testkit"]
 
 [package.metadata.requires-dev]
 dev = [
