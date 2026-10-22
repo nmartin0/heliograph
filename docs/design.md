@@ -228,17 +228,36 @@ a mount table binding names to providers, and declared capabilities.
   rate limit and concurrency, terms flags (personal only, non-commercial, no
   live trading, attribution), platforms. Composition refuses a mount whose
   needs its source cannot meet, or a live mount on a `no_live_trading` source.
-- The core wraps every adapter with rate and concurrency limits; adapters never
-  throttle themselves. One error type per port (`SourceUnavailable`,
-  `SinkUnavailable`). Secrets are `${VAR}` or keyring references that fail
-  loudly when missing.
-- The **mount table** in the run configuration binds logical instruments to
-  sources:
+- A source declares its rate limit and concurrency; the app builds a
+  throttle from them and binds it to the source before use
+  (`DataSource.bind`), and the source enters it around every request it
+  makes. Sources never throttle themselves. One error type per port
+  (`SourceUnavailableError`, `SinkUnavailableError`). Secrets are `${VAR}`
+  or keyring references that fail loudly when missing.
+- **When data became known** is stamped by the bridge, never by the source:
+  history at its event time plus the source's declared live delay, live data
+  by the run's clock on arrival, a bar never before it closes (D24).
+- The **mount table** in the run configuration binds names to a source, its
+  parameters, an instrument and the data wanted. Mounts on the same source
+  with the same parameters share one instance, and so one rate limit. Every
+  mount is checked against its source before anything is used, and every
+  problem is reported at once (`app/mounts.py`):
 
 ```toml
-[mounts]
-"BTC-USD" = { source = "ccxt", params = { exchange = "kraken", symbol = "BTC/USD" } }
-"SPY"     = { source = "alpaca", params = { feed = "iex" } }
+mode = "backtest"
+
+[mounts.btc]
+source = "file"
+params = { path = "data/btc-usd.parquet", live_delay = "1s" }
+kind = "trades"                 # or "bars", with bar_size = "1m"
+start = 2026-09-01T00:00:00Z    # a backtest needs both; live data has neither
+end = 2026-10-01T00:00:00Z
+
+[mounts.btc.instrument]
+symbol = "BTC/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
 ```
 
 ## Signals and paper trading

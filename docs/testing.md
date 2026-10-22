@@ -12,7 +12,7 @@ section.
 - a 90% branch-coverage floor per file;
 - the cross-process determinism test (`tests/determinism`);
 - the suite rules (`tests/meta`);
-- 52 declared controls with their script and CI job;
+- 99 declared controls with their script and CI job;
 - the mutation wrapper;
 - a state machine for the engine and alarms.
 
@@ -100,7 +100,7 @@ tested once and inherited, never copied.
   - a manifest check;
   - a parameter schema that round-trips.
 - **Checks for adapters:** declared capabilities match behaviour, rate limits
-  hold, and `SourceUnavailable` is raised rather than an empty answer.
+  hold, and `SourceUnavailableError` is raised rather than an empty answer.
 - **Each check is `error`, `todo` or `off`, set in the plug-in's
   configuration.** The narrowest setting wins. `todo` and `off` need a
   written reason. A plug-in may supply a check's inputs, or replace a check

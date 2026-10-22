@@ -104,22 +104,28 @@ All notable changes to Heliograph are recorded here. The format follows
 - The asyncio bridge: history from a source becomes an ordinary, lazily read
   engine feed, checked and stamped with the source delay; live data from
   several sources is published in arrival order, stamped with the run clock.
+  Data of a kind, size or instrument not asked for is refused; a live bar
+  from a venue whose clock runs up to a second ahead of ours is held until it
+  closes by our clock, and one arriving earlier is refused as partial.
 - A throttle built from each source declared rate limit and concurrency, which
-  the source enters around every request.
+  the source enters around every request; it serves one event loop after
+  another.
 - A `[mounts]` table in the run configuration names, for each mount, a data
   source, its parameters, an instrument and the data wanted (trades or bars of
   a size; a span for a backtest). Every mount is checked against its source's
   declared capabilities and terms, and every problem is reported at once
-  before any source is used. Mounts on the same source and parameters share
+  before any source is used. Start and end are date-times with an offset,
+  never numbers. Mounts on the same source and parameters share
   one instance, and so one rate limit.
 - A data source for CSV and Parquet files: one instrument's trades or bars,
   with times as ISO 8601 or epoch seconds to nanoseconds (or a time-zone-aware
-  Parquet timestamp). A row that cannot be read, or that goes back in time,
-  stops the read naming the file and row. Adds pyarrow (Apache-2.0) as a
-  dependency.
+  Parquet timestamp). A row that cannot be read, that goes back in time, or
+  a bar that overlaps the one before stops the read naming the file and row.
+  CSV files are UTF-8, with or without a byte-order mark. Adds pyarrow
+  (Apache-2.0) as a dependency.
 - A `static` instrument provider: listings written out in its parameters, each
   with the venue's own symbol and optional price and size increments. An
-  instrument listed twice is refused.
+  instrument listed twice, or two sharing one venue symbol, is refused.
 
 ### Fixed
 

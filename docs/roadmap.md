@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (testing batch done; batch C next) |
+| 1 | Data | in progress (batch C1 done: ports, bridge, throttle, mounts, file source; C2 next: store, CCXT) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -77,13 +77,18 @@ which are hard to test well once built:
 
 Batch C:
 
-- [ ] `feat(core)`: `DataSource` and `InstrumentProvider` ports (async
-      protocols) with declared capabilities; `SourceUnavailable`.
-- [ ] `feat(app)`: the asyncio bridge that feeds adapters into the
-      synchronous bus in timestamp order.
-- [ ] `feat(app)`: mount table in the run configuration, checked against
-      capabilities and terms flags; adapter rate-limit wrapper.
-- [ ] `feat(plugins)`: CSV and Parquet source; static instrument provider.
+- [x] `feat(core)`: `DataSource` and `InstrumentProvider` ports (async
+      protocols) with declared capabilities; `SourceUnavailableError`.
+- [x] `feat(app)`: the asyncio bridge that feeds adapters into the
+      synchronous bus in timestamp order, stamping when data became known
+      (D24).
+- [x] `feat(app)`: a throttle enforcing each source's declared rate limit
+      and concurrency, bound to the source (`DataSource.bind`). Added (not
+      planned): `check_controls.py` reports a control whose tests hang, and
+      kills what they started.
+- [x] `feat(app)`: mount table in the run configuration, checked against
+      capabilities and terms flags.
+- [x] `feat(plugins)`: CSV and Parquet source; static instrument provider.
 - [ ] `feat(plugins)`: raw, clean and published store with quarantine.
 - [ ] `feat(plugins)`: CCXT source, history and live (D21); the exchange is
       a parameter of the mount.

@@ -84,6 +84,7 @@ decay; re-check before adding.
 | Other charts, grids | ECharts 6.1 + echarts-gl, uPlot 1.6, Plotly, AG Grid Community, Perspective 5.6 | Apache-2.0, MIT, MIT, MIT, Apache-2.0 |
 | Wizard, forms, editor | Vue Flow 1.48, JSON Forms 3.8, CodeMirror 6 | MIT |
 | Tests | hypothesis, inline-snapshot, syrupy, pytest-randomly | MPL-2.0, MIT, MIT, MIT |
+| Type stubs | pyarrow-stubs 20 | BSD-2 |
 
 ## Avoid
 

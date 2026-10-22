@@ -100,7 +100,10 @@ tulipy and finta (unmaintained).
 
 `DataSource`, `InstrumentProvider`, `SignalSink`, `Broker`; async protocols in
 the core, with the event loop and a bridge to the synchronous bus in the app;
-capabilities checked at composition; limits enforced by a core wrapper. **Why:** Elysium measured
+capabilities checked at composition; limits declared by each source and
+enforced by a throttle the app binds to it (`DataSource.bind`), as
+Hummingbot's connectors declare rate-limit rules for a shared throttler.
+**Why:** Elysium measured
 a 40× slowdown when filter push-down an adapter could not do fell back to a
 full scan, which declared capabilities avoid; and the Unix-file model the
 owner proposed. See [research/adapters.md](research/adapters.md).
@@ -222,3 +225,26 @@ and statistics, as LEAN does. Details in [testing.md](testing.md).
   carries every fix.
 
 See [research/testing.md](research/testing.md).
+
+## D24 · When source data became known is stamped by the bridge (2026-10-22)
+
+A source reports when things happened; when Heliograph learned them is
+stamped in one place, the bridge (`core/sources.py`, `app/bridge.py`):
+
+- history is known at its event time plus the source's declared
+  `live_delay` (a bar, at its end plus the delay);
+- live data is known when it arrives, by the run's clock.
+
+**Why:** a backtest must see data no sooner than a live run would have. A
+source that set its own receive times could make history look fresher than
+the feed it stands for, and every source would have to get it right.
+Stamping in one place also lets a source's clock run ahead of ours without
+tripping the look-ahead guard: a point is simply known when it arrives. A
+bar cannot be known before it closes, so a live bar that arrives up to a
+second (`bridge.SKEW`) before its end by our clock is held until then, and
+one arriving earlier is refused as a partial bar.
+
+**Rejected:** trusting a vendor's own receive times (few provide them, and
+none for our clock); a per-source stamping rule (the same rule written N
+times).
+

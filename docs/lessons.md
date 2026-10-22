@@ -97,6 +97,40 @@ within each section.
 - **A lazy-merge assumption was wrong:** predicting the exact interleaving of
   `heapq.merge` reads failed; testing the bound (read-ahead ≤ number of feeds)
   is what matters.
+- **A TOML literal string (single quotes) keeps `\n` as two characters.**
+  A control's `old` text with a newline needs a basic (double-quoted) or
+  multi-line string.
+- **A throttle asked to wait zero seconds spins for ever** on simulated
+  time, and a control that broke the window boundary hung the suite. The
+  simulated sleep now fails on a wait that is not positive, and
+  `check_controls.py` reports a control whose tests hang.
+- **pyarrow's `to_pydict()` turns a timestamp column into `datetime`s,**
+  dropping nanoseconds (and overflowing on out-of-range values); convert
+  timestamp columns with `pyarrow.compute.cast` to int64 first. A malformed
+  Parquet file raises `ArrowInvalid`, a `ValueError`, not an `OSError`; a
+  missing one raises `FileNotFoundError`.
+- **`pa.Array[Any]` in an annotation fails at import** (pyarrow's classes
+  are not subscriptable at run time, though `pyarrow-stubs` makes them
+  generic for mypy); quote the annotation.
+- **A second review found nine defects in a green, fully controlled
+  series** (2026-10-22): cancellation lost in a thread, a live bar refused
+  for a few milliseconds of clock skew, a semaphore bound to one event loop,
+  a real sleep paired with a simulated clock, numbers taken as dates, a
+  crash that hid other problems, early exits that hid other problems, an
+  encoding error without a location, overlapping bars. Controls prove the
+  tests we wrote; review finds the ones we did not. Keep asking for it.
+- **`asyncio.to_thread` cannot be cancelled:** the thread runs on. Closing a
+  generator it is still running raises `ValueError: generator already
+  executing`, which replaces the `CancelledError`. Shield the read and close
+  the generator when the thread finishes.
+- **An `asyncio.Semaphore` binds to the first loop that waits on it,** and
+  later raises in any other. Anything that outlives a loop (a source and its
+  throttle across `SourceLoop`s) must make its primitives per loop.
+- **pydantic's lax `datetime` takes integers and numeric strings,** guessing
+  seconds or milliseconds. `Field(strict=True)` takes only a `datetime` from
+  Python (TOML) and ISO text from JSON.
+- **`pkill -f pattern` matches the shell running it** when the pattern is in
+  the command line, and kills it. Write the pattern as `[s]ignal\.pause`.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.
