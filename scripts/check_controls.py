@@ -54,6 +54,8 @@ class Outcome:
     failed: frozenset[str]
     reasons: dict[str, str] = field(default_factory=dict)
     """Each failed node id's reason as pytest summarised it, such as ``AssertionError``."""
+    hung: bool = False
+    """The tests ran past the time limit: they noticed nothing in a usable way."""
 
     @property
     def silent(self) -> tuple[str, ...]:
@@ -186,7 +188,16 @@ def failure_reasons(output: str) -> dict[str, str]:
     return {node: reason.strip() for node, reason in FAILED_LINE.findall(output)}
 
 
-def run_tests(root: Path, tests: Sequence[str]) -> str:
+TIMEOUT = 600.0
+"""Seconds a control's tests may run. A break can make code loop for ever; a
+hang proves no guarantee, and must not stall the run (or CI) behind it."""
+
+
+class HungError(Exception):
+    """A control's tests did not finish within the time limit."""
+
+
+def run_tests(root: Path, tests: Sequence[str], timeout: float = TIMEOUT) -> str:
     command = [
         sys.executable,
         "-m",
@@ -202,14 +213,31 @@ def run_tests(root: Path, tests: Sequence[str]) -> str:
     ]
     # Wide, so pytest does not cut its summary lines (and their reasons) to 80 columns.
     env = {**os.environ, "COLUMNS": "1000"}
-    result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, check=False)
-    return result.stdout + result.stderr
+    # A session of its own, so a hang kills pytest and anything it started.
+    with subprocess.Popen(
+        command,
+        cwd=root,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    ) as process:
+        try:
+            output, _ = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+            raise HungError(f"{len(tests)} test(s) still running after {timeout:g} s") from None
+    return output
 
 
-def check(root: Path, record: Path, control: Control) -> Outcome:
+def check(root: Path, record: Path, control: Control, timeout: float = TIMEOUT) -> Outcome:
     original = apply(root, record, control)
     try:
-        output = run_tests(root, control.tests)
+        output = run_tests(root, control.tests, timeout)
+    except HungError:
+        return Outcome(control, frozenset(), {}, hung=True)
     finally:
         write(root / control.path, original)
         record.unlink(missing_ok=True)
@@ -241,7 +269,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     bad = []
     for control in controls:
         outcome = check(ROOT, IN_PROGRESS, control)
-        if outcome.silent:
+        if outcome.hung:
+            bad.append(outcome)
+            print(f"  HUNG    {control.describes}")
+            print(f"          its tests ran past {TIMEOUT:g} s; make the break fail, not hang")
+        elif outcome.silent:
             bad.append(outcome)
             print(f"  SILENT  {control.describes}")
             for test in outcome.silent:

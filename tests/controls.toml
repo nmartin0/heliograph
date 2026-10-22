@@ -415,6 +415,15 @@ tests = [
 ]
 
 [[control]]
+describes = "a control whose tests hang is reported, not waited on"
+path = "scripts/check_controls.py"
+old = "    except HungError:\n        return Outcome(control, frozenset(), {}, hung=True)\n"
+new = "    except HungError:\n        return Outcome(control, frozenset(), {})\n"
+tests = [
+    "tests/meta/test_check_controls.py::test_a_break_that_makes_its_tests_hang_is_reported_and_restored",
+]
+
+[[control]]
 describes = "a break that matches more than once is refused"
 path = "scripts/check_controls.py"
 old = "    if count != 1:\n"
@@ -596,3 +605,10 @@ path = "src/heliograph/app/limits.py"
 old = "            if self._users:\n"
 new = "            if self._users and False:\n"
 tests = ["tests/app/test_limits.py::test_a_throttle_in_use_on_one_loop_is_refused_on_another"]
+
+[[control]]
+describes = "a hung control's tests are killed with everything they started"
+path = "scripts/check_controls.py"
+old = "            os.killpg(process.pid, signal.SIGKILL)\n"
+new = "            process.kill()\n"
+tests = ["tests/meta/test_check_controls.py::test_a_hung_control_kills_what_its_tests_started_too"]

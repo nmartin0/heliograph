@@ -76,6 +76,37 @@ def test_a_named_test_fails_through_its_parameters_or_the_tests_inside_it() -> N
     assert outcome.silent == ("tests/c.py::test_pl",)
 
 
+def test_a_break_that_makes_its_tests_hang_is_reported_and_restored(project: Path) -> None:
+    """A break that loops for ever proves nothing, and must not stall the run."""
+    before = (project / "mod.py").read_text()
+    forever = control("test_mod.py::test_double", new="return next(i for i in iter(int, 1) if i)")
+    outcome = check_controls.check(project, project / "r.json", forever, timeout=3)
+    assert outcome.hung
+    assert (project / "mod.py").read_text() == before
+
+
+def running(pid: int) -> bool:
+    """Whether process ``pid`` still runs (a zombie, killed but not reaped, does not)."""
+    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+    return state.stdout.strip()[:1] not in ("", "Z")
+
+
+def test_a_hung_control_kills_what_its_tests_started_too(project: Path) -> None:
+    """A test that starts a process and hangs leaves nothing running behind it."""
+    child = (
+        "import subprocess, sys, pathlib; "
+        "pathlib.Path('child.pid').write_text(str(subprocess.Popen("
+        "[sys.executable, '-c', 'import signal; signal.pause()']).pid)); "
+        "return next(i for i in iter(int, 1) if i)"
+    )
+    outcome = check_controls.check(
+        project, project / "r.json", control("test_mod.py::test_double", new=child), timeout=3
+    )
+    assert outcome.hung
+    pid = int((project / "child.pid").read_text())
+    assert any(not running(pid) for _ in range(50))  # SIGKILL lands within a few polls
+
+
 def test_a_break_that_does_not_compile_is_refused(project: Path) -> None:
     before = (project / "mod.py").read_text()
     with pytest.raises(SystemExit, match="does not compile"):
@@ -147,9 +178,9 @@ def test_a_break_the_same_size_as_the_last_in_the_same_second_runs_its_own_code(
     )
     run_tests = check_controls.run_tests
 
-    def pinned(root: Path, tests: Sequence[str]) -> str:
+    def pinned(root: Path, tests: Sequence[str], timeout: float = check_controls.TIMEOUT) -> str:
         os.utime(root / "mod.py", (1_700_000_000, 1_700_000_000))
-        return run_tests(root, tests)
+        return run_tests(root, tests, timeout)
 
     monkeypatch.setattr(check_controls, "run_tests", pinned)
     record = project / "r.json"
