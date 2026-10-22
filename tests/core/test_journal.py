@@ -2,62 +2,25 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from tests.support.world import END, Crossed, points, toy_session
 
 from heliograph.core.alarms import AlarmFired
-from heliograph.core.bars import TimeBars
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
-from heliograph.core.engine import BacktestEngine
 from heliograph.core.journal import JournalEntry, MemoryJournal, inputs, runs
-from heliograph.core.messages import Bar, Instrument, Message, Point, RunEnded, Settled
-from heliograph.core.streams import BarSpec, StreamSpec
-from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp
-
-BTC = Instrument(symbol="BTC/USD", venue="kraken", asset_class="crypto", quote_currency="USD")
-
-
-@dataclass(frozen=True, slots=True)
-class Crossed:
-    """What a toy strategy publishes when a bar closes above 105."""
-
-    ts: Timestamp
-    close: float
+from heliograph.core.messages import Message, RunEnded, Settled
+from heliograph.core.time import NANOS_PER_MINUTE, Timestamp
 
 
 def session(*segments: tuple[Iterable[Message], Timestamp | None]) -> list[JournalEntry]:
-    """Run bars and a toy strategy over each (feed, until) in turn; return the journal."""
+    """The toy session over each (feed, until) in turn; its journal."""
     journal = MemoryJournal()
-    clock = SimulatedClock(Timestamp(0))
-    bus = MessageBus(clock, journal)
-    engine = BacktestEngine(clock, bus)
-    for size in ("1h", "4h"):
-        TimeBars(StreamSpec(instrument=BTC, bars=BarSpec.of(size)), bus, engine.scheduler)
-
-    def strategy(bar: Bar) -> None:
-        if bar.close > 105:
-            bus.publish(Crossed(bar.ts, bar.close))
-
-    bus.subscribe(Bar, strategy)
-    for feed, until in segments:
-        engine.run(feed, until=until)
+    toy_session(journal, *segments)
     return journal.entries
-
-
-END = Timestamp(12 * NANOS_PER_HOUR)
-
-
-def points(raw: list[tuple[int, int]]) -> list[Point]:
-    out = []
-    for minute, price in sorted(raw):
-        ts = Timestamp(minute * NANOS_PER_MINUTE)
-        values = {"price": price, "size": 1.0}
-        out.append(Point(instrument=BTC, event_time=ts, received_at=ts, values=values))
-    return out
 
 
 def test_every_message_is_numbered_and_marked_with_its_origin() -> None:

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
+from tests.support.world import BTC, ETH, world
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bars import TimeBars
@@ -14,12 +15,10 @@ from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.engine import BacktestEngine
 from heliograph.core.errors import InvalidValueError
-from heliograph.core.messages import Bar, Instrument, Point, Settled
+from heliograph.core.messages import Bar, Point, Settled
 from heliograph.core.streams import BarSpec, StreamSpec
 from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp
 
-BTC = Instrument(symbol="BTC/USD", venue="kraken", asset_class="crypto", quote_currency="USD")
-ETH = Instrument(symbol="ETH/USD", venue="kraken", asset_class="crypto", quote_currency="USD")
 MIN = NANOS_PER_MINUTE
 HOUR = NANOS_PER_HOUR
 
@@ -35,11 +34,11 @@ def point(minute: float, price: float, size: float = 1.0, *, delay: float = 0, *
 
 
 def build(*specs: BarSpec) -> tuple[SimulatedClock, MessageBus, BacktestEngine, list[TimeBars]]:
-    clock = SimulatedClock(Timestamp(0))
-    bus = MessageBus(clock)
-    engine = BacktestEngine(clock, bus)
-    builders = [TimeBars(StreamSpec(instrument=BTC, bars=s), bus, engine.scheduler) for s in specs]
-    return clock, bus, engine, builders
+    w = world()
+    builders = [
+        TimeBars(StreamSpec(instrument=BTC, bars=s), w.bus, w.engine.scheduler) for s in specs
+    ]
+    return w.clock, w.bus, w.engine, builders
 
 
 def collect(bus: MessageBus, clock: SimulatedClock) -> list[tuple[int, Bar]]:

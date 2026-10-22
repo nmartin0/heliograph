@@ -2,23 +2,19 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from tests.support.world import BTC, END, Crossed, toy_session
+from tests.support.world import points as btc_points
 
 from heliograph.core.alarms import AlarmFired
-from heliograph.core.bars import TimeBars
-from heliograph.core.bus import MessageBus
-from heliograph.core.clock import SimulatedClock
-from heliograph.core.engine import BacktestEngine
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.journal import runs
-from heliograph.core.messages import Bar, Instrument, Message, Point, RunEnded, Settled
-from heliograph.core.streams import BarSpec, StreamSpec
-from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp
+from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
+from heliograph.core.time import NANOS_PER_HOUR, Timestamp
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
     SqliteJournal,
@@ -28,45 +24,18 @@ from heliograph.plugins.sqlite_journal import (
     read_header,
 )
 
-BTC = Instrument(symbol="BTC/USD", venue="kraken", asset_class="crypto", quote_currency="USD")
-
-
-@dataclass(frozen=True, slots=True)
-class Crossed:
-    ts: Timestamp
-    close: float
-
-
 TYPES = (Point, Bar, AlarmFired, Settled, RunEnded, Crossed)
-END = Timestamp(12 * NANOS_PER_HOUR)
 
 
 def session(path: Path, *segments: tuple[Iterable[Message], Timestamp | None]) -> None:
-    """Bars and a toy strategy over each (feed, until) in turn, journalled to ``path``."""
+    """The toy session, journalled to ``path`` in batches of seven."""
     params = SqliteJournalParams(path=str(path), batch=7)
     with SqliteJournal(params, header={"run": "test"}) as journal:
-        clock = SimulatedClock(Timestamp(0))
-        bus = MessageBus(clock, journal)
-        engine = BacktestEngine(clock, bus)
-        for size in ("1h", "4h"):
-            TimeBars(StreamSpec(instrument=BTC, bars=BarSpec.of(size)), bus, engine.scheduler)
-
-        def strategy(bar: Bar) -> None:
-            if bar.close > 105:
-                bus.publish(Crossed(bar.ts, bar.close))
-
-        bus.subscribe(Bar, strategy)
-        for feed, until in segments:
-            engine.run(feed, until=until)
+        toy_session(journal, *segments)
 
 
 def points(raw: list[tuple[int, int]]) -> list[Point]:
-    out = []
-    for minute, price in sorted(raw):
-        ts = Timestamp(minute * NANOS_PER_MINUTE)
-        values = {"price": price, "size": 0.5}
-        out.append(Point(instrument=BTC, event_time=ts, received_at=ts, values=values))
-    return out
+    return btc_points(raw, size=0.5)
 
 
 def test_entries_read_back_equal_to_what_was_written(tmp_path: Path) -> None:

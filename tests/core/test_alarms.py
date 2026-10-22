@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Nicholas Martin
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
-from dataclasses import dataclass
-
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from tests.support.world import Tick, ticks, world
 
 from heliograph.core.alarms import AlarmFired, AlarmQueue
 from heliograph.core.bus import MessageBus
@@ -16,23 +15,9 @@ from heliograph.core.messages import Message
 from heliograph.core.time import Timestamp
 
 
-@dataclass(frozen=True, slots=True)
-class Tick:
-    ts: Timestamp
-
-
 def build(start: int = 0) -> tuple[SimulatedClock, MessageBus, BacktestEngine, list[Message]]:
-    clock = SimulatedClock(Timestamp(start))
-    bus = MessageBus(clock)
-    engine = BacktestEngine(clock, bus)
-    seen: list[Message] = []
-    bus.subscribe(Tick, seen.append)
-    bus.subscribe(AlarmFired, seen.append)
-    return clock, bus, engine, seen
-
-
-def ticks(*times: int) -> list[Tick]:
-    return [Tick(Timestamp(t)) for t in times]
+    w = world(start)
+    return w.clock, w.bus, w.engine, w.record(Tick, AlarmFired)
 
 
 def test_alarms_fire_between_messages_and_before_a_message_at_the_same_time() -> None:

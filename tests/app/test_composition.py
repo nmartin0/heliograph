@@ -4,21 +4,12 @@
 from pathlib import Path
 
 import pytest
+from tests.support.plugins import Sma, WindowParams
 
 from heliograph.app.composition import build_components
 from heliograph.app.config import ConfigError, RunConfig, load_config, parse_config
-from heliograph.plugins.manifest import Manifest, NoParams, Params, Plugin, param
+from heliograph.plugins.manifest import Manifest, NoParams, Plugin
 from heliograph.plugins.registry import Registry
-
-
-class WindowParams(Params):
-    period: int = param(20, description="Bars in the window", ge=2)
-
-
-class Sma(Plugin[WindowParams]):
-    manifest = Manifest(
-        kind="filters", name="sma", version="1", summary="Simple average", params=WindowParams
-    )
 
 
 class Log(Plugin[NoParams]):

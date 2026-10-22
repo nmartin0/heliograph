@@ -80,6 +80,9 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["src", "tests", "scripts"]
+# Module names from the source roots, so tests import shared builders as `tests.support`.
+mypy_path = ["src", "."]
+explicit_package_bases = true
 warn_unreachable = true
 
 [tool.pydantic-mypy]
@@ -90,6 +93,8 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+# The repository root, so tests import shared builders as `tests.support`.
+pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = ["error"]

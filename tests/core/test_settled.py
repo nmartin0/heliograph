@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from tests.support.world import Tick, ticks, world
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bus import MessageBus
@@ -19,26 +20,16 @@ from heliograph.core.time import Timestamp
 
 
 @dataclass(frozen=True, slots=True)
-class Tick:
-    ts: Timestamp
-
-
-@dataclass(frozen=True, slots=True)
 class Signal:
     ts: Timestamp
 
 
 def build() -> tuple[SimulatedClock, MessageBus, BacktestEngine, list[str]]:
-    clock = SimulatedClock(Timestamp(0))
-    bus = MessageBus(clock)
+    w = world()
     seen: list[str] = []
     for kind in (Tick, AlarmFired, Settled, Signal):
-        bus.subscribe(kind, lambda m: seen.append(f"{type(m).__name__}{m.ts}"))
-    return clock, bus, BacktestEngine(clock, bus), seen
-
-
-def ticks(*times: int) -> list[Tick]:
-    return [Tick(Timestamp(t)) for t in times]
+        w.bus.subscribe(kind, lambda m: seen.append(f"{type(m).__name__}{m.ts}"))
+    return w.clock, w.bus, w.engine, seen
 
 
 def test_each_instant_settles_once_after_everything_at_it() -> None:

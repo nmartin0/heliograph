@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from tests.support.world import world
 
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
@@ -37,9 +38,8 @@ class Derived:
 
 
 def build(start: int = 0) -> tuple[SimulatedClock, MessageBus, BacktestEngine]:
-    clock = SimulatedClock(Timestamp(start))
-    bus = MessageBus(clock)
-    return clock, bus, BacktestEngine(clock, bus)
+    w = world(start)
+    return w.clock, w.bus, w.engine
 
 
 def ticks(raw_feeds: list[list[int]]) -> list[list[Tick]]:
