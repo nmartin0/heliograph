@@ -91,6 +91,9 @@ class TimeBars:
             return
         spec = self._spec
         start = spec.start_of(point.event_time)
+        # Late if its bar has closed, or would have closed by the time the point
+        # became known. The first is not implied by the second: a handler may
+        # publish a point stamped before a close that has already happened.
         closed = self._closed_up_to is not None and start < self._closed_up_to
         if closed or self._closes_at(start) <= point.ts:
             self._late += 1
@@ -113,8 +116,9 @@ class TimeBars:
             bar = self._open.pop(start, None)
             self._closed_up_to = end
             if bar is None:
-                if self._last_close is None:
-                    continue
+                # Only carrying reaches an interval with no bar, and only after a
+                # bar has closed, which set the last close.
+                assert self._last_close is not None
                 price = self._last_close
                 bar = _Open(price, price, price, price, 0.0)
             self._last_close = bar.close
@@ -130,10 +134,10 @@ class TimeBars:
         return earliest_open
 
     def _rearm(self) -> None:
+        # With nothing to close no alarm is pending: one is set only while a
+        # bar is open, and open bars are removed only when it fires.
         start = self._next_interval()
-        if start is None:
-            self._scheduler.cancel(self._key)
-        else:
+        if start is not None:
             self._scheduler.at(self._closes_at(start), self._key)
 
     def _publish(self, start: Timestamp, end: Timestamp, bar: _Open, now: Timestamp) -> None:

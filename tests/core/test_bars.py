@@ -91,6 +91,26 @@ def test_a_point_after_its_bar_closed_is_counted_late_and_changes_nothing() -> N
     assert builder.late_points == 1
 
 
+def test_a_point_stamped_earlier_than_a_close_already_made_is_late() -> None:
+    """Feeds arrive in time order, but a handler may publish a point stamped in the past.
+
+    Such a point belongs to a bar that has closed; it must not open it again.
+    """
+    clock, bus, engine, (builder,) = build(BarSpec.of("1h"))
+    seen = collect(bus, clock)
+    replayed: list[Point] = []
+
+    def publish_a_stale_point(bar: Bar) -> None:
+        if not replayed:
+            replayed.append(point(30, 999, delay=29))  # happened 00:30, stamped 00:59
+            bus.publish(replayed[0])
+
+    bus.subscribe(Bar, publish_a_stale_point)
+    engine.run([point(10, 100)], until=Timestamp(3 * HOUR))
+    assert [(bar.start, bar.high) for _, bar in seen] == [(0, 100)]
+    assert builder.late_points == 1
+
+
 def test_grace_waits_for_points_that_happened_before_the_end() -> None:
     clock, bus, engine, (builder,) = build(BarSpec.of("1h", grace=2 * MIN))
     seen = collect(bus, clock)

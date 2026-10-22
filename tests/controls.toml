@@ -86,7 +86,24 @@ tests = [
 describes = "a point arriving after its bar closed is late and changes nothing"
 path = "src/heliograph/core/bars.py"
 old = "        if closed or self._closes_at(start) <= point.ts:\n"
-new = "        if closed:\n"
+new = "        if False:\n"
+tests = [
+    "tests/core/test_bars.py::test_a_point_after_its_bar_closed_is_counted_late_and_changes_nothing",
+    "tests/core/test_bars.py::test_a_point_received_exactly_at_its_close_is_late_first_or_not",
+]
+
+[[control]]
+describes = "a point stamped before a close already made is late"
+path = "src/heliograph/core/bars.py"
+old = "        if closed or self._closes_at(start) <= point.ts:\n"
+new = "        if self._closes_at(start) <= point.ts:\n"
+tests = ["tests/core/test_bars.py::test_a_point_stamped_earlier_than_a_close_already_made_is_late"]
+
+[[control]]
+describes = "a point received exactly when its bar closes is late"
+path = "src/heliograph/core/bars.py"
+old = "        if closed or self._closes_at(start) <= point.ts:\n"
+new = "        if closed or self._closes_at(start) < point.ts:\n"
 tests = [
     "tests/core/test_bars.py::test_a_point_received_exactly_at_its_close_is_late_first_or_not",
 ]
