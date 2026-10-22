@@ -12,9 +12,12 @@ Changes are written in one checkout and applied by the owner in his, with
 2. **Plan** the commits before writing: one logical change each, in an order
    where every commit passes the checks.
 3. **Write and check.** `./scripts/check.sh` must pass. For a test that guards
-   a rule, break the code once and watch the test fail (negative control);
-   back the file up with `cp` and restore it the same way, never with
-   `git stash` or `git checkout` (see [lessons.md](lessons.md)).
+   a rule, declare a negative control in `tests/controls.toml` and run it:
+   `uv run python scripts/check_controls.py --only "<words>"`. For a one-off
+   break by hand, back the file up with `cp` and restore it the same way,
+   never with `git stash` or `git checkout` (see [lessons.md](lessons.md)).
+   When a module's tests matter, run `scripts/mutation_test.py` on it and
+   answer each survivor ([testing.md](testing.md)).
 4. **Commit** with a Conventional Commits message (below). Fix an earlier
    commit with `git commit --fixup=<sha>`, then
    `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`.

@@ -30,6 +30,24 @@ within each section.
 
 ## Python and libraries
 
+- **Python trusts a cached `.pyc` by its source's modification second and
+  size** (2026-10-22). Two controls shortened one file by exactly 12
+  characters within one second, so the second ran the first one's bytecode
+  and passed. Anything that rewrites source and re-imports it must drop the
+  file's cache (`importlib.util.cache_from_source`).
+- **pytest names a unittest-style test `name::runTest`**, and a parametrized
+  one `name[param]`. Matching a failure by exact node id missed a Hypothesis
+  state machine; match the name and anything under it.
+- **A bare `@pytest.mark.skip` is an attribute, not a call.** A rule that
+  inspected calls missed it; only its negative control showed that.
+- **A mutation survivor is dead code or a missing test, and reasoning can
+  mistake one for the other.** Three survivors in `TimeBars` looked
+  unreachable; review found that one was reachable after all: a handler may
+  publish a point stamped before a close already made, which re-opened the
+  bar. Two were deleted, the third kept with a test. Before deleting, try to
+  construct the input, and assume nothing the contract does not promise
+  (here, that every point arrives in time order).
+
 - **Replaying inside one process cannot catch hash-order nondeterminism**
   (2026-10-22). A handler publishing once per item of a set of strings
   replays equal in-process. Yet its journal digest differed in each of

@@ -7,7 +7,7 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | Phase | Theme | Status |
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
-| 1 | Data | in progress (9 of 22 commits; testing batch next) |
+| 1 | Data | in progress (testing batch done; batch C next) |
 | 2 | Backtest engine and strategy pipeline | planned |
 | 3 | Graphical workspace | planned |
 | 4 | Signals and paper trading | planned |
@@ -54,31 +54,26 @@ Planned commits, in order:
       it from run configuration needs the header and bus wiring in the app;
       that comes with the mount table in batch C.)
 Testing batch, before the data sources (D23; [testing.md](testing.md)). It
-comes first because batch C adds asynchronous adapters and a live
-exchange, which are hard to test well once built:
+came first because batch C adds asynchronous adapters and a live exchange,
+which are hard to test well once built:
 
-- [ ] `test`: shared builders in `tests/support` (an instrument defined in
-      five files, `build()` in four, `ticks()` in three).
-- [ ] `build`: random test order (pytest-randomly) and branch coverage
-      reported per file in `check.sh`; CI fails if the checks changed the
-      working tree.
-- [ ] `test`: cross-process determinism: the same session in fresh
-      interpreters with different `PYTHONHASHSEED` and `TZ` gives
-      byte-identical journals. The control is a handler publishing once per
-      item of a set of strings.
-- [ ] `test`: suite rules in `tests/meta`:
-  - no `all(...)` over a collection not shown to be non-empty;
-  - no test imports from a conftest;
-  - every step of `check.sh` can fail the script;
-  - no skip without a stated platform reason;
-  - each rule asserts it found something to check.
-- [ ] `build`: `scripts/check_controls.py` with a declared control for
-      every guard written so far, and a `controls` job in CI.
-- [ ] `build`: `scripts/mutation_test.py` (mutmut in a scratch copy,
-      structural tests deselected); its survivors over the core either
-      tested or recorded.
-- [ ] `test`: a state machine checking the engine and alarm queue against a
-      sorted-list reference after any sequence of feeds, alarms and runs.
+- [x] `test`: shared builders in `tests/support`.
+- [x] `build`: random test order (pytest-randomly), a 90% branch-coverage
+      floor per file, and CI failing if the checks change the working tree.
+- [x] `test`: cross-process determinism: fresh interpreters with different
+      `PYTHONHASHSEED` and `TZ` write identical journal entries and headers,
+      and sensitivity tests show the harness sees output that follows the
+      hash seed or the time zone.
+- [x] `test`: suite rules in `tests/meta`, each with a control.
+- [x] `build`: `scripts/check_controls.py` and `tests/controls.toml` (52
+      controls), with a CI job.
+- [x] `build`: `scripts/mutation_test.py`; added (not planned) a
+      `refactor(core)` removing two unreachable branches in `TimeBars`,
+      and a `test` commit closing the gaps found. What survives is wording,
+      falsy equivalents, overwritten start values and the alarm heap's
+      clean-up threshold.
+- [x] `test`: a Hypothesis state machine checking the engine and alarm
+      queue against a slow reference.
 
 Batch C:
 

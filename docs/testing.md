@@ -5,21 +5,16 @@ How Heliograph is tested, and why. The research behind this page is in
 [principles.md](principles.md) still apply, and this page refines its "Tests"
 section.
 
-**Status (2026-10-22).** In place today:
-- unit tests and properties;
-- strict warnings and markers;
-- the second time zone;
-- controls run by hand and recorded in commit messages.
-
-Arriving with the testing batch on the [roadmap](roadmap.md):
-- shared builders;
-- random order;
-- branch coverage;
-- the cross-process determinism test;
-- the suite rules;
-- the controls script and its CI job;
+**Status (2026-10-22).** In place:
+- unit tests and properties, strict warnings and markers, random order and
+  the second time zone;
+- shared builders (`tests/support`);
+- a 90% branch-coverage floor per file;
+- the cross-process determinism test (`tests/determinism`);
+- the suite rules (`tests/meta`);
+- 52 declared controls with their script and CI job;
 - the mutation wrapper;
-- the first state machine.
+- a state machine for the engine and alarms.
 
 Conformance kits and scenarios come in Phase 2, outside-in tests in Phase 3,
 and live tests with the CCXT source.
@@ -48,7 +43,7 @@ Three corollaries:
 | Unit | `tests/core`, `tests/plugins`, `tests/app` (mirrors `src/`) | one module's behaviour through its public interface | every check |
 | Properties | beside the unit tests | a rule over every input (Hypothesis `@given`) | every check |
 | State machines | beside the unit tests | a component equals a slow reference model after any sequence of operations (`RuleBasedStateMachine`) | every check |
-| Determinism | `tests/determinism` | the same inputs give byte-identical journals in separate processes with different hash seeds and time zones | every check |
+| Determinism | `tests/determinism` | the same inputs give the same journal (entry rows byte for byte, and header) in separate processes with different hash seeds and time zones | every check |
 | Conformance | `tests/conformance` (Phase 2) | every registered plug-in of a kind meets the kind's contract | every check |
 | Scenarios | `tests/scenarios` (Phase 2) | a whole backtest still gives its recorded counts, statistics and signals | every check |
 | Outside-in | `tests/process` (Phase 3) | the engine process, started as a person would start it, serves what it should through its API; imports nothing from `heliograph` | every check |
@@ -176,14 +171,18 @@ kept.
   - its replacement;
   - the tests, named one by one, that must fail.
 
-  The script applies each break, runs those tests, expects them to fail, and
-  restores the file even if interrupted.
+  The script applies each break, runs those tests, and expects every one to
+  fail. It restores the file afterwards, on Ctrl-C and on SIGTERM too; after
+  a harder kill, the next run restores it from a record kept on disk.
 - **CI runs every control** as a separate job.
 - **Commit messages report the result**, for example
   `Controls: late point added to its bar -> 1 fails`, and name what the
   control is checking for.
-- **A control that fires for the wrong reason has proved nothing.** A syntax
-  error or a missing fixture, for example. Read the failure.
+- **A control that fires for the wrong reason has proved nothing.** The
+  script refuses a break that does not compile, and reports a control as
+  WRONG when its tests fail only with a NameError or ImportError. It prints
+  each control's failure kinds (`AssertionError`, `Failed: DID NOT RAISE`,
+  a domain error); read them.
 
 **Mutation testing** looks for the controls nobody thought of.
 `scripts/mutation_test.py <module> <tests…>` runs mutmut in a scratch copy
@@ -196,8 +195,10 @@ rewritten.
 
 ## Coverage
 
-Branch coverage is measured on every check (coverage.py). It is read per
-file changed, not as a total: Elysium's 96% total hid a 63% file. A line
+Branch coverage is measured on every check (coverage.py), and
+`scripts/coverage_floor.py` fails if any one source file is under 90%
+(`[tool.heliograph.coverage]` in `pyproject.toml`). It is read per file, not
+as a total: Elysium's 96% total hid a 63% file. A line
 added and not covered has not been checked, whether or not it is correct. A
 line that cannot be reached by any test is either made reachable through a
 real path or deleted. It is never reached through a seam built for the
@@ -208,13 +209,11 @@ test.
 Helpers used by more than one test file live in `tests/support/`. They are
 plain modules imported by name, never imported from a conftest (Elysium
 found that two conftests on the path shadow each other). Extract a helper at
-the second caller, not the first. Test data uses made-up instruments as well
-as real ones, so nothing in the core depends on a venue's names.
+the second caller, not the first. A test meant to show the core depends on
+no venue's names uses a made-up instrument, as Elysium's tests use an
+Author and Book schema rather than its customers' tables.
 
 ## Commands
-
-The control and mutation scripts, `tests/determinism` and `tests/meta` arrive
-with the testing batch on the roadmap; until then the first two lines work.
 
 ```bash
 ./scripts/check.sh                       # everything, including both time zones
