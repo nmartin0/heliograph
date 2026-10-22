@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from tests.support.world import BTC
 
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.streams import BarSpec, StreamSpec
 from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp, from_iso
+from tests.support.world import BTC
 
 
 def test_bars_start_on_their_boundaries_counted_from_the_anchor() -> None:

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from tests.support.plugins import Sma, WindowParams
 
 from heliograph.plugins.manifest import Manifest, Params, Plugin
 from heliograph.plugins.registry import (
@@ -17,6 +16,7 @@ from heliograph.plugins.registry import (
     UnknownPluginError,
     installed_entry_points,
 )
+from tests.support.plugins import Sma, WindowParams
 
 
 class Ema(Plugin[WindowParams]):

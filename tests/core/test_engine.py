@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from tests.support.world import world
 
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
@@ -20,6 +19,7 @@ from heliograph.core.errors import (
     ReentrancyError,
 )
 from heliograph.core.time import Timestamp
+from tests.support.world import world
 
 
 @dataclass(frozen=True, slots=True)

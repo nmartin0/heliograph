@@ -7,8 +7,6 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from tests.support.world import BTC, END, Crossed, toy_session
-from tests.support.world import points as btc_points
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.errors import InvalidValueError
@@ -23,6 +21,8 @@ from heliograph.plugins.sqlite_journal import (
     read_entries,
     read_header,
 )
+from tests.support.world import BTC, END, Crossed, toy_session
+from tests.support.world import points as btc_points
 
 TYPES = (Point, Bar, AlarmFired, Settled, RunEnded, Crossed)
 

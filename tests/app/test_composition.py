@@ -4,12 +4,12 @@
 from pathlib import Path
 
 import pytest
-from tests.support.plugins import Sma, WindowParams
 
 from heliograph.app.composition import build_components
 from heliograph.app.config import ConfigError, RunConfig, load_config, parse_config
 from heliograph.plugins.manifest import Manifest, NoParams, Plugin
 from heliograph.plugins.registry import Registry
+from tests.support.plugins import Sma, WindowParams
 
 
 class Log(Plugin[NoParams]):

@@ -63,6 +63,10 @@ select = [
     "TID",      # banned APIs
 ]
 
+[tool.ruff.lint.isort]
+# Ours, sorted together after third-party imports.
+known-first-party = ["heliograph", "scripts", "tests"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "time.time".msg = "Read the time from a Clock (heliograph.core.clock)."
 "time.time_ns".msg = "Read the time from a Clock (heliograph.core.clock)."

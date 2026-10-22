@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
-from tests.support.world import BTC, ETH, world
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bars import TimeBars
@@ -18,6 +17,7 @@ from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Point, Settled
 from heliograph.core.streams import BarSpec, StreamSpec
 from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp
+from tests.support.world import BTC, ETH, world
 
 MIN = NANOS_PER_MINUTE
 HOUR = NANOS_PER_HOUR

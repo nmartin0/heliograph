@@ -82,6 +82,9 @@ All notable changes to Heliograph are recorded here. The format follows
 - Tests run in a random order each time, printing the seed, and every source
   file must reach 90% branch coverage; CI fails if the checks leave changes in
   the working tree.
+- A determinism test: the same session run in fresh processes with different
+  hash seeds and time zones writes the same journal: identical entry rows,
+  byte for byte, and the same header.
 
 ### Fixed
 

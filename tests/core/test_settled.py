@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from tests.support.world import Tick, ticks, world
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bus import MessageBus
@@ -17,6 +16,7 @@ from heliograph.core.engine import BacktestEngine
 from heliograph.core.errors import ClockError, InvalidTypeError
 from heliograph.core.messages import Message, RunEnded, Settled
 from heliograph.core.time import Timestamp
+from tests.support.world import Tick, ticks, world
 
 
 @dataclass(frozen=True, slots=True)

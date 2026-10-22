@@ -4,7 +4,6 @@
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from tests.support.world import Tick, ticks, world
 
 from heliograph.core.alarms import AlarmFired, AlarmQueue
 from heliograph.core.bus import MessageBus
@@ -13,6 +12,7 @@ from heliograph.core.engine import BacktestEngine
 from heliograph.core.errors import AlarmLoopError, ClockError, InvalidValueError
 from heliograph.core.messages import Message
 from heliograph.core.time import Timestamp
+from tests.support.world import Tick, ticks, world
 
 
 def build(start: int = 0) -> tuple[SimulatedClock, MessageBus, BacktestEngine, list[Message]]:

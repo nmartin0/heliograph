@@ -6,7 +6,6 @@ from collections.abc import Iterable
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from tests.support.world import END, Crossed, points, toy_session
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.bus import MessageBus
@@ -14,6 +13,7 @@ from heliograph.core.clock import SimulatedClock
 from heliograph.core.journal import JournalEntry, MemoryJournal, inputs, runs
 from heliograph.core.messages import Message, RunEnded, Settled
 from heliograph.core.time import NANOS_PER_MINUTE, Timestamp
+from tests.support.world import END, Crossed, points, toy_session
 
 
 def session(*segments: tuple[Iterable[Message], Timestamp | None]) -> list[JournalEntry]:
