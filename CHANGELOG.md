@@ -148,6 +148,13 @@ All notable changes to Heliograph are recorded here. The format follows
   a mount's trades, with optional grace, gap policy, price and volume fields;
   a stream naming no mount, a bars mount, or the same stream twice is refused
   when the configuration is read.
+- `run_backtest` runs a backtest from its configuration: its mounts through
+  the bridge, its streams' bars, the engine, and a new SQLite journal whose
+  header records the configuration (its digest and validated form), each
+  mount's source and parameters, the store snapshots read, the interval and
+  the version. `replay_backtest` rebuilds a run from its journal alone, entry
+  for entry. Configurations with components are refused until Phase 2 runs
+  them.
 
 ### Fixed
 

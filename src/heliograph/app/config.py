@@ -32,7 +32,9 @@ A run is described by a TOML file::
 A mount binds a name to a data source and says what to take from it. A
 stream builds bars of one size from a mount's trades (core/bars.py), with
 an optional ``grace``, ``gaps`` ("skip" or "carry"), ``price`` and
-``volume``. What can be checked from the text alone is checked here;
+``volume`` (``volume = ""`` for trades without a size). A stream's mount
+must be the only one on its instrument, since bars take every trade of
+their instrument. What can be checked from the text alone is checked here;
 whether the named source can serve each mount is checked at composition
 (app/mounts.py).
 
@@ -263,6 +265,12 @@ class StreamConfig(BaseModel):
     price: str = "price"
     volume: str | None = "size"
 
+    @field_validator("volume")
+    @classmethod
+    def _no_volume(cls, volume: str | None) -> str | None:
+        """TOML has no null: ``volume = ""`` says the trades carry no size."""
+        return None if volume == "" else volume
+
     @model_validator(mode="after")
     def _a_bar_spec(self) -> "StreamConfig":
         try:
@@ -328,6 +336,12 @@ class RunConfig(BaseModel):
     def _streams_read_trades(self) -> "RunConfig":
         problems = []
         seen: dict[tuple[str, str], int] = {}
+        # Bars are built from every trade of an instrument on the bus, whichever
+        # mount it came from, so a stream needs its mount to be the only one
+        # delivering that instrument.
+        by_instrument: dict[str, list[str]] = {}
+        for name, spec in self.mounts.items():
+            by_instrument.setdefault(spec.instrument.instrument().key, []).append(name)
         for index, stream in enumerate(self.streams):
             where = f"streams[{index}]"
             mount = self.mounts.get(stream.mount)
@@ -337,6 +351,13 @@ class RunConfig(BaseModel):
             if mount.kind != "trades":
                 problems.append(
                     f"{where}: mounts.{stream.mount} delivers bars; streams build bars from trades"
+                )
+            key = mount.instrument.instrument().key
+            sharing = by_instrument[key]
+            if len(sharing) > 1:
+                problems.append(
+                    f"{where}: mounts {', '.join(sharing)} all deliver {key}; "
+                    "a stream needs its mount to be the only one"
                 )
             identity = (stream.mount, stream.bar_spec().identity())
             if identity in seen:
@@ -353,10 +374,16 @@ class RunConfig(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class LoadedConfig:
-    """A validated configuration and the SHA-256 of the exact text it came from."""
+    """A validated configuration, the exact text it came from, and that text's SHA-256.
+
+    The text is kept because it is the only exact form: TOML has date-times,
+    dates and times that JSON does not, so a configuration written out as
+    JSON may not read back the same.
+    """
 
     config: RunConfig
     digest: str
+    text: str
 
 
 def parse_config(text: str) -> LoadedConfig:
@@ -373,7 +400,7 @@ def parse_config(text: str) -> LoadedConfig:
         config = RunConfig.model_validate(raw)
     except ValidationError as exc:
         raise ConfigError(f"invalid run configuration:\n{exc}") from exc
-    return LoadedConfig(config, hashlib.sha256(text.encode("utf-8")).hexdigest())
+    return LoadedConfig(config, hashlib.sha256(text.encode("utf-8")).hexdigest(), text)
 
 
 def load_config(path: Path) -> LoadedConfig:

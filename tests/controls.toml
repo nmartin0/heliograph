@@ -1084,3 +1084,104 @@ path = "src/heliograph/app/config.py"
 old = "            identity = (stream.mount, stream.bar_spec().identity())\n"
 new = "            identity = (stream.mount, stream.bar_spec().label())\n"
 tests = ["tests/app/test_streams_config.py::test_two_streams_of_one_size_but_different_grace_are_two_streams"]
+
+[[control]]
+describes = "a backtest with components is refused, not run without them"
+path = "src/heliograph/app/run.py"
+old = "    if config.components:\n"
+new = "    if config.components and False:\n"
+tests = ["tests/app/test_run.py::test_what_a_backtest_cannot_run_is_refused"]
+
+[[control]]
+describes = "a run never writes over a journal"
+path = "src/heliograph/app/run.py"
+old = "    if journal.exists():\n"
+new = "    if journal.exists() and False:\n"
+tests = ["tests/app/test_run.py::test_a_run_never_writes_over_a_journal"]
+
+[[control]]
+describes = "a run's journal records the snapshots it read"
+path = "src/heliograph/app/run.py"
+old = "spec.source == \"store\""
+new = "spec.source == \"stored\""
+tests = ["tests/app/test_run.py::test_a_backtest_on_a_published_snapshot_journals_its_trades_and_bars"]
+
+[[control]]
+describes = "a run's streams build their bars into the journal"
+path = "src/heliograph/app/run.py"
+old = "            TimeBars(spec, bus, engine.scheduler)\n"
+new = "            assert spec\n"
+tests = ["tests/app/test_run.py::test_a_backtest_on_a_published_snapshot_journals_its_trades_and_bars"]
+
+[[control]]
+describes = "a replay leaves the journal's own header keys to the journal"
+path = "src/heliograph/app/run.py"
+old = "k not in RESERVED_HEADER"
+new = "k not in ()"
+tests = ["tests/app/test_run.py::test_a_replay_from_the_journal_alone_reproduces_it_byte_for_byte"]
+
+[[control]]
+describes = "a run lasts past its end by the longest live delay and grace"
+path = "src/heliograph/app/run.py"
+old = "    until = Timestamp(end + late + grace)\n"
+new = "    until = Timestamp(end)\n"
+tests = [
+    "tests/app/test_run.py::test_a_run_lasts_long_enough_for_the_last_trades_to_arrive_and_the_last_bar_to_close",
+]
+
+[[control]]
+describes = "every source is closed after a run, even when one fails to close"
+path = "src/heliograph/app/run.py"
+old = "            failures.append(exc)\n"
+new = "            raise\n"
+tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
+
+[[control]]
+describes = "a run's own error is not hidden by a source failing to close"
+path = "src/heliograph/app/run.py"
+old = "    if failures and sys.exc_info()[1] is None:\n"
+new = "    if failures:\n"
+tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
+
+[[control]]
+describes = "a source that fails only to close fails the run"
+path = "src/heliograph/app/run.py"
+old = "    if failures and sys.exc_info()[1] is None:\n"
+new = "    if failures and False:\n"
+tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
+
+[[control]]
+describes = "only a complete run replays"
+path = "src/heliograph/app/run.py"
+old = "    if written.get(\"status\") != \"complete\":\n"
+new = "    if written.get(\"status\") == \"never\":\n"
+tests = ["tests/app/test_run.py::test_a_failed_run_does_not_replay"]
+
+[[control]]
+describes = "a replay checks its configuration against the digest"
+path = "src/heliograph/app/run.py"
+old = "    if loaded.digest != written[\"config_digest\"]:\n"
+new = "    if loaded.digest == \"\":\n"
+tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_does_not_replay"]
+
+[[control]]
+describes = "the header records each mount's validated parameters, defaults included"
+path = "src/heliograph/app/run.py"
+old = "        params = plugin.params.model_dump(mode=\"json\")\n"
+new = "        params = plugin.params.model_dump(mode=\"json\", exclude_defaults=True)\n"
+tests = ["tests/app/test_run.py::test_the_header_records_each_mounts_validated_parameters_and_plugin_version"]
+
+[[control]]
+describes = "a stream's mount must be the only one on its instrument"
+path = "src/heliograph/app/config.py"
+old = "            if len(sharing) > 1:\n"
+new = "            if len(sharing) > 2:\n"
+tests = ["tests/app/test_run.py::test_a_stream_on_an_instrument_two_mounts_deliver_is_refused"]
+
+[[control]]
+describes = "a stream's volume of \"\" means trades without a size"
+path = "src/heliograph/app/config.py"
+old = "        return None if volume == \"\" else volume\n"
+new = "        return volume\n"
+tests = ["tests/app/test_run.py::test_trades_without_a_size_have_a_stream_with_no_volume"]
+
