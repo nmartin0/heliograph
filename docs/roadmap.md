@@ -152,7 +152,10 @@ tests and the gate.
       configuration, journalled and replayed; a first plug-in per stage
       (D30, D4a). The signal's lifecycle (taken, skipped, expired) waits for
       paper trading in Phase 4.
-- One example strategy; simulated fills and cost model; a text report.
+- [x] Simulated fills at the next bar's open, a cost model (`next_open`:
+      spread, slippage, commission), the position held from fills, and a
+      text report computed from the journal (D31, D4b).
+- One example strategy.
 - `heliograph.sdk` first cut.
 
 **Gate:** a snapshot test matches a hand-checked backtest exactly, and the

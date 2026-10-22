@@ -108,7 +108,7 @@ contract and a core purity test).
   `heliograph.<kind>`. Kinds are plural snake-case slugs (decision D16):
   `data_sources`, `instrument_providers`, `sinks`, `brokers`, `indicators`,
   `forecasters`, `gates`, `combiners`, `sizers`, `exits`, `risk_gates`,
-  `strategies`. Unknown names fail with the list of valid ones;
+  `fills`, `strategies`. Unknown names fail with the list of valid ones;
   duplicates are refused; discovery is all-or-nothing.
 - **Run configuration (built).** TOML naming components, their plug-ins and
   parameters, validated as a whole, fingerprinted with SHA-256, parameters
@@ -207,8 +207,15 @@ makes the combined forecast 0; the sizer sees every close, so it can follow
 the price while forecasts warm up; exits run in order and the one that sets
 the target is named; risk gates see only proposals that add risk (taking it
 off always leaves), and the first to refuse stops the signal, which is
-journalled as `SignalRefused`. In the first cut the position a strategy
-holds is the last target it signalled; fills come with the simulated broker.
+journalled as `SignalRefused`. The position a strategy holds is the last
+target it signalled or, with a simulated broker, what has been filled.
+
+Simulated fills (D31, `core/broker.py`): a strategy naming a fill model
+(`fills`) has a `SimulatedBroker`, which fills each signal at the open of the
+price stream's next bar, priced by the model (`next_open`: half the spread,
+slippage and a commission), and publishes a journalled `Fill` when that bar
+becomes known. The text report (`app/report.py`) reads only the journal:
+signals, fills, costs, profit and loss, drawdown and time in the market.
 
 Optional: meta-labelling as a sizer that scales a forecast by the probability
 it pays off. The design is Carver's, with MQL5's veto, pattern mask and invert

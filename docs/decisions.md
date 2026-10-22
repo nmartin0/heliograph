@@ -405,8 +405,8 @@ the previous close of the price stream. A signal's id hashes the
 configuration's digest, the strategy, the instant and the target (−0.0 as
 0.0), so the same decision always has the same id and runs do not share
 ids. Each stage belongs to one strategy, since it keeps state; every stage
-must be used. The position held is the last signalled target until the
-simulated broker (D4b) reports fills.
+must be used. The position held is the last signalled target, or what the
+simulated broker has filled when the strategy has one (D31).
 
 In the configuration, `[[strategies]]` name their price stream (a price
 field, not a volume) and stages; stages are `[[components]]` with names, and
@@ -430,3 +430,45 @@ silent filters diluting (D8); signalling
 every bar whatever the target (idempotent delivery would hide it, but the
 journal and the person would drown).
 
+## D31 · Simulated fills at the next bar's open; the report reads only the journal (2026-10-22)
+
+A strategy with `fills` in its configuration has a `SimulatedBroker`. A
+signal is made at a close of the strategy's price stream; the broker fills
+it at the open of that stream's next bar: the first bar of the same
+instrument and size starting at or after the end of the bar the signal was
+made on. (Not at or after the signal's instant: with a grace period both
+the bar and the signal on it are published after the bar ends, by when the
+next bar has started.) That open is known only when the bar
+is, so the `Fill` is published then (`ts`), with the bar's start as
+`event_time`; it arrives before the instant settles, so the strategy's
+decision at that close already holds the filled position. The broker trades
+the difference between the target and the position it holds, and a later
+signal before a fill replaces the earlier one. A fill model (plug-in kind
+`fills`) prices each fill and its commission; the first, `next_open`, pays
+half the spread and the slippage against the trader and a commission as a
+fraction of the value traded, and refuses costs at which a sale would
+fetch nothing. With a broker, the position a strategy holds
+is what has been filled, so a signal not yet filled is asked for again at
+the next close if it is still wanted. Fills are journalled and replay byte
+for byte.
+
+The text report (`app/report.py`) is computed from the journal alone: the
+configuration from its header, then the entries. Equity is the strategy's
+cash, starting at 0, plus its position at the close, marked once per close
+of its price stream after the instant settles. It reports signals sent and
+refused, fills, units and value traded, commission, what fills paid beyond
+the open, the end position, profit and loss, the largest drawdown, and the
+share of closes spent in the market. A strategy without a fill model was
+not simulated, and the report says so instead of showing a result of 0.
+
+**Why:** the next open is the first price a person acting on a close could
+get; filling at the signal's own close would trade on a price already
+gone. A report from the journal is the same for a run and its replay, so it
+can be compared as text in the scenario tests (D4c).
+
+**Rejected:** filling at the signal's close (look-ahead by one bar's
+latency); a fill per signal however many were superseded (a person acts on
+the latest); the position held still following the signals when a broker
+exists (the strategy would believe in trades that never happened);
+computing the report from live objects in the run (a replay could not
+reproduce it, and it would need the plug-ins).

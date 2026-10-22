@@ -206,6 +206,19 @@ within each section.
 - **Check a published default before copying a design from memory.**
   Carver's buffer trades to its nearest edge (`buffer_trade_to_edge: True`
   in pysystemtrade's defaults.yaml), not to the optimal position.
+- **Run the controls with `uv run python`.** `check_controls.py` runs pytest
+  with its own interpreter; started with the system `python3`, which lacks
+  pytest, every control reports silent. A wall of silent controls means the
+  wrong interpreter before it means weak tests.
+- **Grace moves every stamp of a stream, signals included.** The first
+  broker filled at the first bar starting at or after the signal's instant;
+  with a grace period the signal is stamped after the next bar has started,
+  so nothing was ever filled and the strategy asked again at every close.
+  Every test fed bars with no grace. An independent review found it.
+- **A test's decoy can be caught by another guard.** The broker's
+  "another size" bar first started before the signal, so the start filter
+  refused it and removing the size filter changed nothing; its control said
+  so.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

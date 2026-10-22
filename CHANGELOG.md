@@ -200,6 +200,13 @@ All notable changes to Heliograph are recorded here. The format follows
   sizer with a no-trade buffer it trades to the edge of, a `trailing_stop`
   exit and a `limits` risk gate. Risk gates see only signals that add risk:
   taking risk off (a stop, a veto) always leaves.
+- Simulated fills (core/broker.py): a strategy naming a fill model has its
+  signals filled at the open of its price stream's next bar, as a journalled
+  `Fill` known when that bar is; the strategy then holds what was filled.
+  First fill model: `next_open`, with spread, slippage and commission.
+- A text report of a backtest (app/report.py), computed from its journal
+  alone: signals, fills, units and value traded, costs, profit and loss,
+  largest drawdown and time in the market; the same for a run and its replay.
 
 ### Fixed
 
@@ -254,3 +261,5 @@ All notable changes to Heliograph are recorded here. The format follows
 - D30 records how strategies run (forecasters and gates as graph nodes, a
   strategy observing the graph); design.md and the roadmap describe the
   pipeline as built, and D4 is split into three parts.
+- D31 records simulated fills at the next open and the report from the
+  journal; the roadmap marks D4b done.
