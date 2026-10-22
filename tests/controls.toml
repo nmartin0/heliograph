@@ -786,9 +786,9 @@ tests = ["tests/app/test_mounts.py::test_a_source_whose_capabilities_cannot_be_r
 
 [[control]]
 describes = "a file read cancelled mid-batch stays cancelled and closes when the read ends"
-path = "src/heliograph/plugins/file_source.py"
-old = "            _close_after(reading, batches)\n"
-new = "            batches.close()\n"
+path = "src/heliograph/plugins/batches.py"
+old = "        _close_after(reading, batches)\n"
+new = "        batches.close()\n"
 tests = [
     "tests/plugins/test_file_source.py::test_a_read_cancelled_while_a_batch_is_being_read_stays_cancelled_and_closes_its_file",
 ]

@@ -21,9 +21,9 @@ A file has no live data, no rate limit and no lookback. What the data's
 terms say is the user's to declare (``terms``), since the file cannot.
 """
 
-import asyncio
 import csv
 from collections.abc import AsyncIterator, Generator, Sequence
+from contextlib import aclosing
 from itertools import islice
 from pathlib import Path
 from typing import Any, Literal
@@ -53,6 +53,7 @@ from heliograph.core.time import (
     from_iso,
     parse_span,
 )
+from heliograph.plugins.batches import off_loop
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 type TimeUnit = Literal["iso", "s", "ms", "us", "ns"]
@@ -159,19 +160,10 @@ class FileSource(Plugin[FileSourceParams]):
         throttle = self._throttle
         if throttle is None:
             raise InvalidValueError(f"{self.path}: the source was used before it was bound")
-        batches = self._batches()
-        reading: asyncio.Future[list[Row] | None] | None = None
         previous: int | None = None
         free_from: int | None = None  # where the previous bar ends; bars may not overlap
-        try:
-            while True:
-                async with throttle:
-                    # Shielded: a cancelled read still finishes in its thread, and
-                    # the generator is closed only once it has (see finally).
-                    reading = asyncio.ensure_future(asyncio.to_thread(next, batches, None))
-                    batch = await asyncio.shield(reading)
-                if batch is None:
-                    return
+        async with aclosing(off_loop(self._batches(), throttle)) as batches:
+            async for batch in batches:
                 for number, row in batch:
                     where = f"{self.path} row {number}"
                     try:
@@ -194,8 +186,6 @@ class FileSource(Plugin[FileSourceParams]):
                         return
                     if happened >= request.start:
                         yield message
-        finally:
-            _close_after(reading, batches)
 
     def subscribe(self, subscriptions: Sequence[Subscription]) -> AsyncIterator[Message]:
         """Never: a file has no live data, and its capabilities say so.
@@ -254,24 +244,6 @@ class FileSource(Plugin[FileSourceParams]):
             volume=v,
         )
         return bar, happened
-
-
-def _close_after(reading: "asyncio.Future[Any] | None", batches: Generator[Any]) -> None:
-    """Close ``batches`` now, or when the read still running in its thread ends.
-
-    Closing a generator another thread is running raises ``ValueError`` and
-    leaves its file open, which is what a cancelled read would do otherwise.
-    """
-    if reading is None or reading.done():
-        batches.close()
-        return
-
-    def close(done: "asyncio.Future[Any]") -> None:
-        if not done.cancelled():
-            done.exception()  # retrieved: nobody else will
-        batches.close()
-
-    reading.add_done_callback(close)
 
 
 class Nanos(int):
