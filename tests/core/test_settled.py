@@ -81,7 +81,8 @@ def test_nothing_arrives_at_an_instant_after_it_settled(data: list[int], alarms:
     assert settled == sorted(set(data) | set(alarms))
     for index, message in enumerate(events):
         if isinstance(message, Settled):
-            assert all(later.ts > message.ts for later in events[index + 1 :])
+            later = events[index + 1 :]
+            assert all(m.ts > message.ts for m in later)  # empty is fine: nothing after the end
 
 
 def alarm_after_five(engine: BacktestEngine, settled: Settled) -> None:

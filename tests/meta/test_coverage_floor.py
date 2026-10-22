@@ -21,5 +21,5 @@ def test_a_file_exactly_at_the_floor_passes() -> None:
 
 
 def test_the_floor_is_read_from_the_project_settings() -> None:
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     assert coverage_floor.floor(root / "pyproject.toml") == 90.0

@@ -151,6 +151,7 @@ def test_bars_equal_the_points_grouped_by_interval(raw: list[tuple[int, int, int
         (bar.start // HOUR, bar.open, bar.high, bar.low, bar.close, bar.volume) for _, bar in seen
     ]
     assert actual == expected
+    assert len(seen) == len(expected)
     assert all(at == bar.ts == bar.end for at, bar in seen)
 
 
@@ -176,6 +177,7 @@ def test_phase_1_gate_a_4h_bar_is_visible_to_the_1h_consumer_at_its_end_never_be
     engine.run([point(m, 100 + m % 7) for m in range(0, 12 * 60, 10)], until=Timestamp(12 * HOUR))
 
     # Never earlier: every bar is delivered exactly when it becomes known.
+    assert len(delivered) == 12 + 3  # twelve 1h bars and three 4h bars
     assert all(at == bar.ts for at, bar in delivered)
     # Not later: when the 1h bar ending at a 4h boundary T is settled, so is the 4h bar.
     by_time = {ts: (hour, four) for ts, hour, four in snapshots}
@@ -183,6 +185,7 @@ def test_phase_1_gate_a_4h_bar_is_visible_to_the_1h_consumer_at_its_end_never_be
         t = boundary * HOUR
         assert by_time[t] == (t, t)
     # And before T, the 4h bar ending at T had not been seen.
+    assert len(snapshots) >= 72  # at least one per ten-minute point
     assert all(four is None or four <= ts for ts, _, four in snapshots)
     assert by_time[7 * HOUR] == (7 * HOUR, 4 * HOUR)
 

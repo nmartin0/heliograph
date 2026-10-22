@@ -85,6 +85,10 @@ All notable changes to Heliograph are recorded here. The format follows
 - A determinism test: the same session run in fresh processes with different
   hash seeds and time zones writes the same journal: identical entry rows,
   byte for byte, and the same header.
+- Rules about the tests themselves, checked from their source in tests/meta:
+  no assertion about every item of a possibly empty collection, no imports
+  from a conftest, no skip without a reason and none for a missing import, no
+  sleeping, and every step of check.sh able to fail it.
 
 ### Fixed
 

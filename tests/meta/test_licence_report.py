@@ -12,7 +12,7 @@ import pytest
 
 
 def load_script() -> ModuleType:
-    path = Path(__file__).resolve().parents[1] / "scripts" / "licence_report.py"
+    path = Path(__file__).resolve().parents[2] / "scripts" / "licence_report.py"
     spec = importlib.util.spec_from_file_location("licence_report", path)
     assert spec is not None
     assert spec.loader is not None

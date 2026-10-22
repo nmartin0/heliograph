@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 HEADER = (
     re.compile(r"# SPDX-FileCopyrightText: 20\d\d(-20\d\d)? Nicholas Martin"),
     re.compile(r"# SPDX-License-Identifier: LicenseRef-Proprietary"),
@@ -50,7 +50,7 @@ def header_of(path: Path) -> list[str]:
 
 def test_the_check_finds_the_files_it_guards() -> None:
     names = {path.relative_to(ROOT).as_posix() for path in owned_sources()}
-    assert {"src/heliograph/core/bus.py", "scripts/check.sh", "tests/test_headers.py"} <= names
+    assert {"src/heliograph/core/bus.py", "scripts/check.sh", "tests/meta/test_headers.py"} <= names
 
 
 @pytest.mark.parametrize(
