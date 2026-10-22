@@ -324,3 +324,10 @@ new = "\n"
 tests = [
     "tests/meta/test_check_controls.py::test_a_break_the_same_size_as_the_last_in_the_same_second_runs_its_own_code",
 ]
+
+[[control]]
+describes = "the mutation wrapper lists every mutant no test killed"
+path = "scripts/mutation_test.py"
+old = 'if name and status and status != "killed":'
+new = 'if name and status == "survived":'
+tests = ["tests/meta/test_mutation_test.py::test_every_mutant_not_killed_is_listed_with_its_status"]

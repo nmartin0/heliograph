@@ -92,6 +92,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - Declared negative controls (tests/controls.toml) and
   scripts/check_controls.py, which breaks each guarantee on purpose and fails
   unless every test it names fails; CI runs them as their own job.
+- scripts/mutation_test.py mutation-tests one module against the tests that
+  cover it (mutmut, in a scratch copy) and lists every change no test noticed.
 
 ### Fixed
 

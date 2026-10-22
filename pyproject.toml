@@ -24,6 +24,7 @@ dev = [
     "coverage>=7.16",
     "hypothesis>=6.140",
     "import-linter>=2.15",
+    "mutmut>=3.8",
     "mypy>=1.18",
     "pytest>=8.4",
     "pytest-randomly>=5.0",
