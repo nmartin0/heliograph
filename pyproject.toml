@@ -49,6 +49,19 @@ file = "heliograph.plugins.file_source:FileSource"
 ccxt = "heliograph.plugins.ccxt_source:CcxtSource"
 store = "heliograph.plugins.store:StoreSource"
 
+[project.entry-points."heliograph.combiners"]
+weighted = "heliograph.plugins.stages:Weighted"
+
+[project.entry-points."heliograph.exits"]
+trailing_stop = "heliograph.plugins.stages:TrailingStop"
+
+[project.entry-points."heliograph.forecasters"]
+ewmac = "heliograph.plugins.forecasters:Ewmac"
+linear = "heliograph.plugins.forecasters:Linear"
+
+[project.entry-points."heliograph.gates"]
+threshold = "heliograph.plugins.forecasters:Threshold"
+
 [project.entry-points."heliograph.indicators"]
 alma = "heliograph.plugins.talipp_indicators:Alma"
 atr = "heliograph.plugins.talib_indicators:Atr"
@@ -60,6 +73,12 @@ rsi = "heliograph.plugins.talib_indicators:Rsi"
 sma = "heliograph.plugins.indicators:Sma"
 stddev = "heliograph.plugins.talib_indicators:StdDev"
 zlema = "heliograph.plugins.indicators:ZeroLag"
+
+[project.entry-points."heliograph.risk_gates"]
+limits = "heliograph.plugins.stages:Limits"
+
+[project.entry-points."heliograph.sizers"]
+vol_target = "heliograph.plugins.stages:VolTarget"
 
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"

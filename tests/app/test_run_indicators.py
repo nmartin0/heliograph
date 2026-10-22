@@ -136,6 +136,7 @@ def test_the_header_records_each_indicator_its_version_parameters_and_inputs(
     run(config(csv(tmp_path), INDICATORS), registry, journal)
     components = json.loads(read_header(journal)["components"])
     assert components["ema_of_sma"] == {
+        "kind": "indicators",
         "plugin": "ema",
         "version": "1",
         "params": {"period": 2},
@@ -187,7 +188,7 @@ def indicator(
         (indicator("sma", ["btc@15m.close"]), "reads 'btc@15m.close', which is neither"),
         (
             indicator("sma", ["b"]) + indicator("sma", ["btc@1h.close"], name="b"),
-            "reads 'b', which is neither an indicator defined before it",
+            "reads 'b', which is neither an indicator, forecaster or gate defined before it",
         ),
         (indicator("sma", ["btc@1h.close"], name=None), "an indicator needs a name"),
         (indicator("sma", []), "an indicator needs inputs"),
@@ -255,7 +256,7 @@ SPACED_NAME = ("[[streams]]", indicator("sma", ["btc@1h.close"], name="a b") + "
     ("change", "reason"),
     [
         (DOTTED_MOUNT, r"mount names \['btc.usd'\] must be"),
-        (NAMED_FILTER, "only indicators take a name and inputs"),
+        (NAMED_FILTER, "only graph nodes .* take a name and inputs"),
         (SPACED_NAME, "'a b' is taken, or not"),
     ],
 )

@@ -189,6 +189,17 @@ All notable changes to Heliograph are recorded here. The format follows
   Legoux), their memory bounded however long the run. And `zlema` (zero lag)
   in plain Python, its lag rounded down as most tools round it. TA-Lib 0.8
   and talipp 2.7 are new dependencies (BSD and MIT); numpy is now declared.
+- The strategy pipeline (core/pipeline.py): `[[strategies]]` in a run
+  assemble forecasters and gates (graph nodes, journalled with the
+  indicators), a combiner, a sizer, exits and risk gates. A strategy decides
+  at each close of its price stream; when its target changes it publishes a
+  `Signal` (target, side, forecasts, vetoes, the exit that set it, a stable
+  id), or a `SignalRefused` naming the risk gate and its reason. Both are
+  journalled and replay byte for byte. First stages: `ewmac` and `linear`
+  forecasters, a `threshold` gate, a `weighted` combiner, a `vol_target`
+  sizer with a no-trade buffer it trades to the edge of, a `trailing_stop`
+  exit and a `limits` risk gate. Risk gates see only signals that add risk:
+  taking risk off (a stop, a veto) always leaves.
 
 ### Fixed
 

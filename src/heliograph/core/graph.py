@@ -29,13 +29,15 @@ untouched. Nodes are only ever added before they are read, so the graph has
 no cycles by construction.
 
 After stabilising, the graph publishes one ``IndicatorValues`` for the
-instant: every indicator's latest sample, and which changed. Strategies read
-that one message, so they see an instant's values together.
+instant: every indicator's latest sample, and which changed. Then it calls
+its observers (``observe``) with the instant and every node that took a
+sample then, bar inputs included, so a strategy acts once per instant on
+values that are all of that instant (core/pipeline.py).
 """
 
 import heapq
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, get_args
 
@@ -91,7 +93,7 @@ class _Node:
 class Graph:
     """Indicators over bar fields, stabilised on ``Settled``; see the module docstring."""
 
-    __slots__ = ("_bus", "_dirty", "_inputs", "_nodes", "_queued")
+    __slots__ = ("_bus", "_dirty", "_inputs", "_nodes", "_observers", "_queued")
 
     def __init__(self, bus: MessageBus) -> None:
         self._bus = bus
@@ -99,6 +101,7 @@ class Graph:
         self._inputs: dict[tuple[str, int, str], _Node] = {}
         self._dirty: list[tuple[int, str]] = []
         self._queued: set[str] = set()
+        self._observers: list[Callable[[Timestamp, frozenset[str]], None]] = []
         bus.subscribe(Bar, self._on_bar)
         bus.subscribe(Settled, self._on_settled)
 
@@ -149,6 +152,18 @@ class Graph:
         """The latest sample of the node ``name`` (None before its first)."""
         return self._nodes[name].value
 
+    def has(self, name: str) -> bool:
+        """Whether a node is named ``name``."""
+        return name in self._nodes
+
+    def observe(self, observer: Callable[[Timestamp, frozenset[str]], None]) -> None:
+        """Call ``observer(ts, changed)`` after each stabilisation, in the order added.
+
+        ``changed`` names every node that took a sample at ``ts``, inputs
+        included; ``value`` then reads any node's latest sample.
+        """
+        self._observers.append(observer)
+
     def _on_bar(self, bar: Bar) -> None:
         size = bar.end - bar.start
         for bar_field in BAR_FIELDS:
@@ -173,6 +188,7 @@ class Graph:
         if not self._dirty:
             return
         produced: list[str] = []
+        sampled: set[str] = set()
         while self._dirty:
             _, name = heapq.heappop(self._dirty)
             self._queued.discard(name)
@@ -186,6 +202,7 @@ class Graph:
             if isinstance(sample, bool) or not math.isfinite(sample):
                 raise InvalidValueError(f"{name} produced {sample!r} at {settled.ts}, not a number")
             node.value = float(sample)
+            sampled.add(name)
             if node.indicator is not None:
                 produced.append(name)
             for reader in node.readers:
@@ -197,3 +214,7 @@ class Graph:
                 if n.indicator is not None and n.value is not None
             }
             self._bus.publish(IndicatorValues(settled.ts, values, tuple(sorted(produced))))
+        if sampled:
+            changed = frozenset(sampled)
+            for observer in self._observers:
+                observer(settled.ts, changed)

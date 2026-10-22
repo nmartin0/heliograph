@@ -203,12 +203,12 @@ def test_a_source_failing_mid_run_leaves_a_journal_saying_so(
         ('mode = "live"\n[mounts.btc]\nsource = "file"\nkind = "trades"\n' + INSTRUMENT, "is live"),
         (
             '[[components]]\nkind = "filters"\nplugin = "sma"\n',
-            "components of kind filters are not run yet",
+            "components of kind filters are not run: a run runs",
         ),
         (
             '[[components]]\nkind = "filters"\nplugin = "sma"\n'
             f'[mounts.btc]\nsource = "file"\nkind = "trades"\n{SPAN}{INSTRUMENT}',
-            "components of kind filters are not run yet",
+            "components of kind filters are not run: a run runs",
         ),
         ("", "at least one mount"),
     ],

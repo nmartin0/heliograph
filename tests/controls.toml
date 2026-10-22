@@ -1280,15 +1280,15 @@ tests = ["tests/plugins/test_indicators.py::test_the_simple_average_is_summed_ex
 [[control]]
 describes = "a run refuses components it cannot run yet, but runs indicators"
 path = "src/heliograph/app/run.py"
-old = "    later = sorted({c.kind for c in config.components if c.kind != \"indicators\"})\n"
+old = "    later = sorted({c.kind for c in config.components if c.kind not in GRAPH_KINDS | STAGE_KINDS})\n"
 new = "    later = sorted({c.kind for c in config.components})\n"
 tests = ["tests/app/test_run_indicators.py::test_a_run_computes_its_indicators_and_journals_their_values"]
 
 [[control]]
 describes = "an indicator given another number of inputs than it reads is refused before the run"
 path = "src/heliograph/app/run.py"
-old = "        elif len(component.inputs) != arity:\n"
-new = "        elif False:\n"
+old = "        if len(component.inputs) != arity:\n"
+new = "        if False:\n"
 tests = ["tests/app/test_run_indicators.py::test_an_indicator_that_cannot_run_is_refused_before_anything_is_written"]
 
 [[control]]
@@ -1329,15 +1329,15 @@ tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_what_does_
 [[control]]
 describes = "two spellings of one stream field read one input"
 path = "src/heliograph/app/run.py"
-old = "                reads = [config.input_name(read) for read in component.inputs]\n"
-new = "                reads = list(component.inputs)\n"
+old = "                    component.name, indicator, [config.input_name(r) for r in component.inputs]\n"
+new = "                    component.name, indicator, list(component.inputs)\n"
 tests = ["tests/app/test_run_indicators.py::test_two_spellings_of_one_stream_field_read_the_same_input"]
 
 [[control]]
 describes = "an indicator reading streams of different grace is refused"
 path = "src/heliograph/app/config.py"
-old = "            if len(read_graces) > 1:\n"
-new = "            if len(read_graces) > 2:\n"
+old = "            if len(read_graces) > 1:\n                problems.append(\n                    f\"{where}: reads streams of different grace; its inputs"
+new = "            if len(read_graces) > 2:\n                problems.append(\n                    f\"{where}: reads streams of different grace; its inputs"
 tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_streams_of_different_grace_is_refused"]
 
 [[control]]
@@ -1357,8 +1357,8 @@ tests = ["tests/app/test_run_indicators.py::test_names_that_cannot_be_read_back_
 [[control]]
 describes = "an indicator's name is letters, digits, underscores and hyphens"
 path = "src/heliograph/app/config.py"
-old = "            if not _NAME.fullmatch(component.name) or component.name in graces:\n"
-new = "            if component.name in graces:\n"
+old = "            if not _NAME.fullmatch(component.name) or component.name in named:\n"
+new = "            if component.name in named:\n"
 tests = ["tests/app/test_run_indicators.py::test_names_that_cannot_be_read_back_are_refused"]
 
 [[control]]
@@ -1628,8 +1628,365 @@ new = "        return self._ema.update([value])\n"
 tests = ["tests/plugins/test_indicators.py::test_the_zero_lag_average_follows_its_definition"]
 
 [[control]]
+describes = "a strategy decides only at closes of its price stream"
+path = "src/heliograph/core/pipeline.py"
+old = "        if spec.price not in changed:\n            return  # decisions are made at the closes of the price stream only\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_decisions_are_made_only_at_closes_of_the_price_stream"]
+
+[[control]]
+describes = "a strategy decides nothing until every forecaster and gate has a sample"
+path = "src/heliograph/core/pipeline.py"
+old = "        warm = all(v is not None for v in (*forecasts.values(), *gates.values()))\n"
+new = "        warm = any(v is not None for v in forecasts.values())\n"
+tests = ["tests/core/test_pipeline.py::test_nothing_is_decided_until_every_forecaster_and_gate_has_a_sample"]
+
+[[control]]
+describes = "each forecast is capped"
+path = "src/heliograph/core/pipeline.py"
+old = "breakdown = {name: capped(f) for"
+new = "breakdown = {name: f for"
+tests = ["tests/core/test_pipeline.py::test_forecasts_are_capped_each_and_once_combined"]
+
+[[control]]
+describes = "the combined forecast is capped"
+path = "src/heliograph/core/pipeline.py"
+old = "            combined = capped(combined)\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_forecasts_are_capped_each_and_once_combined"]
+
+[[control]]
+describes = "a gate at zero vetoes"
+path = "src/heliograph/core/pipeline.py"
+old = "if g is not None and g <= 0)"
+new = "if g is not None and g < 0)"
+tests = ["tests/core/test_pipeline.py::test_a_gate_at_or_below_zero_vetoes_and_the_strategy_goes_flat"]
+
+[[control]]
+describes = "a veto makes the combined forecast zero"
+path = "src/heliograph/core/pipeline.py"
+old = "            combined = 0.0 if vetoed else "
+new = "            combined = "
+tests = ["tests/core/test_pipeline.py::test_a_gate_at_or_below_zero_vetoes_and_the_strategy_goes_flat"]
+
+[[control]]
+describes = "no signal while the target is the position held"
+path = "src/heliograph/core/pipeline.py"
+old = "        if target is None or combined is None or target == self._held:\n"
+new = "        if target is None or combined is None:\n"
+tests = ["tests/core/test_pipeline.py::test_no_signal_while_the_sizer_keeps_the_position_held"]
+
+[[control]]
+describes = "a target that is not finite stops the run"
+path = "src/heliograph/core/pipeline.py"
+old = "        if not math.isfinite(target):\n"
+new = "        if False:\n"
+tests = ["tests/core/test_pipeline.py::test_a_target_that_is_not_finite_stops_the_run"]
+
+[[control]]
+describes = "a refused signal is not also signalled"
+path = "src/heliograph/core/pipeline.py"
+old = "                    )\n                )\n                return\n"
+new = "                    )\n                )\n"
+tests = ["tests/core/test_pipeline.py::test_a_refused_signal_is_journalled_and_the_position_held_does_not_change"]
+
+[[control]]
+describes = "the position held follows the signals"
+path = "src/heliograph/core/pipeline.py"
+old = "        self._held = target\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_nothing_is_decided_until_every_forecaster_and_gate_has_a_sample", "tests/core/test_pipeline.py::test_a_gate_at_or_below_zero_vetoes_and_the_strategy_goes_flat"]
+
+[[control]]
+describes = "an exit that sets the target is named"
+path = "src/heliograph/core/pipeline.py"
+old = "                exit_name, target = name, adjusted\n"
+new = "                target = adjusted\n"
+tests = ["tests/core/test_pipeline.py::test_an_exit_overrides_the_target_and_is_named"]
+
+[[control]]
+describes = "a strategy reading what the graph lacks is refused"
+path = "src/heliograph/core/pipeline.py"
+old = "        if missing:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_pipeline.py::test_a_strategy_reading_what_the_graph_lacks_is_refused"]
+
+[[control]]
+describes = "a signal's values must be finite"
+path = "src/heliograph/core/pipeline.py"
+old = "            if not math.isfinite(getattr(self, name)):\n"
+new = "            if False:\n"
+tests = ["tests/core/test_pipeline.py::test_a_signal_with_a_value_that_is_not_finite_is_refused_as_it_is_made"]
+
+[[control]]
+describes = "observers hear every node that took a sample, inputs included"
+path = "src/heliograph/core/graph.py"
+old = "            sampled.add(name)\n"
+new = "            sampled.add(name) if node.indicator is not None else None\n"
+tests = ["tests/core/test_graph.py::test_observers_hear_once_per_instant_which_nodes_took_a_sample_inputs_included"]
+
+[[control]]
+describes = "a strategy's price must be a stream's field"
+path = "src/heliograph/app/config.py"
+old = "            if found is None:\n                problems.append(\n                    f\"{where}: price"
+new = "            if False:\n                problems.append(\n                    f\"{where}: price"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "several forecasters need a combiner"
+path = "src/heliograph/app/config.py"
+old = "            if strategy.combiner is None and len(strategy.forecasters) > 1:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "a stage serves one strategy"
+path = "src/heliograph/app/config.py"
+old = "                        if name in owner:\n"
+new = "                        if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "every stage is used by a strategy"
+path = "src/heliograph/app/config.py"
+old = "            if component.kind in STAGE_KINDS and component.name not in owner:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "a strategy's stages are of the kinds they are named for"
+path = "src/heliograph/app/config.py"
+old = "                    if kinds.get(name) != kind:\n"
+new = "                    if name not in kinds:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "only exits among stages read inputs"
+path = "src/heliograph/app/config.py"
+old = "                elif component.inputs:\n"
+new = "                elif False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "an exit reads graph nodes only"
+path = "src/heliograph/app/config.py"
+old = "            if unknown:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "a strategy reading streams of different grace is refused"
+path = "src/heliograph/app/config.py"
+old = "            if len(read_graces) > 1:\n                problems.append(\n                    f\"{where}: reads streams of different grace; it would"
+new = "            if len(read_graces) > 2:\n                problems.append(\n                    f\"{where}: reads streams of different grace; it would"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_reading_streams_of_different_grace_is_refused"]
+
+[[control]]
+describes = "a combiner weighting other forecasters is refused before the run"
+path = "src/heliograph/app/run.py"
+old = "        if wanted is not None and wanted != set(strategy.forecasters):\n"
+new = "        if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_combiner_weighting_other_forecasters_is_refused_before_anything_is_written"]
+
+[[control]]
+describes = "a stage that is not what its kind needs is refused before the run"
+path = "src/heliograph/app/run.py"
+old = "            if lacking:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_stage_that_is_not_what_its_kind_needs_is_refused_before_anything_is_written"]
+
+[[control]]
+describes = "the weighted combiner applies its multiplier"
+path = "src/heliograph/plugins/stages.py"
+old = "        return self.params.multiplier * total\n"
+new = "        return total\n"
+tests = ["tests/plugins/test_stages.py::test_weighted_sums_by_weight_times_the_multiplier"]
+
+[[control]]
+describes = "the sizer keeps the position held within its buffer"
+path = "src/heliograph/plugins/stages.py"
+old = "        if abs(wanted - held) <= band:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_keeps_the_position_held_within_its_buffer_and_trades_to_its_edge"]
+
+[[control]]
+describes = "the sizer waits for vol_span changes"
+path = "src/heliograph/plugins/stages.py"
+old = "        if self._variance is None or self._changes < self.params.vol_span or self._variance == 0:\n"
+new = "        if self._variance is None or self._variance == 0:\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_sizes_the_forecast_against_the_average_position"]
+
+[[control]]
+describes = "a stopped side stays out while still wanted"
+path = "src/heliograph/plugins/stages.py"
+old = "                return 0.0  # still wanting the side it was stopped out of\n"
+new = "                pass\n"
+tests = ["tests/plugins/test_stages.py::test_a_long_is_stopped_from_its_entry_close_and_stays_out_while_still_wanted"]
+
+[[control]]
+describes = "limits let signals age out after 24 hours"
+path = "src/heliograph/plugins/stages.py"
+old = "self._sent[0] <= proposal.ts - NANOS_PER_DAY"
+new = "self._sent[0] <= proposal.ts - 2 * NANOS_PER_DAY"
+tests = ["tests/plugins/test_stages.py::test_limits_count_only_signals_sent_in_any_24_hours"]
+
+[[control]]
+describes = "limits refuse a price jump"
+path = "src/heliograph/plugins/stages.py"
+old = "            if jump > self.params.max_jump:\n"
+new = "            if False:\n"
+tests = ["tests/plugins/test_stages.py::test_limits_refuse_a_price_jump_from_the_previous_close"]
+
+[[control]]
+describes = "ewmac averages squared changes"
+path = "src/heliograph/plugins/forecasters.py"
+old = "            self._variance += self._vol_weight * (squared - self._variance)\n"
+new = "            self._variance = squared\n"
+tests = ["tests/plugins/test_forecasters.py::test_ewmac_follows_its_definition"]
+
+[[control]]
+describes = "a threshold passes strictly above its bound"
+path = "src/heliograph/plugins/forecasters.py"
+old = "(above is None or value > above)"
+new = "(above is None or value >= above)"
+tests = ["tests/plugins/test_forecasters.py::test_a_threshold_passes_strictly_inside_its_bounds"]
+
+[[control]]
 describes = "Hypothesis has no deadline anywhere in the suite, so a slow machine cannot fail a correct test"
 path = "tests/conftest.py"
 old = "settings.register_profile(\"heliograph\", deadline=None)\n"
 new = "settings.register_profile(\"heliograph\", deadline=1)\n"
 tests = ["tests/core/test_alarms.py::test_alarms_and_data_are_delivered_in_time_order_at_their_own_instant"]
+
+[[control]]
+describes = "a proposal that only takes risk off never goes to the risk gates"
+path = "src/heliograph/core/pipeline.py"
+old = "        gates_ = () if reduces_risk(self._held, target) else spec.risk_gates\n"
+new = "        gates_ = spec.risk_gates\n"
+tests = ["tests/core/test_pipeline.py::test_taking_risk_off_never_goes_to_the_risk_gates", "tests/app/test_run_strategies.py::test_a_rate_limit_refuses_adding_risk_but_never_taking_it_off"]
+
+[[control]]
+describes = "risk gates hear of every signal sent"
+path = "src/heliograph/core/pipeline.py"
+old = "        for _, gate in spec.risk_gates:\n            gate.sent(proposal)\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_risk_gates_hear_only_of_signals_sent_and_see_the_previous_close"]
+
+[[control]]
+describes = "a combined forecast that is not finite stops the run"
+path = "src/heliograph/core/pipeline.py"
+old = "            if not math.isfinite(combined):\n"
+new = "            if False:\n"
+tests = ["tests/core/test_pipeline.py::test_a_combined_forecast_that_is_not_finite_stops_the_run"]
+
+[[control]]
+describes = "a veto takes the strategy flat whatever the sizer's buffer"
+path = "src/heliograph/core/pipeline.py"
+old = "            target = 0.0  # a veto takes the strategy flat, whatever the sizer's buffer\n"
+new = "            pass\n"
+tests = ["tests/core/test_pipeline.py::test_a_veto_takes_the_strategy_flat_whatever_the_sizers_buffer"]
+
+[[control]]
+describes = "a flat target is 0.0, never -0.0"
+path = "src/heliograph/core/pipeline.py"
+old = "        target += 0.0  # -0.0 is flat\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_a_flat_target_is_never_minus_zero"]
+
+[[control]]
+describes = "-0.0 and 0.0 have one id"
+path = "src/heliograph/core/pipeline.py"
+old = "    target = target + 0.0  # -0.0 and 0.0 are one decision\n"
+new = ""
+tests = ["tests/core/test_pipeline.py::test_the_same_decision_has_the_same_id_and_runs_have_their_own"]
+
+[[control]]
+describes = "a signal's id is scoped by its run"
+path = "src/heliograph/core/pipeline.py"
+old = "f\"{scope}|{strategy}|{ts}|{target!r}\""
+new = "f\"{strategy}|{ts}|{target!r}\""
+tests = ["tests/core/test_pipeline.py::test_the_same_decision_has_the_same_id_and_runs_have_their_own"]
+
+[[control]]
+describes = "risk gates see the previous close"
+path = "src/heliograph/core/pipeline.py"
+old = "            previous=previous,\n"
+new = "            previous=None,\n"
+tests = ["tests/core/test_pipeline.py::test_risk_gates_hear_only_of_signals_sent_and_see_the_previous_close"]
+
+[[control]]
+describes = "a run scopes its signals' ids by its configuration's digest"
+path = "src/heliograph/app/run.py"
+old = "        scope=scope,\n"
+new = ""
+tests = ["tests/app/test_run_strategies.py::test_a_run_signals_what_its_strategy_decides_vetoes_and_stops_included"]
+
+[[control]]
+describes = "a run gives exits the stream fields they read"
+path = "src/heliograph/app/run.py"
+old = "            reads += [read for c, _ in components if c.kind == \"exits\" for read in c.inputs]\n"
+new = ""
+tests = ["tests/app/test_run_strategies.py::test_an_exit_may_read_a_streams_field"]
+
+[[control]]
+describes = "a risk gate must hear what was sent"
+path = "src/heliograph/app/run.py"
+old = "                needs.append(_NEEDS[\"risk_gates/sent\"])\n"
+new = "                pass\n"
+tests = ["tests/app/test_run_strategies.py::test_a_risk_gate_that_cannot_hear_what_was_sent_is_refused"]
+
+[[control]]
+describes = "a strategy's price is not a volume"
+path = "src/heliograph/app/config.py"
+old = "            elif found[2] == \"volume\":\n"
+new = "            elif False:\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
+
+[[control]]
+describes = "an exit may read a stream's field"
+path = "src/heliograph/app/config.py"
+old = "                if read not in graces and self.stream_field(read) is None\n"
+new = "                if read not in graces\n"
+tests = ["tests/app/test_run_strategies.py::test_an_exit_may_read_a_streams_field"]
+
+[[control]]
+describes = "vol_target trades to the edge of its buffer"
+path = "src/heliograph/plugins/stages.py"
+old = "        return wanted - band if held < wanted else wanted + band\n"
+new = "        return wanted\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_keeps_the_position_held_within_its_buffer_and_trades_to_its_edge"]
+
+[[control]]
+describes = "vol_target may trade to the target itself"
+path = "src/heliograph/plugins/stages.py"
+old = "        if not self.params.to_edge:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_may_trade_to_the_target_itself"]
+
+[[control]]
+describes = "the stop starts from the entry close"
+path = "src/heliograph/plugins/stages.py"
+old = "            self._best = price if side else None\n"
+new = "            self._best = None\n"
+tests = ["tests/plugins/test_stages.py::test_a_long_is_stopped_from_its_entry_close_and_stays_out_while_still_wanted"]
+
+[[control]]
+describes = "the stop leaves a strategy's own exit or reversal alone"
+path = "src/heliograph/plugins/stages.py"
+old = "        if side != direction:\n            # Entering, leaving or reversing on the strategy's own decision: an entry\n            # starts the best close at this one.\n            self._best = price if side else None\n            return target\n"
+new = ""
+tests = ["tests/plugins/test_stages.py::test_a_strategy_leaving_or_reversing_on_its_own_is_not_stopped"]
+
+[[control]]
+describes = "limits measure the jump from the previous close"
+path = "src/heliograph/plugins/stages.py"
+old = "        last = proposal.previous\n"
+new = "        last = None\n"
+tests = ["tests/plugins/test_stages.py::test_limits_refuse_a_price_jump_from_the_previous_close"]
+
+[[control]]
+describes = "limits count the signals sent"
+path = "src/heliograph/plugins/stages.py"
+old = "        self._sent.append(proposal.ts)\n"
+new = "        pass\n"
+tests = ["tests/plugins/test_stages.py::test_limits_count_only_signals_sent_in_any_24_hours"]

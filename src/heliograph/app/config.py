@@ -38,6 +38,24 @@ their instrument. What can be checked from the text alone is checked here;
 whether the named source can serve each mount is checked at composition
 (app/mounts.py).
 
+Indicators, forecasters and gates are nodes of the indicator graph: each
+has a ``name`` and reads ``inputs``, streams' fields or nodes defined
+before it. Combiners, sizers, exits and risk gates are a strategy's
+stages: each has a ``name``, and an exit may read graph nodes or streams'
+fields. A strategy assembles them (core/pipeline.py)::
+
+    [[strategies]]
+    name = "trend"
+    price = "btc@1h.close"          # decides at each close of this stream
+    forecasters = ["fast", "slow"]
+    gates = ["calm"]                 # optional
+    combiner = "blend"               # optional with one forecaster
+    sizer = "vol"
+    exits = ["stop"]                 # optional
+    risk_gates = ["limits"]          # optional
+
+Each stage belongs to one strategy, and each must be used by one.
+
 The file is validated as a whole and fingerprinted, so every run and signal
 can record exactly which configuration produced it.
 """
@@ -114,14 +132,20 @@ def _hash_key(value: Any) -> Any:
     return value
 
 
+GRAPH_KINDS = frozenset({"indicators", "forecasters", "gates"})
+"""Kinds whose plug-ins are nodes of the indicator graph."""
+STAGE_KINDS = frozenset({"combiners", "sizers", "exits", "risk_gates"})
+"""Kinds whose plug-ins are a strategy's stages."""
+
+
 class ComponentConfig(BaseModel):
-    """One plug-in to build: its kind, its plug-in name, its raw parameters, and for an
-    indicator its own ``name`` and the ``inputs`` it reads.
+    """One plug-in to build: its kind, its plug-in name, its raw parameters, and for a
+    graph node or a stage its own ``name``, and the ``inputs`` it reads.
 
     An input is a stream's bar field, written ``<mount>@<size>.<field>`` (such
-    as ``btc@1h.close``), or the name of an indicator defined earlier. The
-    parameters are frozen all the way down, so a loaded configuration always
-    matches the digest recorded for it.
+    as ``btc@1h.close``), or the name of a graph node defined earlier; an
+    exit reads graph nodes only. The parameters are frozen all the way down,
+    so a loaded configuration always matches the digest recorded for it.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -306,6 +330,32 @@ class StreamConfig(BaseModel):
         )
 
 
+class StrategyConfig(BaseModel):
+    """One strategy: the stream whose closes it decides at, and its stages by name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    price: str
+    forecasters: tuple[str, ...]
+    gates: tuple[str, ...] = ()
+    combiner: str | None = None
+    sizer: str
+    exits: tuple[str, ...] = ()
+    risk_gates: tuple[str, ...] = ()
+
+    def stages(self) -> dict[str, tuple[str, ...]]:
+        """The names this strategy uses, by the kind each must be."""
+        return {
+            "forecasters": self.forecasters,
+            "gates": self.gates,
+            "combiners": () if self.combiner is None else (self.combiner,),
+            "sizers": (self.sizer,),
+            "exits": self.exits,
+            "risk_gates": self.risk_gates,
+        }
+
+
 class RunConfig(BaseModel):
     """Everything needed to assemble one run.
 
@@ -319,6 +369,7 @@ class RunConfig(BaseModel):
     components: tuple[ComponentConfig, ...] = ()
     mounts: Mapping[str, MountConfig] = Field(default_factory=dict)
     streams: tuple[StreamConfig, ...] = ()
+    strategies: tuple[StrategyConfig, ...] = ()
 
     @field_validator("mounts", mode="after")
     @classmethod
@@ -389,25 +440,39 @@ class RunConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _indicators_read_what_exists(self) -> "RunConfig":
+    def _components_read_what_exists(self) -> "RunConfig":
         problems = []
-        graces: dict[str, set[int]] = {}  # each indicator's inputs' graces, all the way down
+        graces: dict[str, set[int]] = {}  # each graph node's inputs' graces, all the way down
+        named: set[str] = set()
+        exits: list[tuple[str, ComponentConfig]] = []
         for index, component in enumerate(self.components):
             where = f"components[{index}] ({component.plugin})"
-            if component.kind != "indicators":
+            kind = component.kind
+            if kind not in GRAPH_KINDS and kind not in STAGE_KINDS:
                 if component.name is not None or component.inputs:
-                    problems.append(f"{where}: only indicators take a name and inputs")
+                    problems.append(
+                        f"{where}: only graph nodes (indicators, forecasters, gates) and "
+                        "strategy stages take a name and inputs"
+                    )
                 continue
+            noun = kind.removesuffix("s").replace("_", " ")
             if not component.name:
-                problems.append(f"{where}: an indicator needs a name")
+                problems.append(f"{where}: {_article(noun)} {noun} needs a name")
                 continue
-            if not _NAME.fullmatch(component.name) or component.name in graces:
+            if not _NAME.fullmatch(component.name) or component.name in named:
                 problems.append(
                     f"{where}: the name {component.name!r} is taken, or not letters, digits, "
                     "underscores and hyphens"
                 )
+            named.add(component.name)
+            if kind in STAGE_KINDS:
+                if kind == "exits":
+                    exits.append((where, component))
+                elif component.inputs:
+                    problems.append(f"{where}: a {noun} reads no inputs; exits may")
+                continue
             if not component.inputs:
-                problems.append(f"{where}: an indicator needs inputs")
+                problems.append(f"{where}: {_article(noun)} {noun} needs inputs")
             read_graces: set[int] = set()
             for read in component.inputs:
                 found = self.stream_field(read)
@@ -417,8 +482,8 @@ class RunConfig(BaseModel):
                     read_graces.add(found[1].bar_spec().grace)
                 else:
                     problems.append(
-                        f"{where}: reads {read!r}, which is neither an indicator defined "
-                        "before it nor a stream's field (<mount>@<size>.<field>)"
+                        f"{where}: reads {read!r}, which is neither an indicator, forecaster or "
+                        "gate defined before it nor a stream's field (<mount>@<size>.<field>)"
                     )
             if len(read_graces) > 1:
                 problems.append(
@@ -426,9 +491,82 @@ class RunConfig(BaseModel):
                     "different instants, so it would see one of them late"
                 )
             graces[component.name] = read_graces
+        for where, component in exits:
+            unknown = [
+                read
+                for read in component.inputs
+                if read not in graces and self.stream_field(read) is None
+            ]
+            if unknown:
+                problems.append(
+                    f"{where}: reads {', '.join(map(repr, unknown))}; an exit reads indicators, "
+                    "forecasters, gates or streams' fields"
+                )
+        problems += self._strategies_assemble(graces)
         if problems:
             raise ValueError("; ".join(problems))
         return self
+
+    def _strategies_assemble(self, graces: Mapping[str, set[int]]) -> list[str]:
+        problems = []
+        kinds = {c.name: c.kind for c in self.components if c.name is not None}
+        owner: dict[str, str] = {}
+        strategy_names: set[str] = set()
+        for index, strategy in enumerate(self.strategies):
+            where = f"strategies[{index}] ({strategy.name})"
+            if not _NAME.fullmatch(strategy.name) or strategy.name in strategy_names:
+                problems.append(
+                    f"{where}: the name is taken, or not letters, digits, underscores and hyphens"
+                )
+            strategy_names.add(strategy.name)
+            found = self.stream_field(strategy.price)
+            read_graces: set[int] = set()
+            if found is None:
+                problems.append(
+                    f"{where}: price {strategy.price!r} is not a stream's field "
+                    "(<mount>@<size>.<field>)"
+                )
+            elif found[2] == "volume":
+                problems.append(f"{where}: price {strategy.price!r} is a volume, not a price")
+            else:
+                read_graces.add(found[1].bar_spec().grace)
+            if not strategy.forecasters:
+                problems.append(f"{where}: a strategy needs at least one forecaster")
+            if strategy.combiner is None and len(strategy.forecasters) > 1:
+                problems.append(f"{where}: {len(strategy.forecasters)} forecasters need a combiner")
+            for kind, names in strategy.stages().items():
+                for name in names:
+                    if kinds.get(name) != kind:
+                        problems.append(f"{where}: {name!r} is not a component of kind {kind}")
+                        continue
+                    if kind in STAGE_KINDS:
+                        if name in owner:
+                            problems.append(
+                                f"{where}: {name!r} is already strategy {owner[name]}'s; "
+                                "a stage keeps state, so it serves one strategy"
+                            )
+                        owner.setdefault(name, strategy.name)
+                    read_graces |= graces.get(name, set())
+            for exit_name in strategy.exits:
+                for component in self.components:
+                    if component.name == exit_name:
+                        for read in component.inputs:
+                            field_ = self.stream_field(read)
+                            if field_ is not None:
+                                read_graces.add(field_[1].bar_spec().grace)
+                            read_graces |= graces.get(read, set())
+            if len(read_graces) > 1:
+                problems.append(
+                    f"{where}: reads streams of different grace; it would decide on values "
+                    "of different instants"
+                )
+        for index, component in enumerate(self.components):
+            if component.kind in STAGE_KINDS and component.name not in owner:
+                problems.append(
+                    f"components[{index}] ({component.name}): no strategy uses this "
+                    f"{component.kind.removesuffix('s').replace('_', ' ')}"
+                )
+        return problems
 
     def stream_field(self, ref: str) -> tuple[str, StreamConfig, str] | None:
         """The mount, stream and bar field ``ref`` names (``btc@1h.close``), or None."""
@@ -454,7 +592,11 @@ class RunConfig(BaseModel):
 
     def __hash__(self) -> int:
         mounts = tuple(sorted(self.mounts.items()))
-        return hash((self.mode, self.components, mounts, self.streams))
+        return hash((self.mode, self.components, mounts, self.streams, self.strategies))
+
+
+def _article(noun: str) -> str:
+    return "an" if noun[0] in "aeiou" else "a"
 
 
 @dataclass(frozen=True, slots=True)

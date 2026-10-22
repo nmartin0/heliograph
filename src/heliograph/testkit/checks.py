@@ -9,7 +9,8 @@ Every plug-in, whatever its kind:
   defaults, or ``Conformance.params``), and its parameter schema renders;
 - ``params``: its parameters survive JSON and back, unchanged.
 
-Every indicator (``Indicator`` in core/graph.py), fed a fixed random walk
+Every indicator, forecaster and gate (an ``Indicator`` in core/graph.py),
+fed a fixed random walk
 (independent walks, or the fields of random bars if it declares them):
 
 - ``no_peeking``: in a fresh interpreter, its outputs for the first
@@ -339,15 +340,19 @@ def check_reference(plugin: PluginClass) -> None:
 # -- which checks each kind gets ----------------------------------------------------------
 
 EVERY: dict[str, Check] = {"manifest": check_manifest, "params": check_params}
+INDICATOR_CHECKS: dict[str, Check] = {
+    "no_peeking": check_no_peeking,
+    "warm_up": check_warm_up,
+    "gaps": check_gaps,
+    "constant": check_constant,
+    "single_point": check_single_point,
+    "reference": check_reference,
+}
+# Forecasters and gates are graph nodes too (core/pipeline.py): the same contract.
 BY_KIND: dict[str, dict[str, Check]] = {
-    "indicators": {
-        "no_peeking": check_no_peeking,
-        "warm_up": check_warm_up,
-        "gaps": check_gaps,
-        "constant": check_constant,
-        "single_point": check_single_point,
-        "reference": check_reference,
-    },
+    "indicators": INDICATOR_CHECKS,
+    "forecasters": INDICATOR_CHECKS,
+    "gates": INDICATOR_CHECKS,
 }
 
 

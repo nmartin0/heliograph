@@ -269,3 +269,25 @@ def test_two_bars_of_one_input_known_at_one_instant_are_refused_not_one_dropped(
 
     with pytest.raises(InvalidValueError, match="two 1h bars of kraken:BTC/USD known at"):
         w.engine.run([bar(0, 100, received=2), bar(1, 110)], until=Timestamp(2 * HOUR))
+
+
+def test_observers_hear_once_per_instant_which_nodes_took_a_sample_inputs_included() -> None:
+    w = world()
+    hourly(w, "1h")
+    graph = Graph(w.bus)
+    graph.bar_input("close", BTC, HOUR, "close")
+    graph.add("mean2", Mean(2), ["close"])
+    heard: list[tuple[str, int, frozenset[str], float | None]] = []
+    graph.observe(
+        lambda ts, changed: heard.append(("first", ts // HOUR, changed, graph.value("mean2")))
+    )
+    graph.observe(lambda ts, changed: heard.append(("second", ts // HOUR, changed, None)))
+    w.engine.run(points([(30, 100), (90, 102)]), until=Timestamp(2 * HOUR))
+    assert heard == [
+        ("first", 1, frozenset({"close"}), None),
+        ("second", 1, frozenset({"close"}), None),
+        ("first", 2, frozenset({"close", "mean2"}), 101.0),
+        ("second", 2, frozenset({"close", "mean2"}), None),
+    ]
+    assert graph.has("mean2")
+    assert not graph.has("nothing")

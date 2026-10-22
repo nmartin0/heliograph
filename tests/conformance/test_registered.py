@@ -38,9 +38,14 @@ def test_conformance(plugin: Any, check: str) -> None:
 def test_every_installed_plugin_is_in_the_kit() -> None:
     names = {f"{p.manifest.kind}/{p.manifest.name}" for p in PLUGINS}
     assert names == {
+        "combiners/weighted",
         "data_sources/ccxt",
         "data_sources/file",
         "data_sources/store",
+        "exits/trailing_stop",
+        "forecasters/ewmac",
+        "forecasters/linear",
+        "gates/threshold",
         "instrument_providers/static",
         "indicators/alma",
         "indicators/atr",
@@ -53,6 +58,8 @@ def test_every_installed_plugin_is_in_the_kit() -> None:
         "indicators/stddev",
         "indicators/zlema",
         "journals/sqlite",
+        "risk_gates/limits",
+        "sizers/vol_target",
     }
 
 
