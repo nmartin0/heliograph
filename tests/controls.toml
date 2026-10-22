@@ -605,6 +605,70 @@ tests = [
 ]
 
 [[control]]
+describes = "a file's row at the request's start is delivered"
+path = "src/heliograph/plugins/file_source.py"
+old = "if happened >= request.start:"
+new = "if happened > request.start:"
+tests = [
+    "tests/plugins/test_file_source.py::test_a_file_yields_its_trades_in_the_requested_interval_for_the_requested_instrument",
+]
+
+[[control]]
+describes = "a file's row at the request's end is not delivered"
+path = "src/heliograph/plugins/file_source.py"
+old = "if happened >= request.end:"
+new = "if happened > request.end:"
+tests = [
+    "tests/plugins/test_file_source.py::test_a_file_yields_its_trades_in_the_requested_interval_for_the_requested_instrument",
+]
+
+[[control]]
+describes = "a file is read no further than the request's end"
+path = "src/heliograph/plugins/file_source.py"
+old = """                    if happened >= request.end:
+                        return
+"""
+new = """                    if happened >= request.end:
+                        continue
+"""
+tests = ["tests/plugins/test_file_source.py::test_reading_stops_at_the_first_row_past_the_end"]
+
+[[control]]
+describes = "a file whose times go back is refused"
+path = "src/heliograph/plugins/file_source.py"
+old = "if previous is not None and happened < previous:"
+new = "if previous is not None and happened < previous and False:"
+tests = ["tests/plugins/test_file_source.py::test_a_row_that_cannot_be_read_stops_the_read_naming_the_file_and_row"]
+
+[[control]]
+describes = "a file's bar ends one bar size after it starts"
+path = "src/heliograph/plugins/file_source.py"
+old = "end = Timestamp(happened + size)"
+new = "end = Timestamp(happened + size + 1)"
+tests = ["tests/plugins/test_file_source.py::test_bars_end_one_bar_size_after_the_time_they_start"]
+
+[[control]]
+describes = "a Parquet timestamp without a time zone is refused"
+path = "src/heliograph/plugins/file_source.py"
+old = "    if values.type.tz is None:\n"
+new = "    if values.type.tz is None and False:\n"
+tests = ["tests/plugins/test_file_source.py::test_a_parquet_timestamp_without_a_time_zone_is_refused"]
+
+[[control]]
+describes = "a Parquet timestamp is converted from its own unit"
+path = "src/heliograph/plugins/file_source.py"
+old = "scale = UNITS[values.type.unit]"
+new = "scale = 1"
+tests = ["tests/plugins/test_file_source.py::test_a_parquet_timestamp_in_seconds_is_converted"]
+
+[[control]]
+describes = "an epoch time that is a float is refused, not truncated"
+path = "src/heliograph/plugins/file_source.py"
+old = "isinstance(value, bool | float)"
+new = "isinstance(value, bool)"
+tests = ["tests/plugins/test_file_source.py::test_a_parquet_float_time_is_refused"]
+
+[[control]]
 describes = "history of another bar size is refused"
 path = "src/heliograph/app/bridge.py"
 old = "        if _what(data) != asked:\n"
@@ -705,3 +769,33 @@ path = "src/heliograph/app/mounts.py"
 old = "        except InvalidValueError as exc:  # reading"
 new = "        except KeyError as exc:  # reading"
 tests = ["tests/app/test_mounts.py::test_a_source_whose_capabilities_cannot_be_read_is_reported_with_the_rest"]
+
+[[control]]
+describes = "a file read cancelled mid-batch stays cancelled and closes when the read ends"
+path = "src/heliograph/plugins/file_source.py"
+old = "            _close_after(reading, batches)\n"
+new = "            batches.close()\n"
+tests = [
+    "tests/plugins/test_file_source.py::test_a_read_cancelled_while_a_batch_is_being_read_stays_cancelled_and_closes_its_file",
+]
+
+[[control]]
+describes = "a CSV file that is not UTF-8 is refused naming where"
+path = "src/heliograph/plugins/file_source.py"
+old = "        except UnicodeDecodeError as exc:\n"
+new = "        except UnicodeTranslateError as exc:\n"
+tests = ["tests/plugins/test_file_source.py::test_a_csv_file_that_is_not_utf8_is_refused_naming_where"]
+
+[[control]]
+describes = "a byte-order mark is not read into the first column name"
+path = "src/heliograph/plugins/file_source.py"
+old = 'encoding="utf-8-sig"'
+new = 'encoding="utf-8"'
+tests = ["tests/plugins/test_file_source.py::test_a_byte_order_mark_is_not_part_of_the_first_column_name"]
+
+[[control]]
+describes = "a file's overlapping bars are refused"
+path = "src/heliograph/plugins/file_source.py"
+old = "                        if free_from is not None and happened < free_from:\n"
+new = "                        if free_from is not None and happened < free_from - 3600 * 10**9:\n"
+tests = ["tests/plugins/test_file_source.py::test_bars_that_overlap_are_refused"]

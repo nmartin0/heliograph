@@ -9,6 +9,7 @@ test runner) are not distributed and are not listed here.
 | --- | --- | --- | --- | --- |
 | annotated-types | 0.8.0 | MIT | permissive | https://github.com/annotated-types/annotated-types |
 | msgspec | 0.22.0 | BSD-3-Clause | permissive | https://github.com/msgspec/msgspec |
+| pyarrow | 26.0.0 | Apache-2.0 | permissive | https://github.com/apache/arrow |
 | pydantic | 2.14.1 | MIT | permissive | https://github.com/pydantic/pydantic |
 | pydantic-core | 2.50.1 | MIT | permissive | https://github.com/pydantic/pydantic-core |
 | typing-extensions | 4.16.0 | PSF-2.0 | permissive | https://github.com/python/typing_extensions |

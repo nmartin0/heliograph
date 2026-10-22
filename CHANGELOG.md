@@ -112,6 +112,11 @@ All notable changes to Heliograph are recorded here. The format follows
   declared capabilities and terms, and every problem is reported at once
   before any source is used. Mounts on the same source and parameters share
   one instance, and so one rate limit.
+- A data source for CSV and Parquet files: one instrument's trades or bars,
+  with times as ISO 8601 or epoch seconds to nanoseconds (or a time-zone-aware
+  Parquet timestamp). A row that cannot be read, or that goes back in time,
+  stops the read naming the file and row. Adds pyarrow (Apache-2.0) as a
+  dependency.
 
 ### Fixed
 

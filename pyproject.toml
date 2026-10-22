@@ -16,6 +16,7 @@ classifiers = [
 ]
 dependencies = [
     "msgspec>=0.19,<1",
+    "pyarrow>=22,<27",
     "pydantic>=2.11,<3",
 ]
 
@@ -26,6 +27,7 @@ dev = [
     "import-linter>=2.15",
     "mutmut>=3.8",
     "mypy>=1.18",
+    "pyarrow-stubs>=20.0.0.20260819",
     "pytest>=8.4",
     "pytest-randomly>=5.0",
     "ruff>=0.14",
@@ -33,6 +35,9 @@ dev = [
 
 [project.entry-points."heliograph.journals"]
 sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
+
+[project.entry-points."heliograph.data_sources"]
+file = "heliograph.plugins.file_source:FileSource"
 
 [build-system]
 requires = ["hatchling>=1.27"]
