@@ -144,6 +144,10 @@ All notable changes to Heliograph are recorded here. The format follows
   only whole candles become bars; a history shorter than asked stops the read.
   Live tests (`uv run pytest -m live`) check it against Kraken; they are
   excluded by default. Adds ccxt (MIT) and its dependencies.
+- Streams in the run configuration (`[[streams]]`): bars of a size built from
+  a mount's trades, with optional grace, gap policy, price and volume fields;
+  a stream naming no mount, a bars mount, or the same stream twice is refused
+  when the configuration is read.
 
 ### Fixed
 

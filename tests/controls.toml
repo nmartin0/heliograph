@@ -1063,3 +1063,24 @@ path = "src/heliograph/plugins/store.py"
 old = "        if entry[\"raw_rows\"] != entry[\"declared_rows\"]:\n"
 new = "        if entry[\"raw_rows\"] < 0:\n"
 tests = ["tests/plugins/test_store.py::test_the_audit_compares_rows_read_with_rows_the_raw_files_declare"]
+
+[[control]]
+describes = "a stream must name a mount"
+path = "src/heliograph/app/config.py"
+old = "                problems.append(f\"{where}: no mount named {stream.mount!r}\")\n"
+new = "                pass\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "a stream builds bars from a trades mount only"
+path = "src/heliograph/app/config.py"
+old = "            if mount.kind != \"trades\":\n"
+new = "            if mount.kind == \"quotes\":\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "the same stream twice is refused, streams differing in grace are not"
+path = "src/heliograph/app/config.py"
+old = "            identity = (stream.mount, stream.bar_spec().identity())\n"
+new = "            identity = (stream.mount, stream.bar_spec().label())\n"
+tests = ["tests/app/test_streams_config.py::test_two_streams_of_one_size_but_different_grace_are_two_streams"]

@@ -25,9 +25,16 @@ A run is described by a TOML file::
     asset_class = "crypto"
     quote_currency = "USD"
 
-A mount binds a name to a data source and says what to take from it. What
-can be checked from the text alone is checked here; whether the named source
-can serve each mount is checked at composition (app/mounts.py).
+    [[streams]]
+    mount = "btc"
+    bars = "1h"
+
+A mount binds a name to a data source and says what to take from it. A
+stream builds bars of one size from a mount's trades (core/bars.py), with
+an optional ``grace``, ``gaps`` ("skip" or "carry"), ``price`` and
+``volume``. What can be checked from the text alone is checked here;
+whether the named source can serve each mount is checked at composition
+(app/mounts.py).
 
 The file is validated as a whole and fingerprinted, so every run and signal
 can record exactly which configuration produced it.
@@ -54,6 +61,7 @@ from pydantic import (
 
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.messages import Instrument
+from heliograph.core.streams import BarSpec
 from heliograph.core.time import Timestamp, from_datetime, parse_span
 
 
@@ -243,6 +251,43 @@ class MountConfig(BaseModel):
         return hash((fields, _hash_key(self.params)))
 
 
+class StreamConfig(BaseModel):
+    """Bars of one size built from one mount's trades."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mount: str
+    bars: str
+    grace: str | None = None
+    gaps: Literal["skip", "carry"] = "skip"
+    price: str = "price"
+    volume: str | None = "size"
+
+    @model_validator(mode="after")
+    def _a_bar_spec(self) -> "StreamConfig":
+        try:
+            self.bar_spec()
+        except InvalidValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+    def bar_spec(self) -> BarSpec:
+        """How the bars are cut.
+
+        Raises:
+            InvalidValueError: for a size or grace that is not a span, or a
+                grace not shorter than the bar.
+        """
+        grace = 0 if self.grace is None else parse_span(self.grace)
+        return BarSpec(
+            size=parse_span(self.bars),
+            grace=grace,
+            gaps=self.gaps,
+            price=self.price,
+            volume=self.volume,
+        )
+
+
 class RunConfig(BaseModel):
     """Everything needed to assemble one run.
 
@@ -255,6 +300,7 @@ class RunConfig(BaseModel):
     mode: Literal["backtest", "live"] = "backtest"
     components: tuple[ComponentConfig, ...] = ()
     mounts: Mapping[str, MountConfig] = Field(default_factory=dict)
+    streams: tuple[StreamConfig, ...] = ()
 
     @field_validator("mounts", mode="after")
     @classmethod
@@ -278,8 +324,31 @@ class RunConfig(BaseModel):
             raise ValueError("; ".join(problems))
         return self
 
+    @model_validator(mode="after")
+    def _streams_read_trades(self) -> "RunConfig":
+        problems = []
+        seen: dict[tuple[str, str], int] = {}
+        for index, stream in enumerate(self.streams):
+            where = f"streams[{index}]"
+            mount = self.mounts.get(stream.mount)
+            if mount is None:
+                problems.append(f"{where}: no mount named {stream.mount!r}")
+                continue
+            if mount.kind != "trades":
+                problems.append(
+                    f"{where}: mounts.{stream.mount} delivers bars; streams build bars from trades"
+                )
+            identity = (stream.mount, stream.bar_spec().identity())
+            if identity in seen:
+                problems.append(f"{where}: the same stream as streams[{seen[identity]}]")
+            seen.setdefault(identity, index)
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
     def __hash__(self) -> int:
-        return hash((self.mode, self.components, tuple(sorted(self.mounts.items()))))
+        mounts = tuple(sorted(self.mounts.items()))
+        return hash((self.mode, self.components, mounts, self.streams))
 
 
 @dataclass(frozen=True, slots=True)
