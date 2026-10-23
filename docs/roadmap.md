@@ -150,17 +150,13 @@ candles.
       candles (D33, D5). Carrying gaps in bars built from bars waits until a
       strategy needs it.
 - Fixes from the review of everything built (2026-10-23), in three
-  batches: F1 signals (D34) done; F2 bars and timing; F3 sources and the
-  store.
+  batches: F1 signals (D34) done; F2 bars and timing (D35) done; F3
+  sources and the store.
 - Open, from the review of F1: a doubted price reaches the graph's nodes
   (a forecaster, an ATR a stop reads) before any risk gate can doubt it;
   a sanity filter on bars in front of the graph would keep it out.
-- Open, found in D5's review: late points and late bars are counted but
-  not reported or journalled; the check that a graph node's inputs share a
-  grace takes grace for the time a bar closes, which a bar built from bars
-  does not (a pass-through 15m and a built 1h with grace 5m close together
-  yet are refused); CCXT names Kraken's 15-day candles `2w`, which reads as
-  14 days.
+- Open, found in D5's review: CCXT names Kraken's 15-day candles `2w`,
+  which reads as 14 days (F3).
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
 - [x] Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate;

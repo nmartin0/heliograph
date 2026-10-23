@@ -83,8 +83,8 @@ contract and a core purity test).
   then has arrived (Jane Street's Incremental idea): each node with a changed
   input is updated once, in dependency order, which is the order nodes were
   added in; inputs closing at one instant are read together (a run refuses an
-  indicator reading streams of different grace, which close at different
-  instants). Indicators are series, so every sample propagates, equal or not;
+  indicator reading streams that close at different times after their end:
+  its sources' delays, and the grace of bars built from trades, D35). Indicators are series, so every sample propagates, equal or not;
   the cutoff is a node producing no sample. One `IndicatorValues` per
   instant carries every indicator's latest sample and which changed. A run
   builds its indicators from `[[components]]` (D26, D27). After each
@@ -128,7 +128,8 @@ read the past as it was known even after a vendor corrects its history.
 
 **Bars (built).** `TimeBars` builds the bars of one stream from its points:
 points go to the bar containing their `event_time`, in any order; each open
-bar is published by an alarm when its interval ends (plus the spec's grace);
+bar is published by an alarm when its interval ends (plus the source's
+delay and the spec's grace, D35);
 a point arriving at or after its bar's close is counted as late and changes
 nothing. One builder per stream: a second is refused, because components
 claim their alarm keys.

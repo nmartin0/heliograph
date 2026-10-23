@@ -311,7 +311,8 @@ Every sample a node produces is passed on, even one equal to the last; a
 node that produces none leaves what reads it untouched. One stream per
 mount and bar size, however its size is written (`btc@1h.close` and
 `btc@60m.close` are one input). An indicator may not read streams of
-different grace, which close at different instants. Two bars of one input
+different grace, which close at different instants (since D35: streams that
+close at different times after their end, delays included). Two bars of one input
 known at one instant are refused, never one of them dropped. A replay
 refuses an indicator whose installed version or parameters, defaults
 included, are not the ones the run recorded.
@@ -618,3 +619,57 @@ was sized at a fraction of its target); the
 quantile floor alone (it falls with a long quiet spell); inferring
 `bars_per_year` from the stream's size (right only for markets that trade
 around the clock; stock exchanges come in Phase 4).
+
+## D35 · A bar closes after its source's delay; partial bars and misaligned reads are refused (2026-10-23)
+
+From the review of everything built, for bars and their timing:
+
+- **A bar built from trades waits for its source's delay.** `TimeBars`
+  closes a bar at its end plus the mount's live delay plus its grace, as
+  `BarsFromBars` already did (D33): a source whose trades arrive a minute
+  late lost the last minute of every bar, silently.
+- **A mount's start and end lie on whole bars of each stream built from
+  it.** A mount starting at 00:40 built an "00:00-01:00" bar from 20
+  minutes of trades and published it as whole. A mount's own bars, used as
+  they come, are whole whatever the grid (an exchange's weekly candles
+  start on Mondays; 7-day bars from 1970, on Thursdays). Live data has no
+  start: its first bar may be partial (Phase 4).
+- **Carried bars stop at the end of their mount's data**, instead of
+  running on, flat, to the end of a run that another source's delay keeps
+  going.
+- **A built stream's grace is shorter than its bar less one part**, or
+  bars would wait on each other (D33 had let it through).
+- **What a graph node or a strategy reads must close at the same time
+  after its end.** That is the mount's delay, plus the grace for bars
+  built from trades; bars of a mount of bars, as they come or built, close
+  on their last part. The check replaces the old one on graces alone: it
+  refused a stream and the minutes it was built from, which close
+  together, and let through mounts of different delays, which do not. The
+  configuration, not knowing its sources' delays, compares only streams
+  of one mount; a run compares them all with its sources' own delays
+  before it writes anything. A replay does not check again: it rebuilds
+  what the run did.
+- **The journal says when it could not write.** A batch that cannot be
+  written (a full disk) leaves the journal closed and marked failed, with
+  why, instead of "running" with its last entries gone; the error is
+  raised if the run had otherwise completed. On a disk too full even for
+  the status it stays "running", which a replay refuses; a run that had
+  failed keeps its own error. A stamp SQLite cannot hold is refused when
+  the entry is added, so the run fails there.
+- **A run records the rules its bars were built by** (`bars`, 2 since this
+  decision), so a journal written before is replayed under the rules it
+  ran under, and still matches itself.
+- **Late data is recorded.** Each stream's count of points or bars left out
+  for arriving after their bar closed goes into the header at the end of
+  the run (`late`), and the report says so when it is not nothing.
+
+**Why:** each was data lost or misread without a word: closes and volumes
+quietly wrong, a bar half built, an indicator reading one stream's bar
+against another's a bar earlier, a journal that looked unfinished.
+
+**Rejected:** dropping partial bars at a mount's edges (the configuration
+can say what it means instead); keeping the grace check and adding a delay
+check beside it (two rules for one property, and the first was wrong for
+built bars); journalling late counts as messages during the run (only the
+end knows the total, and the header is where a run's outcome is).
+

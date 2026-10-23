@@ -231,6 +231,20 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- Bars built from trades wait for their source's delay: a source whose
+  trades arrive late lost the end of every bar.
+- A mount's start and end must lie on whole bars of each stream built from
+  it, and a built stream's grace must be shorter than its bar less one
+  part. Carried bars stop at the end of their mount's data.
+- What a node or strategy reads must close at the same time after its end
+  (delay, and grace for bars from trades); this replaces the check on
+  graces, which refused streams that close together and let through
+  mounts of different delays. Runs check it with their sources' delays.
+- A journal whose last entries cannot be written is marked failed and
+  says why; a stamp SQLite cannot hold is refused when it is added.
+- Runs record the rules their bars were built by (`bars` in the header), so
+  journals written before these fixes replay as they ran.
+- Late data left out is recorded in the header (`late`) and reported.
 - A risk gate refusing a reversal no longer keeps the side held: the
   strategy is signalled flat instead (`Signal.instead_of`, schema 2).
 - A close whose price a risk gate doubts (`limits`: a jump from the last
