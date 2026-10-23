@@ -230,6 +230,13 @@ within each section.
   an unused kind stopping every run, `?` in a journal's name read as a
   URI's query, a file that is not a journal giving a traceback, and two
   runs in one second wanting the same journal.
+- **A fallback timed from a bar's end must add the source's delay.** The
+  first `BarsFromBars` closed a bar one finer bar after its end, which is
+  when the next part is known only if parts come at once; with a source
+  whose data is known a minute late, every hour lost its last minute,
+  silently. Its tests had no delay. Review also found parts off their grid
+  taken into the wrong bar, and two bars of one stream at one instant
+  stopping the graph.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

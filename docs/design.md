@@ -133,6 +133,15 @@ a point arriving at or after its bar's close is counted as late and changes
 nothing. One builder per stream: a second is refused, because components
 claim their alarm keys.
 
+**Bars from bars (built, D33).** On a mount of bars (an exchange's candles),
+a stream of the mount's size is its bars as they come, and a stream of a
+whole multiple of it is built by `BarsFromBars`: the finer bars of each
+interval put together, published when the last of them (ending at the
+interval's end) is known, or else by an alarm one finer bar after the end,
+plus the source's delay and the grace; one bar per instant, in order. A finer bar of a bar already closed, or known at or after its
+close, is late and counted. Gaps are skipped; carrying them is not offered
+yet.
+
 **Streams.** Every consumer (indicator, chart, strategy) is bound to a
 *stream*: an instrument plus a resampler spec (bar size, anchor, time zone and
 session calendar, gap policy, price field). Consumers on the same stream share

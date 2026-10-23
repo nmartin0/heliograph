@@ -220,6 +220,12 @@ All notable changes to Heliograph are recorded here. The format follows
   compared as text with inline-snapshot (a new development dependency, MIT).
 - `heliograph.sdk`: the names a plug-in written outside this repository
   imports.
+- Streams on mounts of bars: a stream of the mount's size is its bars as
+  they come, and one of a whole multiple is built from them, published when
+  its last part is known (`BarsFromBars`, D33), allowing for the source's
+  delay, one bar per instant. A strategy can run on an
+  exchange's candles; `examples/trend.toml` says how. A live test runs a
+  backtest on Kraken's minute candles (`uv run pytest -m live`).
 - `Registry.installed()`: the installed plug-ins of the kinds asked for, or of
   every kind.
 
@@ -282,6 +288,8 @@ All notable changes to Heliograph are recorded here. The format follows
   pipeline as built, and D4 is split into three parts.
 - D31 records simulated fills at the next open and the report from the
   journal; the roadmap marks D4b done.
+- D33 records how bars are built from bars; the roadmap marks streams on
+  mounts of bars done.
 - D32 records the command, the SDK and the example; the roadmap marks D4c
   and Phase 2's gate done, and moves streams on bar mounts to the next
   batch; testing.md describes the scenarios; the README says how to run

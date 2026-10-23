@@ -125,7 +125,8 @@ In four batches: D1 the indicator graph and indicators in runs; D2 the
 conformance kits; D3 indicators on TA-Lib and talipp; D4 the pipeline, the
 example strategy and the gate, in three parts: D4a the pipeline, D4b
 simulated fills, costs and a report, D4c the example strategy, scenario
-tests and the gate.
+tests and the gate. Then D5: streams on mounts of bars, for an exchange's
+candles.
 
 - [x] Indicator graph with stabilisation per timestamp and cutoffs (D27);
       indicators in a run from configuration, journalled, recorded in the
@@ -144,10 +145,16 @@ tests and the gate.
 - [x] Indicator nodes wrapping TA-Lib streams and talipp (D29); a first
       set: `rsi`, `atr`, `macd`, `bbands`, `stddev` on TA-Lib, `hma` and
       `alma` on talipp, `zlema` in plain Python (D3).
-- Bars built from finer bars, and streams on mounts that deliver bars:
-  the example needs neither, so they move to the next batch, before
-  backtesting on an exchange's candles (CCXT's history of trades is slow to
-  page; its candles are not).
+- [x] Streams on mounts of bars: a mount's own bars, and bars built from
+      finer bars (`BarsFromBars`), so strategies run on an exchange's
+      candles (D33, D5). Carrying gaps in bars built from bars waits until a
+      strategy needs it.
+- Open, found in D5's review: late points and late bars are counted but
+  not reported or journalled; the check that a graph node's inputs share a
+  grace takes grace for the time a bar closes, which a bar built from bars
+  does not (a pass-through 15m and a built 1h with grace 5m close together
+  yet are refused); CCXT names Kraken's 15-day candles `2w`, which reads as
+  14 days.
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
 - [x] Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate;

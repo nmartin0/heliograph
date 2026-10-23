@@ -510,3 +510,38 @@ example (its terms, its size, and a scenario that changes when the data is
 refreshed); the SDK as the strategy-as-one-class API of design.md (that
 waits for the pipeline to need it).
 
+## D33 · Bars built from bars close on their last part (2026-10-23)
+
+A stream on a mount of bars is either the mount's own bars (the same size,
+no builder; no grace or gaps, since nothing is built) or bars of a whole
+multiple of that size built by `BarsFromBars`. A built bar is its parts put
+together: first open and last close by start, highest high, lowest low,
+summed volume. It is published when its last part (the finer bar ending at
+its end) is known, at that instant; if that part never comes, by an alarm
+one finer bar after its end plus the mount's live delay (recorded in the
+run's header, so a replay builds the same bars) and the stream's grace.
+Bars are published in order and one per instant (the graph takes one bar
+of a stream per instant, D27): a bar complete while an earlier one is still
+open closes that one then, and is itself published at its own close. A
+part of a bar already closed, or known at or after its close, is late,
+counted and left out; a part off its own grid, or repeating a start, is
+refused. Price and volume options name a trade's values and are refused on
+bars; carrying gaps is not offered yet. The run lasts long enough for the
+last fallback alarm.
+
+**Why:** an exchange's candles page fast where its trades do not (Kraken
+pages trades a thousand at a time), and a strategy on hourly bars should
+not need every trade. Closing on the last part makes a built bar known
+exactly when the finer bars say it is complete, with no wait. The fallback
+cannot be an alarm at the bar's end: an alarm fires before the inputs at
+its instant (the engine's rule), so it would close the bar just before its
+last part arrived. One finer bar later is when the next part would have
+been known.
+
+**Rejected:** an alarm at the end plus grace, as `TimeBars` uses (it closes
+before the last part at the same instant); closing when a part of a later
+bar arrives (a gap in the data would hold a bar back, and late parts would
+reorder bars); building from bars inside the data source (sources deliver
+what they hold; building is the stream's job, so the same rules serve
+every source).
+

@@ -161,7 +161,8 @@ Reports are compared as text with inline-snapshot, in the manner of Jane
 Street's expect tests. A change in behaviour shows as a difference to
 accept or reject; to accept one, run
 `uv run pytest tests/scenarios --inline-snapshot=fix` and review the diff
-it writes into the test. A snapshot of the hand-checked report is accepted
+it writes into the test (that run reports an error for each snapshot it
+rewrote; the next run passes). A snapshot of the hand-checked report is accepted
 only when the figures in its docstring say the same.
 
 ### Live tests
