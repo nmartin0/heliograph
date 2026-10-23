@@ -68,6 +68,7 @@ configuration 9eb670d5defd51c0
 strategy trend (kraken:BTC/USD)
   signals sent          5
   signals refused       0
+  closes doubted        0
   fills                 4
   units bought          5.00
   units sold            2.00

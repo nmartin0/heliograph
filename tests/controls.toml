@@ -1672,8 +1672,8 @@ tests = ["tests/core/test_pipeline.py::test_a_gate_at_or_below_zero_vetoes_and_t
 [[control]]
 describes = "no signal while the target is the position held"
 path = "src/heliograph/core/pipeline.py"
-old = "        if target is None or combined is None or target == self._held:\n"
-new = "        if target is None or combined is None:\n"
+old = "        if target == self._held:\n            return\n"
+new = "        if False:\n            return\n"
 tests = ["tests/core/test_pipeline.py::test_no_signal_while_the_sizer_keeps_the_position_held"]
 
 [[control]]
@@ -1686,8 +1686,8 @@ tests = ["tests/core/test_pipeline.py::test_a_target_that_is_not_finite_stops_th
 [[control]]
 describes = "a refused signal is not also signalled"
 path = "src/heliograph/core/pipeline.py"
-old = "                    )\n                )\n                return\n"
-new = "                    )\n                )\n"
+old = "                    return  # adding to the side held, or entering: the position held stays\n"
+new = "                    pass\n"
 tests = ["tests/core/test_pipeline.py::test_a_refused_signal_is_journalled_and_the_position_held_does_not_change"]
 
 [[control]]
@@ -1812,8 +1812,8 @@ tests = ["tests/plugins/test_stages.py::test_vol_target_keeps_the_position_held_
 [[control]]
 describes = "the sizer waits for vol_span changes"
 path = "src/heliograph/plugins/stages.py"
-old = "        if self._variance is None or self._changes < self.params.vol_span or self._variance == 0:\n"
-new = "        if self._variance is None or self._variance == 0:\n"
+old = "        if vol is None or self._vol.count < self.params.vol_span or vol == 0:\n"
+new = "        if vol is None or vol == 0:\n"
 tests = ["tests/plugins/test_stages.py::test_vol_target_sizes_the_forecast_against_the_average_position"]
 
 [[control]]
@@ -1833,14 +1833,14 @@ tests = ["tests/plugins/test_stages.py::test_limits_count_only_signals_sent_in_a
 [[control]]
 describes = "limits refuse a price jump"
 path = "src/heliograph/plugins/stages.py"
-old = "            if jump > self.params.max_jump:\n"
-new = "            if False:\n"
-tests = ["tests/plugins/test_stages.py::test_limits_refuse_a_price_jump_from_the_previous_close"]
+old = "            jumped = abs(move) > self.params.max_jump\n"
+new = "            jumped = False\n"
+tests = ["tests/plugins/test_stages.py::test_limits_doubt_a_price_jump_from_the_previous_close"]
 
 [[control]]
 describes = "ewmac averages squared changes"
-path = "src/heliograph/plugins/forecasters.py"
-old = "            self._variance += self._vol_weight * (squared - self._variance)\n"
+path = "src/heliograph/plugins/volatility.py"
+old = "            self._variance += self._weight * (squared - self._variance)\n"
 new = "            self._variance = squared\n"
 tests = ["tests/plugins/test_forecasters.py::test_ewmac_follows_its_definition"]
 
@@ -1910,8 +1910,8 @@ tests = ["tests/core/test_pipeline.py::test_the_same_decision_has_the_same_id_an
 [[control]]
 describes = "risk gates see the previous close"
 path = "src/heliograph/core/pipeline.py"
-old = "            previous=previous,\n"
-new = "            previous=None,\n"
+old = "            price=price,\n            previous=previous,\n            held=self._held,\n            target=target,\n"
+new = "            price=price,\n            previous=None,\n            held=self._held,\n            target=target,\n"
 tests = ["tests/core/test_pipeline.py::test_risk_gates_hear_only_of_signals_sent_and_see_the_previous_close"]
 
 [[control]]
@@ -1952,8 +1952,8 @@ tests = ["tests/app/test_run_strategies.py::test_an_exit_may_read_a_streams_fiel
 [[control]]
 describes = "vol_target trades to the edge of its buffer"
 path = "src/heliograph/plugins/stages.py"
-old = "        return wanted - band if held < wanted else wanted + band\n"
-new = "        return wanted\n"
+old = "        edge = wanted - band if held < wanted else wanted + band\n"
+new = "        edge = wanted\n"
 tests = ["tests/plugins/test_stages.py::test_vol_target_keeps_the_position_held_within_its_buffer_and_trades_to_its_edge"]
 
 [[control]]
@@ -1966,23 +1966,23 @@ tests = ["tests/plugins/test_stages.py::test_vol_target_may_trade_to_the_target_
 [[control]]
 describes = "the stop starts from the entry close"
 path = "src/heliograph/plugins/stages.py"
-old = "            self._best = price if side else None\n"
+old = "            self._best = entry[1] if entry is not None and entry[0] == holding else None\n"
 new = "            self._best = None\n"
 tests = ["tests/plugins/test_stages.py::test_a_long_is_stopped_from_its_entry_close_and_stays_out_while_still_wanted"]
 
 [[control]]
 describes = "the stop leaves a strategy's own exit or reversal alone"
 path = "src/heliograph/plugins/stages.py"
-old = "        if side != direction:\n            # Entering, leaving or reversing on the strategy's own decision: an entry\n            # starts the best close at this one.\n            self._best = price if side else None\n            return target\n"
-new = ""
+old = "        if side != holding:\n            # Entering, leaving or reversing on the strategy's own decision.\n            self._entry = (side, price) if side else None\n            return target\n"
+new = "        if side != holding:\n            self._stopped = holding  # latch as if stopped\n            self._entry = (side, price) if side else None\n            return target\n"
 tests = ["tests/plugins/test_stages.py::test_a_strategy_leaving_or_reversing_on_its_own_is_not_stopped"]
 
 [[control]]
 describes = "limits measure the jump from the previous close"
 path = "src/heliograph/plugins/stages.py"
-old = "        last = proposal.previous\n"
-new = "        last = None\n"
-tests = ["tests/plugins/test_stages.py::test_limits_refuse_a_price_jump_from_the_previous_close"]
+old = "        self._trusted, self._doubts = price, 0\n"
+new = "        self._doubts = 0\n"
+tests = ["tests/core/test_pipeline.py::test_a_second_bad_print_the_other_way_is_doubted_too"]
 
 [[control]]
 describes = "limits count the signals sent"
@@ -2410,3 +2410,173 @@ old = "                self._close_through(max(earlier), bar.ts)\n"
 new = "                self._close_through(start, bar.ts)\n"
 tests = ["tests/core/test_bars_from_bars.py::test_bars_are_published_in_order_and_one_per_instant"]
 
+# -- F1: signals (the review of 2026-10-23) ------------------------------------------------
+
+[[control]]
+describes = "a refused reversal goes flat instead"
+path = "src/heliograph/core/pipeline.py"
+old = "                if target * self._held >= 0:\n"
+new = "                if True:\n"
+tests = ["tests/core/test_pipeline.py::test_a_refused_reversal_goes_flat_instead_of_keeping_the_side_held"]
+
+[[control]]
+describes = "the stop's best close follows the position held, not proposals"
+path = "src/heliograph/plugins/stages.py"
+old = "            self._entry = (side, price) if side else None\n            return target\n"
+new = "            self._entry = (side, price) if side else None\n            self._best = price if side else None\n            return target\n"
+tests = ["tests/plugins/test_stages.py::test_a_refused_reversal_leaves_the_best_close_of_the_side_held"]
+
+[[control]]
+describes = "a stop stands while the sizer cannot size"
+path = "src/heliograph/plugins/stages.py"
+old = "        if target is None:\n            return None  # nothing to stop while the sizer cannot size; a stop still stands\n"
+new = "        if target is None:\n            self._stopped = 0.0\n            return None\n"
+tests = ["tests/plugins/test_stages.py::test_a_stop_stands_while_the_sizer_cannot_size"]
+
+[[control]]
+describes = "vol_target holds a position to its leverage"
+path = "src/heliograph/plugins/stages.py"
+old = "        wanted = max(-most, min(most, average * forecast / 10.0))\n"
+new = "        wanted = average * forecast / 10.0\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_holds_a_position_to_its_leverage_in_value"]
+
+[[control]]
+describes = "the volatility is floored"
+path = "src/heliograph/plugins/volatility.py"
+old = "        return max(raw, floor)\n"
+new = "        return raw\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_sizes_against_a_floored_volatility_in_a_quiet_market", "tests/plugins/test_forecasters.py::test_ewmac_follows_its_definition"]
+
+[[control]]
+describes = "NaN and infinity are refused in parameters"
+path = "src/heliograph/plugins/manifest.py"
+old = "        frozen=True, extra=\"forbid\", validate_default=True, allow_inf_nan=False\n"
+new = "        frozen=True, extra=\"forbid\", validate_default=True, allow_inf_nan=True\n"
+tests = ["tests/plugins/test_manifest.py::test_nan_and_infinity_are_refused_in_any_number"]
+
+[[control]]
+describes = "vol_target must be told its bars in a year"
+path = "src/heliograph/plugins/stages.py"
+old = "        ...,\n        description=(\n            \"Bars of the price stream"
+new = "        8_760.0,\n        description=(\n            \"Bars of the price stream"
+tests = ["tests/plugins/test_stages.py::test_vol_target_must_be_told_its_bars_in_a_year"]
+
+[[control]]
+describes = "vol_target trades a position beyond its cap back to the cap"
+path = "src/heliograph/plugins/stages.py"
+old = "        return max(-most, min(most, edge))\n"
+new = "        return edge\n"
+tests = ["tests/plugins/test_stages.py::test_a_capped_position_does_not_trade_at_every_close"]
+
+[[control]]
+describes = "a capped position's buffer is a share of the cap"
+path = "src/heliograph/plugins/stages.py"
+old = "        band = self.params.buffer * min(average, most)\n"
+new = "        band = self.params.buffer * average\n"
+tests = ["tests/plugins/test_stages.py::test_a_capped_position_does_not_trade_at_every_close"]
+
+[[control]]
+describes = "the volatility is floored at half its long-run level"
+path = "src/heliograph/plugins/volatility.py"
+old = "        return max(quantile, self._floor_long * math.sqrt(self._long))\n"
+new = "        return quantile\n"
+tests = ["tests/plugins/test_forecasters.py::test_ewmac_shrinks_on_a_price_bouncing_one_tick", "tests/plugins/test_forecasters.py::test_ewmac_follows_its_definition"]
+
+[[control]]
+describes = "a doubted price holds every proposal"
+path = "src/heliograph/core/pipeline.py"
+old = "                doubt = gate.suspect(probe) if isinstance(gate, Suspicious) else None\n"
+new = "                doubt = None\n"
+tests = ["tests/core/test_pipeline.py::test_a_doubted_close_is_not_acted_on_and_the_sizer_never_sees_it"]
+
+[[control]]
+describes = "the quantile floor can apply"
+path = "src/heliograph/plugins/volatility.py"
+old = "        if self.floor_min > self.floor_window:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_stages.py::test_a_floor_that_could_never_apply_is_refused"]
+
+[[control]]
+describes = "an unchanged price is left out of the volatility"
+path = "src/heliograph/plugins/volatility.py"
+old = "            if self._unchanged >= self._stall_after:\n                return\n"
+new = "            pass\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_neither_drains_nor_sizes_up_on_a_stalled_feed", "tests/plugins/test_forecasters.py::test_ewmac_stays_bounded_when_prices_stop_moving"]
+
+[[control]]
+describes = "the long-run level starts from the mean of the first changes"
+path = "src/heliograph/plugins/volatility.py"
+old = "            self._long += (squared - self._long) / self._count  # the mean so far\n"
+new = "            self._long = squared\n"
+tests = ["tests/plugins/test_forecasters.py::test_ewmac_follows_its_definition"]
+
+[[control]]
+describes = "exits act on the position held while the sizer cannot size"
+path = "src/heliograph/core/pipeline.py"
+old = "            target = self._held  # the sizer cannot size: exits still act on what is held\n"
+new = "            return\n"
+tests = ["tests/core/test_pipeline.py::test_exits_and_vetoes_still_act_while_the_sizer_cannot_size"]
+
+[[control]]
+describes = "unsized, only taking risk off leaves"
+path = "src/heliograph/core/pipeline.py"
+old = "        if not sized and not vetoed and not reduces_risk(self._held, target):\n"
+new = "        if False:\n"
+tests = ["tests/core/test_pipeline.py::test_while_the_sizer_cannot_size_nothing_that_adds_risk_leaves"]
+
+[[control]]
+describes = "a buffer as wide as the position is refused"
+path = "src/heliograph/plugins/stages.py"
+old = "        ge=0.0,\n        lt=1.0,\n"
+new = "        ge=0.0,\n"
+tests = ["tests/plugins/test_stages.py::test_vol_target_settings_that_could_never_trade_are_refused"]
+
+[[control]]
+describes = "limits that would doubt every close are refused"
+path = "src/heliograph/plugins/stages.py"
+old = "        description=\"Doubt a price that moved more than this fraction from the last one trusted\",\n        gt=0.0,\n"
+new = "        description=\"Doubt a price that moved more than this fraction from the last one trusted\",\n        ge=0.0,\n"
+tests = ["tests/plugins/test_stages.py::test_limits_that_would_doubt_every_close_are_refused"]
+
+[[control]]
+describes = "an ewmac slower than its floor can hold is refused"
+path = "src/heliograph/plugins/forecasters.py"
+old = "        if self.slow > 2 * self.floor_window:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_forecasters.py::test_an_ewmac_slower_than_its_floor_can_hold_is_refused"]
+
+[[control]]
+describes = "a doubted move that goes on is taken as real"
+path = "src/heliograph/plugins/stages.py"
+old = "            confirmed = bool(self._doubts) and side == self._direction  # the move was real\n"
+new = "            confirmed = False\n"
+tests = ["tests/core/test_pipeline.py::test_a_crash_is_doubted_for_one_close_only"]
+
+[[control]]
+describes = "a feed is doubted no more than max_doubts in a row"
+path = "src/heliograph/plugins/stages.py"
+old = "            if jumped and not confirmed and self._doubts < self.params.max_doubts:\n"
+new = "            if jumped and not confirmed:\n"
+tests = ["tests/core/test_pipeline.py::test_a_feed_is_doubted_no_more_than_max_doubts_in_a_row"]
+
+[[control]]
+describes = "the long-run level takes no change larger than five of its volatilities"
+path = "src/heliograph/plugins/volatility.py"
+old = "            squared = min(squared, _LARGEST**2 * self._long)  # one bad print holds nothing up\n"
+new = "            pass\n"
+tests = ["tests/plugins/test_forecasters.py::test_ewmac_recovers_soon_from_one_bad_print"]
+
+[[control]]
+describes = "a doubted close is marked as one"
+path = "src/heliograph/core/pipeline.py"
+old = "                        self._refuse(probe, identity, \"\", name, doubt, doubted=True)\n"
+new = "                        self._refuse(probe, identity, \"\", name, doubt)\n"
+tests = ["tests/core/test_pipeline.py::test_a_doubted_close_is_not_acted_on_and_the_sizer_never_sees_it"]
+
+
+[[control]]
+describes = "the report counts doubted closes apart"
+path = "src/heliograph/app/report.py"
+old = "            if message.doubted:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_report.py::test_closes_doubted_are_counted_apart_from_signals_refused"]

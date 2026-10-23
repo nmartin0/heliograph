@@ -27,8 +27,19 @@ then (a forecaster on a slower stream gives its last sample). Until each of
 its forecasters and gates has a sample, and its sizer can size, it decides
 nothing. A veto takes it flat whatever the sizer's buffer. When the target
 differs from the position held (the sizer's no-trade buffer keeps small
-changes from trading), the strategy publishes a ``Signal``; if a risk gate refuses it, a
-``SignalRefused`` instead, and the position held stays as it was. With a
+changes from trading), the strategy publishes a ``Signal``; if a risk gate
+refuses it, a ``SignalRefused`` instead, and the position held stays as it
+was, unless the refused signal was a reversal: then the side held is one
+the strategy no longer wants, and it is signalled flat instead (a
+``Signal`` with ``instead_of``, which only takes risk off). A gate may
+also doubt the data (``Suspicious``, a price jump that looks like a bad
+print): that is asked at every close before the sizer and exits see it,
+and a doubted close is not acted on at all (journalled as a
+``SignalRefused`` with ``doubted`` set). The graph's nodes have seen the
+price already: a forecaster or an indicator an exit reads (an ATR) may
+carry the print for a while. While the sizer
+cannot size, the exits and vetoes still act on the position held, and a
+signal that only takes risk off still leaves. With a
 simulated broker (core/broker.py, D31), the position held is what has been
 filled, which the broker tells it (``hold``); without one, it is the last
 target signalled.
@@ -37,8 +48,8 @@ target signalled.
 import hashlib
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from dataclasses import dataclass, field, replace
+from typing import Literal, Protocol, runtime_checkable
 
 from heliograph.core.bus import MessageBus
 from heliograph.core.errors import InvalidValueError
@@ -49,7 +60,7 @@ from heliograph.core.time import Timestamp
 CAP = 20.0
 """The largest forecast, either way, after each forecaster and after combining."""
 
-SCHEMA = 1
+SCHEMA = 2
 """The version of the ``Signal`` record; raised whenever its fields change."""
 
 
@@ -121,6 +132,23 @@ class RiskGate(Protocol):
         ...
 
 
+@runtime_checkable
+class Suspicious(Protocol):
+    """A risk gate that may also doubt the data itself (optional)."""
+
+    def suspect(self, proposal: Proposal) -> str | None:
+        """Why the close ``proposal`` is at cannot be trusted, or None.
+
+        Asked at every close, before the sizer and exits see it, with a
+        proposal to keep the position held: a strategy acting on a bad
+        print, even to leave, would trade on a price that was never there.
+        A doubted close is not acted on at all. The gate decides when to
+        trust a price again; it must not doubt for ever, or exits would
+        never act.
+        """
+        ...
+
+
 def reduces_risk(held: float, target: float) -> bool:
     """Whether going from ``held`` to ``target`` only takes risk off."""
     return held != 0 and (target == 0 or (target * held > 0 and abs(target) <= abs(held)))
@@ -153,6 +181,8 @@ class Signal:
     before it. ``forecast`` is the combined forecast after gates, and
     ``forecasts`` each forecaster's, capped; ``vetoed_by`` names the gates
     that vetoed and ``exit`` the exit that set the target, if any.
+    ``instead_of`` is set when a risk gate refused a reversal: it is the
+    target refused, and this signal goes flat instead (schema 2).
     """
 
     ts: Timestamp
@@ -167,6 +197,7 @@ class Signal:
     forecasts: Mapping[str, float] = field(default_factory=dict)
     vetoed_by: tuple[str, ...] = ()
     exit: str = ""
+    instead_of: float | None = None
     schema: int = SCHEMA
 
     def __post_init__(self) -> None:
@@ -179,7 +210,14 @@ class Signal:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SignalRefused:
-    """A signal a risk gate kept from leaving: the position held stays as it was."""
+    """A signal a risk gate kept from leaving.
+
+    The position held stays as it was, unless the signal refused was a
+    reversal: then a flat ``Signal`` follows at once (its ``instead_of`` is
+    this ``target``). A close whose price was doubted (``Suspicious``) is
+    refused with ``doubted`` set and the position held as its ``target``:
+    nothing was decided on it.
+    """
 
     ts: Timestamp
     id: str
@@ -191,6 +229,7 @@ class SignalRefused:
     exit: str
     refused_by: str
     reason: str
+    doubted: bool = False
     schema: int = SCHEMA
 
 
@@ -249,6 +288,32 @@ class Strategy:
         """The position held: what has been filled, or else the last target signalled."""
         return self._held
 
+    def _refuse(
+        self,
+        proposal: Proposal,
+        identity: str,
+        exit_name: str,
+        gate: str,
+        reason: str,
+        *,
+        doubted: bool = False,
+    ) -> None:
+        self._bus.publish(
+            SignalRefused(
+                ts=proposal.ts,
+                id=identity,
+                strategy=proposal.strategy,
+                instrument=proposal.instrument,
+                target=proposal.target,
+                held=proposal.held,
+                price=proposal.price,
+                exit=exit_name,
+                refused_by=gate,
+                reason=reason,
+                doubted=doubted,
+            )
+        )
+
     def hold(self, position: float) -> None:
         """The position a broker has filled; the strategy decides from it."""
         self._held = position
@@ -275,17 +340,45 @@ class Strategy:
                     f"strategy {spec.name} combined its forecasts to {combined!r} at {ts}"
                 )
             combined = capped(combined)
+        previous, self._previous = self._previous, price
+        if spec.risk_gates:
+            # Before the sizer and exits see this close: a price in doubt is not acted
+            # on, not even to leave. (Graph nodes have seen it already.)
+            probe = Proposal(
+                ts=ts,
+                strategy=spec.name,
+                instrument=spec.instrument,
+                price=price,
+                previous=previous,
+                held=self._held,
+                target=self._held,
+            )
+            for name, gate in spec.risk_gates:
+                doubt = gate.suspect(probe) if isinstance(gate, Suspicious) else None
+                if doubt is not None:
+                    if combined is not None:
+                        identity = signal_id(spec.scope, spec.name, ts, self._held)
+                        self._refuse(probe, identity, "", name, doubt, doubted=True)
+                    return
+        # The sizer sees every close not in doubt, so it can follow the price while the
+        # forecasts warm up; nothing is decided until every forecaster and gate has one.
         target = spec.sizer.target(combined, price, self._held)
-        if vetoed and target is not None:
+        if combined is None:
+            return
+        sized = target is not None
+        if vetoed:
             target = 0.0  # a veto takes the strategy flat, whatever the sizer's buffer
+        elif target is None:
+            target = self._held  # the sizer cannot size: exits still act on what is held
         exit_name = ""
         for name, rule, reads in spec.exits:
             adjusted = rule.adjust(target, self._held, price, [value(read) for read in reads])
-            if adjusted != target:
+            if adjusted is not None and adjusted != target:
                 exit_name, target = name, adjusted
-        previous, self._previous = self._previous, price
-        if target is None or combined is None or target == self._held:
+        if target == self._held:
             return
+        if not sized and not vetoed and not reduces_risk(self._held, target):
+            return  # unsized, only taking risk off may leave
         target += 0.0  # -0.0 is flat
         if not math.isfinite(target):
             raise InvalidValueError(f"strategy {spec.name} sized a target of {target!r} at {ts}")
@@ -299,25 +392,20 @@ class Strategy:
             held=self._held,
             target=target,
         )
+        instead_of: float | None = None
         gates_ = () if reduces_risk(self._held, target) else spec.risk_gates
         for name, gate in gates_:
             reason = gate.check(proposal)
             if reason is not None:
-                self._bus.publish(
-                    SignalRefused(
-                        ts=ts,
-                        id=identity,
-                        strategy=spec.name,
-                        instrument=spec.instrument,
-                        target=target,
-                        held=self._held,
-                        price=price,
-                        exit=exit_name,
-                        refused_by=name,
-                        reason=reason,
-                    )
-                )
-                return
+                self._refuse(proposal, identity, exit_name, name, reason)
+                if target * self._held >= 0:
+                    return  # adding to the side held, or entering: the position held stays
+                # A reversal refused: the side held is the one the strategy no longer
+                # wants, so it goes flat, which only takes risk off, rather than stay.
+                instead_of, target = target, 0.0
+                identity = signal_id(spec.scope, spec.name, ts, target)
+                proposal = replace(proposal, target=target)
+                break
         for _, gate in spec.risk_gates:
             gate.sent(proposal)
         self._bus.publish(
@@ -334,6 +422,7 @@ class Strategy:
                 forecasts=breakdown,
                 vetoed_by=vetoed,
                 exit=exit_name,
+                instead_of=instead_of,
             )
         )
         if not spec.filled:

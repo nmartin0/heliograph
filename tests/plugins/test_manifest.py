@@ -117,3 +117,14 @@ def test_a_manifest_may_use_a_subclass_of_the_declared_params() -> None:
         )
 
     assert Shifted.manifest.params is WiderParams
+
+
+class ScaleParams(Params):
+    scale: float = param(1.0, description="Unbounded on purpose")
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nan_and_infinity_are_refused_in_any_number(value: float) -> None:
+    """TOML writes both; a NaN threshold once vetoed everything, silently."""
+    with pytest.raises(ValidationError, match="finite number"):
+        ScaleParams(scale=value)

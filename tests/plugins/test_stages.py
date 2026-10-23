@@ -61,7 +61,13 @@ def test_weights_that_do_not_sum_to_one_or_are_negative_are_refused(
 def sizer(**params: float) -> VolTarget:
     """Volatility of changes exactly 1 on prices alternating 100, 101: the average
     position is target x capital / (1 x sqrt(bars_per_year)) = 0.1 x 1000 / 10 = 10."""
-    base = {"capital": 1000.0, "target": 0.1, "bars_per_year": 100.0, "vol_span": 2.0}
+    base = {
+        "capital": 1000.0,
+        "target": 0.1,
+        "bars_per_year": 100.0,
+        "vol_span": 2.0,
+        "max_leverage": 5.0,
+    }
     return VolTarget(VolTargetParams(**{**base, **params}))  # type: ignore[arg-type]
 
 
@@ -88,6 +94,50 @@ def test_vol_target_may_trade_to_the_target_itself() -> None:
     for price in (100, 101):
         s.target(None, price, 0.0)
     assert s.target(10.0, 100, 8.5) == pytest.approx(10.0)
+
+
+def test_vol_target_holds_a_position_to_its_leverage_in_value() -> None:
+    """Capital 1000 at a price of 100, leverage 1: never more than 10 units either way."""
+    s = sizer(buffer=0.0, max_leverage=1.0, to_edge=False)
+    for price in (100, 101):
+        s.target(None, price, 0.0)
+    assert s.target(20.0, 100, 0.0) == pytest.approx(10.0)  # wanted 20
+    assert s.target(-20.0, 101, 0.0) == pytest.approx(-1000.0 / 101)
+
+
+def test_vol_target_sizes_against_a_floored_volatility_in_a_quiet_market() -> None:
+    """500 changes of 1, then 20 of 0.01: unfloored, the volatility would fall to
+    (1 - 2/37)^10 (0.57) of itself and the position grow by 3/4; floored at 5% of the last 500
+    volatilities, it holds. (Past about 25 such bars the floor follows them down:
+    staleness, not the floor, covers a feed that stops.)"""
+    s = sizer(buffer=0.0, vol_span=36.0, max_leverage=1e2)
+    price = 100.0
+    for step in range(500):
+        price += 1 if step % 2 else -1
+        s.target(None, price, 0.0)
+    before = s.target(10.0, price, 0.0)
+    for step in range(20):
+        price += 0.01 if step % 2 else -0.01
+        after = s.target(10.0, price, 0.0)
+    assert before is not None
+    assert after is not None
+    assert after == pytest.approx(before, rel=0.05)
+
+
+def test_vol_target_neither_drains_nor_sizes_up_on_a_stalled_feed() -> None:
+    """Past stall_after (3) unchanged prices, the feed has stalled: the average position
+    stays put, and the first move after is measured against the volatility from before."""
+    s = sizer(buffer=0.0, vol_span=4.0)
+    for price in (100, 101, 100, 101, 100):
+        s.target(None, price, 0.0)
+    for _ in range(2):
+        s.target(10.0, 100, 0.0)  # two unchanged prices count, as a market can be still
+    stalled = s.average()
+    for _ in range(50):
+        assert s.target(10.0, 100, 0.0) == pytest.approx(stalled)
+    s.target(10.0, 101, 0.0)
+    assert s.average() is not None
+    assert s.average() <= stalled  # type: ignore[operator]
 
 
 def test_vol_target_cannot_size_while_prices_have_not_moved() -> None:
@@ -155,13 +205,14 @@ def proposal(hour: float, price: float, previous: float | None = None) -> Propos
     )
 
 
-def test_limits_refuse_a_price_jump_from_the_previous_close() -> None:
+def test_limits_doubt_a_price_jump_from_the_previous_close() -> None:
     gate = Limits(LimitsParams(max_jump=0.25))
-    assert gate.check(proposal(0, 100.0)) is None  # no previous close
-    reason = gate.check(proposal(1, 130.0, previous=100.0))
+    assert gate.suspect(proposal(0, 100.0)) is None  # no previous close
+    reason = gate.suspect(proposal(1, 130.0, previous=100.0))
     assert reason is not None
-    assert "moved 30.0% since the previous close (100.0 to 130.0)" in reason
-    assert gate.check(proposal(60 * 24, 130.0, previous=128.0)) is None  # a slow drift is no jump
+    assert "moved 30.0% from the last close trusted (100.0 to 130.0)" in reason
+    assert gate.suspect(proposal(60 * 24, 130.0, previous=128.0)) is None  # a drift: no jump
+    assert gate.check(proposal(1, 130.0, previous=100.0)) is None  # not a matter of rate
 
 
 def test_limits_count_only_signals_sent_in_any_24_hours() -> None:
@@ -172,3 +223,65 @@ def test_limits_count_only_signals_sent_in_any_24_hours() -> None:
     gate.sent(proposal(1, 100.0))
     assert gate.check(proposal(2, 100.0)) == "2 signals in the last 24 hours already"
     assert gate.check(proposal(24, 100.0)) is None  # the one at hour 0 has aged out
+
+
+def test_a_refused_reversal_leaves_the_best_close_of_the_side_held() -> None:
+    """Long from 100, best 120; a reversal proposed at 95 is refused, so long is still held:
+    the stop still trails from 120, and fires at 97."""
+    stop = TrailingStop(TrailingStopParams(multiple=3.0))
+    stop.adjust(1.0, 0.0, 100.0, [1.0])
+    assert stop.adjust(1.0, 1.0, 120.0, [1.0]) == 1.0  # best 120: stop 117
+    assert stop.adjust(-1.0, 1.0, 118.0, [1.0]) == -1.0  # proposed, then refused: still long
+    assert stop.adjust(1.0, 1.0, 116.0, [1.0]) == 0.0  # below 117, from the best of 120
+
+
+def test_a_stop_stands_while_the_sizer_cannot_size() -> None:
+    stop = TrailingStop(TrailingStopParams(multiple=1.0))
+    stop.adjust(1.0, 0.0, 100.0, [1.0])
+    assert stop.adjust(1.0, 1.0, 98.0, [1.0]) == 0.0  # stopped
+    assert stop.adjust(None, 1.0, 98.0, [1.0]) is None  # the sizer cannot size this close
+    assert stop.adjust(1.0, 0.0, 99.0, [1.0]) == 0.0  # still stopped out of the long
+
+
+def test_vol_target_must_be_told_its_bars_in_a_year() -> None:
+    """The old default, 8760, was right only for hourly bars: daily ones were sized
+    sqrt(24), about 4.9 times, too small."""
+    with pytest.raises(ValidationError, match="bars_per_year"):
+        VolTargetParams()
+
+
+def test_a_capped_position_does_not_trade_at_every_close() -> None:
+    """A quiet market at a steady forecast of 10: the position is capped at 10 units' worth
+    and stays put as the price wanders, instead of following the cap at every close."""
+    s = sizer(buffer=0.1, max_leverage=1.0, target=1.0)  # the average is 100 units: capped
+    for price in (100, 101):
+        s.target(None, price, 0.0)
+    held = s.target(10.0, 100.0, 0.0)
+    assert held is not None
+    assert held == pytest.approx(9.0)  # to the buffer's edge below the cap of 10
+    # The cap moves with the price (9.9 to 10 units), within the buffer of 1: no trade.
+    assert {s.target(10.0, p, held) for p in (101.0, 100.5, 100.0, 101.0)} == {held}
+    assert s.target(10.0, 100.0, 20.0) == pytest.approx(10.0)  # far over the cap: back to it
+
+
+def test_a_floor_that_could_never_apply_is_refused() -> None:
+    with pytest.raises(ValidationError, match="floor_min"):
+        VolTargetParams(bars_per_year=365.0, floor_window=50, floor_min=100)
+
+
+@pytest.mark.parametrize(
+    ("params", "reason"),
+    [
+        ({"buffer": 1.0}, "buffer"),  # a buffer as wide as the position never trades
+    ],
+)
+def test_vol_target_settings_that_could_never_trade_are_refused(
+    params: dict[str, float], reason: str
+) -> None:
+    with pytest.raises(ValidationError, match=reason):
+        VolTargetParams(bars_per_year=365.0, **params)  # type: ignore[arg-type]
+
+
+def test_limits_that_would_doubt_every_close_are_refused() -> None:
+    with pytest.raises(ValidationError, match="max_jump"):
+        LimitsParams(max_jump=0.0)

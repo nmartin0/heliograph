@@ -41,6 +41,7 @@ class _Book:
     filled: bool
     signals: int = 0
     refused: int = 0
+    doubted: int = 0
     fills: int = 0
     bought: float = 0.0
     sold: float = 0.0
@@ -76,6 +77,7 @@ class Figures:
     """Whether a broker filled its signals; if not, nothing below ``refused`` was simulated."""
     signals: int
     refused: int
+    doubted: int
     fills: int
     bought: float
     sold: float
@@ -122,7 +124,10 @@ def figures(journal: Path) -> tuple[dict[str, str], list[Figures]]:
         elif isinstance(message, Signal):
             books[message.strategy].signals += 1
         elif isinstance(message, SignalRefused):
-            books[message.strategy].refused += 1
+            if message.doubted:
+                books[message.strategy].doubted += 1
+            else:
+                books[message.strategy].refused += 1
         elif isinstance(message, Fill):
             _fill(books[message.strategy], message)
         elif isinstance(message, Settled):
@@ -181,6 +186,7 @@ def _figures(book: _Book) -> Figures:
         filled=book.filled,
         signals=book.signals,
         refused=book.refused,
+        doubted=book.doubted,
         fills=book.fills,
         bought=book.bought,
         sold=book.sold,
@@ -201,6 +207,7 @@ def _lines(f: Figures) -> list[str]:
     rows = [
         ("signals sent", f"{f.signals}"),
         ("signals refused", f"{f.refused}"),
+        ("closes doubted", f"{f.doubted}"),
     ]
     if not f.filled:
         rows.append(("fills", "not simulated (no fill model)"))

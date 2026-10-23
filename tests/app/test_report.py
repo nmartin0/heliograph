@@ -26,7 +26,7 @@ from tests.support.plugins import Units
 @pytest.fixture
 def registry() -> Registry:
     registry = Registry()
-    for kind in ("data_sources", "indicators", "forecasters", "sizers", "fills"):
+    for kind in ("data_sources", "indicators", "forecasters", "sizers", "fills", "risk_gates"):
         registry.discover(kind)
     registry.register(Units)
     return registry
@@ -112,6 +112,7 @@ def test_a_strategy_without_fills_reports_its_signals_and_no_result(
         "strategy trend (kraken:BTC/USD)",
         "  signals sent     5",
         "  signals refused  0",
+        "  closes doubted   0",
         "  fills            not simulated (no fill model)",
     ]
 
@@ -184,3 +185,25 @@ def test_fills_that_cannot_be_assembled_are_refused(
 ) -> None:
     with pytest.raises(ConfigError, match=reason):
         run(config(csv(tmp_path), rest), registry, tmp_path / "run.sqlite")
+
+
+def test_closes_doubted_are_counted_apart_from_signals_refused(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """A bad print of 150 between 101 and 103: doubted by limits, counted as such."""
+    path = tmp_path / "btc.csv"
+    path.write_text(
+        "time,price,size\n"
+        + "".join(
+            f"2026-10-01T{h:02d}:30:00Z,{p},1\n"
+            for h, p in enumerate([100, 102, 101, 150, 103, 100])
+        )
+    )
+    rest = REST.replace('fills = "costs"', 'fills = "costs"\nrisk_gates = ["limits"]') + component(
+        "risk_gates", "limits", "limits", max_jump=0.2
+    )
+    journal = tmp_path / "run.sqlite"
+    run(config(path, rest), registry, journal)
+    _, (one,) = figures(journal)
+    assert (one.doubted, one.refused) == (1, 0)
+    assert "  closes doubted        1\n" in report(journal)

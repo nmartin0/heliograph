@@ -46,12 +46,12 @@ def test_what_was_delivered_decided_and_filled(run: RunSummary) -> None:
         {
             "AlarmFired": 2880,
             "Bar": 2880,
-            "Fill": 275,
+            "Fill": 281,
             "IndicatorValues": 2856,
             "Point": 8640,
             "RunEnded": 1,
             "Settled": 11520,
-            "Signal": 275,
+            "Signal": 281,
             "SignalRefused": 85,
         }
     )
@@ -63,17 +63,18 @@ Backtest 2026-01-01T00:00:00Z to 2026-05-01T00:00:00Z
 configuration 3bb4054eb5d03e54
 
 strategy trend (kraken:BTC/USD)
-  signals sent          275
+  signals sent          281
   signals refused       85
-  fills                 275
-  units bought          1.98
-  units sold            1.98
-  value traded          127,129.07
-  commission            127.13
-  spread and slippage   63.56
+  closes doubted        0
+  fills                 281
+  units bought          1.92
+  units sold            1.92
+  value traded          125,239.36
+  commission            125.24
+  spread and slippage   62.62
   position at the end   0.00
   last close            23,339.44
-  profit and loss       869.15
-  largest drawdown      320.32
+  profit and loss       854.07
+  largest drawdown      320.48
   closes in the market  485 of 2880 (16.8%)
 """)

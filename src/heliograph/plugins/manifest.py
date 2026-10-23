@@ -24,10 +24,14 @@ class Params(BaseModel):
     """Base class for a plug-in's parameters.
 
     Immutable, unknown keys refused, and defaults validated like any other
-    value, so a default outside its own bounds is caught.
+    value, so a default outside its own bounds is caught. NaN and infinity
+    are refused in every number (TOML can write both, and a NaN threshold,
+    for one, would quietly veto everything).
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", validate_default=True, allow_inf_nan=False
+    )
 
 
 class NoParams(Params):
@@ -40,6 +44,8 @@ def param(
     description: str,
     ge: float | None = None,
     le: float | None = None,
+    gt: float | None = None,
+    lt: float | None = None,
     step: float | None = None,
 ) -> Any:
     """Declare one parameter with its default, description, bounds and search step.
@@ -53,7 +59,9 @@ def param(
     if step is not None and step <= 0:
         raise InvalidValueError(f"step must be positive, got {step}")
     extra: dict[str, Any] | None = None if step is None else {"step": step}
-    return Field(default, description=description, ge=ge, le=le, json_schema_extra=extra)
+    return Field(
+        default, description=description, ge=ge, le=le, gt=gt, lt=lt, json_schema_extra=extra
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

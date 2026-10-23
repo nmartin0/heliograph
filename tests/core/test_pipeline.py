@@ -29,6 +29,7 @@ from heliograph.core.streams import BarSpec, StreamSpec
 from heliograph.core.time import NANOS_PER_HOUR, Timestamp
 from heliograph.plugins.fills import NextOpen, NextOpenParams
 from heliograph.plugins.sqlite_journal import SqliteJournal, SqliteJournalParams, read_entries
+from heliograph.plugins.stages import Limits, LimitsParams
 from tests.support.world import BTC, World, points, world
 
 HOUR = NANOS_PER_HOUR
@@ -392,3 +393,168 @@ def test_with_a_broker_the_position_held_is_what_has_been_filled() -> None:
         (2.0, 103.0),
     ]
     assert strategy.held == 7.0
+
+
+@dataclass
+class RefuseShorts:
+    """A risk gate refusing every short; it records what it was told was sent."""
+
+    sent_: list[Proposal] = field(default_factory=list)
+
+    def check(self, proposal: Proposal) -> str | None:
+        return "no shorts" if proposal.target < 0 else None
+
+    def sent(self, proposal: Proposal) -> None:
+        self.sent_.append(proposal)
+
+
+def test_a_refused_reversal_goes_flat_instead_of_keeping_the_side_held() -> None:
+    """Long 5, the forecast turns to -3: the short is refused, so the long is closed."""
+    gate = RefuseShorts()
+    w, _, strategy, seen = setup({"f": [5.0, -3.0, -3.0]}, risk_gates=(("shorts", gate),))
+    run(w, [100, 99, 98])
+    refused, flat = seen[1:3]
+    assert isinstance(refused, SignalRefused)
+    assert (refused.target, refused.held, refused.refused_by) == (-3.0, 5.0, "shorts")
+    assert isinstance(flat, Signal)
+    assert (flat.target, flat.held, flat.side, flat.instead_of) == (0.0, 5.0, "flat", -3.0)
+    assert flat.id != refused.id
+    assert [p.target for p in gate.sent_] == [5.0, 0.0]
+    assert strategy.held == 0.0
+    # Flat, the short is an entry: refused again, and flat stays flat.
+    assert [type(m).__name__ for m in seen[3:]] == ["SignalRefused"]
+
+
+def test_a_refused_addition_keeps_the_position_held() -> None:
+    """Long 5 wanting 9: the addition is refused and the 5 stays; nothing goes flat."""
+    gate = Refuse(limit=6.0)
+    w, _, strategy, seen = setup({"f": [5.0, 9.0]}, risk_gates=(("cap", gate),))
+    run(w, [100, 101])
+    assert [type(m).__name__ for m in seen] == ["Signal", "SignalRefused"]
+    assert strategy.held == 5.0
+
+
+@dataclass
+class DoubtJumps:
+    """A risk gate doubting a close more than ``limit`` from the one before."""
+
+    limit: float
+    sent_: list[Proposal] = field(default_factory=list)
+
+    def suspect(self, proposal: Proposal) -> str | None:
+        previous = proposal.previous
+        if previous and abs(proposal.price / previous - 1) > self.limit:
+            return "a jump"
+        return None
+
+    def check(self, proposal: Proposal) -> str | None:
+        return None
+
+    def sent(self, proposal: Proposal) -> None:
+        self.sent_.append(proposal)
+
+
+def test_a_doubted_close_is_not_acted_on_and_the_sizer_never_sees_it() -> None:
+    """Long 5; a bad print of 60 would take the forecast flat: the close is doubted, refused
+    with the position held as its target, and the sizer never sees 60. The next close is
+    back near the last trusted, so the strategy acts on it."""
+    gate, sizer = Limits(LimitsParams(max_jump=0.25)), Units()
+    w, _, strategy, seen = setup(
+        {"f": [5.0, 0.0, -3.0, -3.0]}, risk_gates=(("doubt", gate),), sizer=sizer
+    )
+    run(w, [100, 60, 100, 101])
+    kinds = [(type(m).__name__, m.target) for m in seen if isinstance(m, Signal | SignalRefused)]
+    assert kinds == [("Signal", 5.0), ("SignalRefused", 5.0), ("Signal", -3.0)]
+    assert [m.doubted for m in seen if isinstance(m, SignalRefused)] == [True]
+    assert sizer.prices == [100.0, 100.0, 101.0]
+    assert strategy.held == -3.0
+
+
+def test_a_crash_is_doubted_for_one_close_only() -> None:
+    """Long, a stop-like exit at 80; the price falls 30% a close. 70 is doubted; 50, the
+    close after, confirms the fall, and the exit takes the strategy flat there; 35, 30%
+    below the 50 trusted, is doubted again, flat as it is."""
+    gate = Limits(LimitsParams(max_jump=0.25))
+    w, _, strategy, seen = setup(
+        {"f": [5.0]}, risk_gates=(("doubt", gate),), exits=(("floor", FlatBelow(80.0), ()),)
+    )
+    run(w, [100, 70, 50, 35])
+    kinds = [(type(m).__name__, m.price) for m in seen if isinstance(m, Signal | SignalRefused)]
+    assert kinds == [
+        ("Signal", 100.0),
+        ("SignalRefused", 70.0),
+        ("Signal", 50.0),
+        ("SignalRefused", 35.0),
+    ]
+    assert strategy.held == 0.0
+
+
+@dataclass
+class Unsized:
+    """A sizer that sizes the first close and then cannot (a stalled feed, say)."""
+
+    seen: int = 0
+
+    def target(self, forecast: float | None, price: float, held: float) -> float | None:
+        self.seen += 1
+        return 5.0 if self.seen == 1 else None
+
+
+def test_exits_and_vetoes_still_act_while_the_sizer_cannot_size() -> None:
+    """Long 5; then the sizer cannot size. An exit can still take the strategy flat, and
+    nothing that adds risk leaves."""
+    w, _, strategy, seen = setup(
+        {"f": [5.0]}, sizer=Unsized(), exits=(("floor", FlatBelow(90.0), ()),)
+    )
+    run(w, [100, 95, 85, 84])
+    sent = [(m.price, m.target, m.exit) for m in seen if isinstance(m, Signal)]
+    assert sent == [(100.0, 5.0, ""), (85.0, 0.0, "floor")]
+    assert strategy.held == 0.0
+
+
+@dataclass
+class Doubling:
+    """An exit doubling whatever target it is given (an exit that adds risk, for tests)."""
+
+    def adjust(
+        self, target: float | None, held: float, price: float, values: Sequence[float | None]
+    ) -> float | None:
+        return None if target is None else 2 * target
+
+
+def test_while_the_sizer_cannot_size_nothing_that_adds_risk_leaves() -> None:
+    w, _, strategy, seen = setup({"f": [5.0]}, sizer=Unsized(), exits=(("double", Doubling(), ()),))
+    run(w, [100, 101, 102])
+    assert [m.target for m in seen if isinstance(m, Signal)] == [10.0]  # only the sized close
+    assert strategy.held == 10.0
+
+
+def test_a_second_bad_print_the_other_way_is_doubted_too() -> None:
+    """Long 5 at 101; 160 and then 40 are bad prints, each far from the 101 trusted and the
+    second the other way: both are doubted, and 101 is back. Nothing trades."""
+    gate = Limits(LimitsParams(max_jump=0.25))
+    w, _, strategy, seen = setup(
+        {"f": [5.0]}, risk_gates=(("limits", gate),), exits=(("floor", FlatBelow(80.0), ()),)
+    )
+    run(w, [101, 160, 40, 101])
+    kinds = [(type(m).__name__, m.price) for m in seen if isinstance(m, Signal | SignalRefused)]
+    assert kinds == [("Signal", 101.0), ("SignalRefused", 160.0), ("SignalRefused", 40.0)]
+    assert strategy.held == 5.0
+
+
+def test_a_feed_is_doubted_no_more_than_max_doubts_in_a_row() -> None:
+    """Prices swinging far each way from the last trusted: after two doubts, the third is
+    taken as it is, so exits are never kept from acting for long."""
+    gate = Limits(LimitsParams(max_jump=0.25, max_doubts=2))
+    w, _, strategy, seen = setup(
+        {"f": [5.0]}, risk_gates=(("limits", gate),), exits=(("floor", FlatBelow(80.0), ()),)
+    )
+    run(w, [100, 160, 40, 50])
+    kinds = [(type(m).__name__, m.price) for m in seen if isinstance(m, Signal | SignalRefused)]
+    assert kinds == [
+        ("Signal", 100.0),
+        ("SignalRefused", 160.0),
+        ("SignalRefused", 40.0),
+        ("Signal", 50.0),
+    ]
+    assert strategy.held == 0.0  # the exit, below 80, at the close taken as it is
