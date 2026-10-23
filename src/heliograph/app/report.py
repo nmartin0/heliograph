@@ -10,7 +10,7 @@ strategy's price stream, after that instant has settled, so a fill at a
 bar's open is counted at that bar's close. The costs are the commissions,
 plus what fills paid beyond the open (half the spread and the slippage).
 A strategy without a fill model was not simulated: only its signals are
-reported.
+reported. A run that failed or did not finish says so under its heading.
 
 The report reads only the journal: the configuration from its header, and
 the entries. So it is the same for a run and its replay, and can be
@@ -142,6 +142,10 @@ def report(journal: Path) -> str:
         f"Backtest {_when(header['start'])} to {_when(header['end'])}",
         f"configuration {header['config_digest'][:16]}",
     ]
+    if header.get("status") != "complete":
+        lines.append(
+            f"NOT COMPLETE ({header.get('status')}): the figures cover what was journalled"
+        )
     for one in all_figures:
         lines += ["", *_lines(one)]
     return "\n".join(lines) + "\n"

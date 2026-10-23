@@ -1,0 +1,48 @@
+# Six hourly trades, and a strategy simple enough to follow by hand:
+# the forecast is close - 100, held as units; filled at the next open,
+# paying half a 2% spread and a 0.1% commission. The figures are worked
+# out in tests/scenarios/test_hand_checked.py.
+
+mode = "backtest"
+
+[mounts.btc]
+source = "file"
+params = { path = "tests/scenarios/data/hand-checked.csv" }
+kind = "trades"
+start = 2026-10-01T00:00:00Z
+end = 2026-10-02T00:00:00Z
+
+[mounts.btc.instrument]
+symbol = "BTC/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
+
+[[streams]]
+mount = "btc"
+bars = "1h"
+
+[[components]]
+kind = "forecasters"
+plugin = "linear"
+name = "lin"
+inputs = ["btc@1h.close"]
+params = { scalar = 1.0, centre = 100.0 }
+
+[[components]]
+kind = "sizers"
+plugin = "units"
+name = "units"
+
+[[components]]
+kind = "fills"
+plugin = "next_open"
+name = "costs"
+params = { spread = 0.02, commission = 0.001 }
+
+[[strategies]]
+name = "trend"
+price = "btc@1h.close"
+forecasters = ["lin"]
+sizer = "units"
+fills = "costs"

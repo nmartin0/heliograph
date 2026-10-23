@@ -24,6 +24,9 @@ dependencies = [
     "talipp>=2.7,<3",
 ]
 
+[project.scripts]
+heliograph = "heliograph.app.cli:main"
+
 [project.optional-dependencies]
 # The conformance kit, for plug-ins written outside this repository.
 testkit = ["pytest>=8.4"]
@@ -33,6 +36,7 @@ dev = [
     "coverage>=7.16",
     "hypothesis>=6.140",
     "import-linter>=2.15",
+    "inline-snapshot>=0.36",
     "mutmut>=3.8",
     "mypy>=1.18",
     "pyarrow-stubs>=20.0.0.20260819",
@@ -176,6 +180,18 @@ root_package = "heliograph"
 name = "Dependencies point inward: testkit -> app -> plugins -> core"
 type = "layers"
 layers = ["heliograph.testkit", "heliograph.app", "heliograph.plugins", "heliograph.core"]
+
+[[tool.importlinter.contracts]]
+name = "The SDK names what plug-ins use: plugins and core, never the app or the kit"
+type = "forbidden"
+source_modules = ["heliograph.sdk"]
+forbidden_modules = ["heliograph.app", "heliograph.testkit"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing inside Heliograph depends on the SDK; it only names what is there"
+type = "forbidden"
+source_modules = ["heliograph.core", "heliograph.plugins", "heliograph.app", "heliograph.testkit"]
+forbidden_modules = ["heliograph.sdk"]
 
 [tool.heliograph.licences]
 # Read by scripts/licence_report.py; the policy is docs/licensing.md.

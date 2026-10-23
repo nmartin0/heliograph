@@ -9,28 +9,18 @@ import pytest
 
 from heliograph.app.config import ConfigError
 from heliograph.app.report import figures, report
-from heliograph.app.run import JOURNALLED, replay_backtest
+from heliograph.app.run import JOURNALLED
 from heliograph.core.broker import Fill
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.pipeline import Signal
-from heliograph.plugins.manifest import Manifest, NoParams, Plugin
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
     SqliteJournal,
     SqliteJournalParams,
-    raw_rows,
     read_entries,
 )
 from tests.app.test_run_strategies import HOUR, START, component, config, run, strategy
-
-
-class Units(Plugin[NoParams]):
-    """A sizer holding the forecast as units: easy to follow by hand."""
-
-    manifest = Manifest(kind="sizers", name="units", version="1", summary="Forecast as units")
-
-    def target(self, forecast: float | None, price: float, held: float) -> float | None:
-        return forecast
+from tests.support.plugins import Units
 
 
 @pytest.fixture
@@ -108,33 +98,6 @@ def test_the_figures_are_the_ones_worked_out_by_hand(tmp_path: Path, registry: R
     assert one.result == pytest.approx(-14.86807)
     assert one.drawdown == pytest.approx(2.63302 + 14.86807)
     assert (one.closes, one.exposed) == (6, 4)
-
-
-def test_the_report_is_text_and_the_same_for_a_replay(tmp_path: Path, registry: Registry) -> None:
-    original = tmp_path / "run.sqlite"
-    run(config(csv(tmp_path), REST), registry, original)
-    replayed = replay_backtest(original, tmp_path / "replay.sqlite", registry)
-    assert raw_rows(replayed.journal) == raw_rows(original)
-    text = report(original)
-    assert text == report(replayed.journal)
-    assert text.splitlines()[2:] == [
-        "",
-        "strategy trend (kraken:BTC/USD)",
-        "  signals sent          5",
-        "  signals refused       0",
-        "  fills                 4",
-        "  units bought          5.00",
-        "  units sold            2.00",
-        "  value traded          718.07",
-        "  commission            0.72",
-        "  spread and slippage   7.15",
-        "  position at the end   3.00",
-        "  last close            100.00",
-        "  profit and loss       -14.87",
-        "  largest drawdown      17.50",
-        "  closes in the market  4 of 6 (66.7%)",
-    ]
-    assert text.startswith("Backtest 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z\n")
 
 
 def test_a_strategy_without_fills_reports_its_signals_and_no_result(

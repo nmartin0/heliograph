@@ -15,6 +15,7 @@ run raised. Entries are written in batches, so a process that dies loses up
 to ``batch - 1`` of the last entries; live use should set ``batch`` low.
 """
 
+import contextlib
 import os
 import sqlite3
 from collections.abc import Iterable, Iterator
@@ -123,11 +124,18 @@ class SqliteJournal(Plugin[SqliteJournalParams]):
         """Write what is buffered, record ``status`` and close the file."""
         if self._closed:
             return
-        self.flush()
-        self._db.execute("UPDATE header SET value = ? WHERE key = 'status'", (status,))
-        self._db.commit()
-        self._db.close()
-        self._closed = True
+        try:
+            self.flush()
+            self._db.execute("UPDATE header SET value = ? WHERE key = 'status'", (status,))
+            self._db.commit()
+            # Back to a single file: a reader (read-only, so it cannot tidy up) would
+            # otherwise leave -wal and -shm files beside a finished journal. Only
+            # tidying: while another connection has the file open, it stays in WAL.
+            with contextlib.suppress(sqlite3.OperationalError):
+                self._db.execute("PRAGMA journal_mode=DELETE")
+        finally:
+            self._db.close()
+            self._closed = True
 
     def __enter__(self) -> Self:
         return self
@@ -181,10 +189,20 @@ def raw_rows(path: Path) -> list[tuple[Any, ...]]:
 
 
 class _open_existing:  # noqa: N801  (a context manager used like a function)
+    """A journal opened read-only; anything that is not one is ``InvalidValueError``."""
+
     def __init__(self, path: Path) -> None:
         if not path.is_file():
             raise InvalidValueError(f"no journal at {path}")
-        self._db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        # As a URI built by pathlib, so ? # and % in a name are the file's, not the URI's.
+        self._db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            tables = {name for (name,) in self._db.execute("SELECT name FROM sqlite_master")}
+        except sqlite3.DatabaseError:
+            tables = set()
+        if not {"header", "entries"} <= tables:
+            self._db.close()
+            raise InvalidValueError(f"{path} is not a journal")
 
     def __enter__(self) -> sqlite3.Connection:
         return self._db

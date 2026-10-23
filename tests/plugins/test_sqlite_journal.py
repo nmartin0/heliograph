@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Nicholas Martin
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
+import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -126,3 +127,44 @@ def test_the_journal_is_an_installed_plug_in() -> None:
     registry = Registry()
     registry.discover("journals")
     assert registry.get("journals", "sqlite") is SqliteJournal
+
+
+def test_a_finished_journal_is_one_file_and_reading_it_leaves_nothing_beside_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.sqlite"
+    session(path, (points([(10, 100), (70, 110)]), END))
+    list(read_entries(path, TYPES))
+    read_header(path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["run.sqlite"]
+
+
+def test_a_journal_closes_while_another_reader_has_it_open(tmp_path: Path) -> None:
+    path = tmp_path / "run.sqlite"
+    with SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"}) as journal:
+        reader = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        reader.execute("SELECT count(*) FROM header").fetchone()
+        toy_session(journal, (points([(10, 100)]), END))
+    reader.close()
+    assert read_header(path)["status"] == "complete"
+    assert list(read_entries(path, TYPES))
+
+
+@pytest.mark.parametrize("name", ["a?b.sqlite", "a#b.sqlite", "a%20b.sqlite"])
+def test_a_journal_named_with_uri_characters_is_read_as_itself(tmp_path: Path, name: str) -> None:
+    path = tmp_path / name
+    session(path, (points([(10, 100)]), END))
+    assert read_header(path)["run"] == "test"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [name]
+
+
+def test_a_file_that_is_not_a_journal_is_said_to_be_so(tmp_path: Path) -> None:
+    text = tmp_path / "notes.sqlite"
+    text.write_text("hello")
+    empty = tmp_path / "empty.sqlite"
+    sqlite3.connect(empty).close()
+    for path in (text, empty):
+        with pytest.raises(InvalidValueError, match="is not a journal"):
+            read_header(path)
+        with pytest.raises(InvalidValueError, match="is not a journal"):
+            raw_rows(path)

@@ -15,6 +15,7 @@ from heliograph.plugins.registry import (
     Registry,
     UnknownPluginError,
     installed_entry_points,
+    installed_kinds,
 )
 from tests.support.plugins import Sma, WindowParams
 
@@ -153,3 +154,24 @@ def test_discovery_refuses_a_name_already_taken() -> None:
 def test_the_installed_distributions_can_be_queried() -> None:
     # Heliograph declares no plug-ins yet; the real lookup must still work.
     assert list(installed_entry_points("heliograph.no_such_kind")) == []
+
+
+def test_the_installed_registry_loads_only_the_kinds_asked_for() -> None:
+    """A broken plug-in of a kind nobody asked for stops nothing."""
+
+    def by_group(group: str) -> Iterable[EntryPointLike]:
+        if group == "heliograph.widgets":
+            return [FakeEntryPoint("thing", ImportError("no module named bad_pkg"))]
+        assert group == "heliograph.filters"
+        return [FakeEntryPoint("sma", Sma)]
+
+    registry = Registry.installed(["filters"], entry_points=by_group)
+    assert registry.kinds() == ("filters",)
+    with pytest.raises(PluginLoadError, match=r"'thing' in 'heliograph\.widgets' failed to load"):
+        Registry.installed(["filters", "widgets"], entry_points=by_group)
+
+
+def test_with_no_kinds_named_every_installed_kind_is_loaded() -> None:
+    registry = Registry.installed()
+    assert set(registry.kinds()) == set(installed_kinds())
+    assert {"data_sources", "forecasters", "fills", "journals"} <= set(registry.kinds())

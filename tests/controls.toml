@@ -2153,3 +2153,103 @@ path = "src/heliograph/app/report.py"
 old = "    if not f.filled:\n"
 new = "    if False:\n"
 tests = ["tests/app/test_report.py::test_a_strategy_without_fills_reports_its_signals_and_no_result"]
+
+# -- D4c: the example, the command, the SDK (D32) -----------------------------------------
+
+[[control]]
+describes = "a finished journal is one file"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
+new = "                pass\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_finished_journal_is_one_file_and_reading_it_leaves_nothing_beside_it"]
+
+[[control]]
+describes = "a problem Heliograph can name exits with status 2"
+path = "src/heliograph/app/cli.py"
+old = "        return FAILED\n"
+new = "        raise\n"
+tests = ["tests/app/test_cli.py::test_a_problem_heliograph_can_name_is_one_line_and_status_2"]
+
+[[control]]
+describes = "a backtest journals under runs by default"
+path = "src/heliograph/app/cli.py"
+old = "        Path(\"runs\") / f\"{args.config.stem}"
+new = "        Path(\".\") / f\"{args.config.stem}"
+tests = ["tests/app/test_cli.py::test_a_backtest_prints_its_report_and_journals_under_runs"]
+
+[[control]]
+describes = "a replay compares every entry"
+path = "src/heliograph/app/cli.py"
+old = "    if before == after:\n"
+new = "    if len(before) == len(after):\n"
+tests = ["tests/app/test_cli.py::test_a_replay_that_differs_says_where"]
+
+[[control]]
+describes = "the installed registry has every kind"
+path = "src/heliograph/plugins/registry.py"
+old = "        for kind in sorted(set(installed_kinds() if kinds is None else kinds)):\n"
+new = "        for kind in sorted(set(installed_kinds()[:3] if kinds is None else kinds)):\n"
+tests = ["tests/plugins/test_registry.py::test_with_no_kinds_named_every_installed_kind_is_loaded"]
+
+[[control]]
+describes = "a journal closes though another connection has it open"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "            with contextlib.suppress(sqlite3.OperationalError):\n                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
+new = "            self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_journal_closes_while_another_reader_has_it_open"]
+
+[[control]]
+describes = "a journal's path is a URI built by pathlib"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "        self._db = sqlite3.connect(f\"{path.resolve().as_uri()}?mode=ro\", uri=True)\n"
+new = "        self._db = sqlite3.connect(f\"file:{path}?mode=ro\", uri=True)\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_journal_named_with_uri_characters_is_read_as_itself"]
+
+[[control]]
+describes = "a file that is not a journal is said to be so"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "        if not {\"header\", \"entries\"} <= tables:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_file_that_is_not_a_journal_is_said_to_be_so", "tests/app/test_cli.py::test_a_file_that_is_not_a_journal_is_one_line_and_status_2"]
+
+[[control]]
+describes = "the installed registry loads only the kinds asked for"
+path = "src/heliograph/plugins/registry.py"
+old = "        for kind in sorted(set(installed_kinds() if kinds is None else kinds)):\n"
+new = "        for kind in sorted(set(installed_kinds())):\n"
+tests = ["tests/plugins/test_registry.py::test_the_installed_registry_loads_only_the_kinds_asked_for"]
+
+[[control]]
+describes = "a run asks for the kinds its configuration uses"
+path = "src/heliograph/app/cli.py"
+old = "    return Registry.installed({SOURCES, *(c.kind for c in config.components)})\n"
+new = "    return Registry.installed()\n"
+tests = ["tests/app/test_cli.py::test_a_run_loads_only_the_kinds_its_configuration_uses"]
+
+[[control]]
+describes = "a report says when its run did not complete"
+path = "src/heliograph/app/report.py"
+old = "    if header.get(\"status\") != \"complete\":\n"
+new = "    if False:\n"
+tests = ["tests/app/test_cli.py::test_a_run_that_failed_names_its_journal_and_its_report_says_so"]
+
+[[control]]
+describes = "the command's report exits 1 for a run that did not complete"
+path = "src/heliograph/app/cli.py"
+old = "    return 0 if read_header(args.journal).get(\"status\") == \"complete\" else DIFFERS\n"
+new = "    return 0\n"
+tests = ["tests/app/test_cli.py::test_a_run_that_failed_names_its_journal_and_its_report_says_so"]
+
+[[control]]
+describes = "a failed run's error names its journal"
+path = "src/heliograph/app/cli.py"
+old = "        if journal.is_file():\n"
+new = "        if False:\n"
+tests = ["tests/app/test_cli.py::test_a_run_that_failed_names_its_journal_and_its_report_says_so"]
+
+[[control]]
+describes = "two runs in the same second get journals of their own"
+path = "src/heliograph/app/cli.py"
+old = "    while candidate.exists():\n"
+new = "    while False:\n"
+tests = ["tests/app/test_cli.py::test_two_runs_in_the_same_second_get_journals_of_their_own"]

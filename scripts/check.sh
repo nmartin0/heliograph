@@ -24,6 +24,7 @@ run "lockfile is current" uv lock --check
 run "licences"            uv run --frozen python scripts/licence_report.py
 run "lint"                uv run --frozen ruff check .
 run "format"              uv run --frozen ruff format --check .
+run "example data"      uv run --frozen python scripts/make_example_data.py --check
 run "types"               uv run --frozen mypy
 run "layers"              uv run --frozen lint-imports
 run "tests"               uv run --frozen coverage run -m pytest

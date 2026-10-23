@@ -1,0 +1,96 @@
+# A trend-following example on made-up hourly data (examples/data, written by
+# scripts/make_example_data.py). Run it from the repository's folder:
+#
+#     uv run heliograph backtest examples/trend.toml
+#
+# Two EWMAC crossovers, blended; sized to a volatility target with a no-trade
+# buffer; a trailing stop three ATRs behind the best close; a price-jump and
+# rate check; filled at the next hour's open, paying half a 0.1% spread and a
+# 0.1% commission. Robert Carver's design (Systematic Trading, 2015), as
+# docs/design.md describes it. To run it on real trades, point the mount at
+# the ccxt source instead: source = "ccxt", params = { exchange = "kraken" }.
+
+mode = "backtest"
+
+[mounts.btc]
+source = "file"
+params = { path = "examples/data/btc-synthetic.csv" }
+kind = "trades"
+start = 2026-01-01T00:00:00Z
+end = 2026-05-01T00:00:00Z
+
+[mounts.btc.instrument]
+symbol = "BTC/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
+
+[[streams]]
+mount = "btc"
+bars = "1h"
+
+# The forecasts: fast and slow trend, each scaled to an average of 10.
+
+[[components]]
+kind = "forecasters"
+plugin = "ewmac"
+name = "ewmac16"
+inputs = ["btc@1h.close"]
+params = { fast = 16, slow = 64, scalar = 3.75 }
+
+[[components]]
+kind = "forecasters"
+plugin = "ewmac"
+name = "ewmac32"
+inputs = ["btc@1h.close"]
+params = { fast = 32, slow = 128, scalar = 2.65 }
+
+[[components]]
+kind = "indicators"
+plugin = "atr"
+name = "atr24"
+inputs = ["btc@1h.high", "btc@1h.low", "btc@1h.close"]
+params = { period = 24 }
+
+# The strategy's stages.
+
+[[components]]
+kind = "combiners"
+plugin = "weighted"
+name = "blend"
+params = { weights = { ewmac16 = 0.5, ewmac32 = 0.5 }, multiplier = 1.1 }
+
+[[components]]
+kind = "sizers"
+plugin = "vol_target"
+name = "vol"
+params = { capital = 10000.0, target = 0.25, bars_per_year = 8760.0, vol_span = 36, buffer = 0.1 }
+
+[[components]]
+kind = "exits"
+plugin = "trailing_stop"
+name = "stop"
+inputs = ["atr24"]
+params = { multiple = 3.0 }
+
+[[components]]
+kind = "risk_gates"
+plugin = "limits"
+name = "limits"
+params = { max_jump = 0.1, max_per_day = 12 }
+
+[[components]]
+kind = "fills"
+plugin = "next_open"
+name = "costs"
+params = { spread = 0.001, commission = 0.001 }
+
+[[strategies]]
+name = "trend"
+price = "btc@1h.close"
+forecasters = ["ewmac16", "ewmac32"]
+combiner = "blend"
+sizer = "vol"
+exits = ["stop"]
+risk_gates = ["limits"]
+fills = "costs"

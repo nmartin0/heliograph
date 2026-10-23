@@ -54,8 +54,34 @@ def installed_entry_points(group: str) -> Iterable[EntryPointLike]:
     return importlib.metadata.entry_points(group=group)
 
 
+def installed_kinds() -> tuple[str, ...]:
+    """Every kind some installed distribution declares plug-ins of, sorted."""
+    groups = importlib.metadata.entry_points().groups
+    return tuple(sorted(g.removeprefix(GROUP_PREFIX) for g in groups if g.startswith(GROUP_PREFIX)))
+
+
 class Registry:
     """All plug-ins known to this process, by kind and name."""
+
+    @classmethod
+    def installed(
+        cls,
+        kinds: Iterable[str] | None = None,
+        *,
+        entry_points: EntryPointSource = installed_entry_points,
+    ) -> "Registry":
+        """A registry of the installed plug-ins of ``kinds`` (None: of every kind).
+
+        Name only the kinds a run uses, so a broken plug-in of another kind
+        does not stop it.
+
+        Raises:
+            PluginLoadError, DuplicatePluginError: as ``discover`` does.
+        """
+        registry = cls()
+        for kind in sorted(set(installed_kinds() if kinds is None else kinds)):
+            registry.discover(kind, entry_points=entry_points)
+        return registry
 
     __slots__ = ("_plugins",)
 
