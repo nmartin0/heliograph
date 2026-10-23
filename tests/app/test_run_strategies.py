@@ -226,14 +226,16 @@ def test_a_strategy_that_cannot_be_assembled_is_refused_when_read(
         parse_config(config(tmp_path / "btc.csv", rest))
 
 
-def test_a_strategy_reading_streams_of_different_grace_is_refused(tmp_path: Path) -> None:
+def test_a_strategy_reading_streams_that_close_at_different_times_is_refused(
+    tmp_path: Path,
+) -> None:
     rest = (
         component("forecasters", "linear", "slow", ["btc@4h.close"])
         + SIZER
         + strategy(forecasters=["slow"])
     )
     four = '[[streams]]\nmount = "btc"\nbars = "4h"\ngrace = "1m"\n'
-    with pytest.raises(ConfigError, match=r"trend.*reads streams of different grace"):
+    with pytest.raises(ConfigError, match=r"trend.*close at different times after their end"):
         parse_config(config(tmp_path / "btc.csv", rest, four))
 
 

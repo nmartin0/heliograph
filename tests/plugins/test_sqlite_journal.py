@@ -4,6 +4,7 @@
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -11,7 +12,7 @@ from hypothesis import strategies as st
 
 from heliograph.core.alarms import AlarmFired
 from heliograph.core.errors import InvalidValueError
-from heliograph.core.journal import runs
+from heliograph.core.journal import JournalEntry, runs
 from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
 from heliograph.core.time import NANOS_PER_HOUR, Timestamp
 from heliograph.plugins.registry import Registry
@@ -168,3 +169,77 @@ def test_a_file_that_is_not_a_journal_is_said_to_be_so(tmp_path: Path) -> None:
             read_header(path)
         with pytest.raises(InvalidValueError, match="is not a journal"):
             raw_rows(path)
+
+
+class Unwritable:
+    """Stands in for the database connection: every write of entries fails."""
+
+    def __init__(self, real: sqlite3.Connection) -> None:
+        self.real = real
+
+    def executemany(self, *args: object) -> None:
+        raise sqlite3.OperationalError("database or disk is full")
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.real, name)
+
+
+def test_entries_that_cannot_be_written_mark_the_journal_failed_and_say_so(
+    tmp_path: Path,
+) -> None:
+    """A full disk at the last batch: the journal is closed, marked failed with why, and
+    the error is raised, instead of a journal left 'running' with nothing said."""
+    path = tmp_path / "run.sqlite"
+    journal = SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"})
+    journal._db = Unwritable(journal._db)  # type: ignore[assignment]
+    journal.append(JournalEntry(1, "input", Settled(Timestamp(5))))
+    with pytest.raises(sqlite3.OperationalError, match="disk is full"):
+        journal.close()
+    status = read_header(path)["status"]
+    assert status.startswith("failed: its last entries could not be written: OperationalError")
+
+
+def test_a_run_that_failed_keeps_its_own_error_when_its_entries_cannot_be_written(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.sqlite"
+    journal = SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"})
+    journal._db = Unwritable(journal._db)  # type: ignore[assignment]
+    journal.append(JournalEntry(1, "input", Settled(Timestamp(5))))
+    journal.close("failed: ValueError: the source broke")  # no error of its own
+    assert read_header(path)["status"] == (
+        "failed: ValueError: the source broke (its last entries could not be written: "
+        "OperationalError: database or disk is full)"
+    )
+
+
+def test_a_stamp_sqlite_cannot_hold_is_refused_when_the_entry_is_added(tmp_path: Path) -> None:
+    journal = SqliteJournal(SqliteJournalParams(path=str(tmp_path / "run.sqlite")))
+    with pytest.raises(InvalidValueError, match="SQLite holds 64-bit integers"):
+        journal.append(JournalEntry(1, "input", Settled(Timestamp(2**63))))
+    journal.close()
+
+
+class Full(Unwritable):
+    """No room even for the status."""
+
+    def execute(self, sql: str, *args: Any) -> object:
+        if sql.startswith("UPDATE"):
+            raise sqlite3.OperationalError("disk I/O error")
+        return self.real.execute(sql, *args)
+
+
+def test_on_a_disk_too_full_for_the_status_a_failed_run_keeps_its_own_error(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.sqlite"
+    journal = SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"})
+    journal._db = Full(journal._db)  # type: ignore[assignment]
+    journal.append(JournalEntry(1, "input", Settled(Timestamp(5))))
+    journal.close("failed: ValueError: the source broke")  # raises nothing of its own
+    assert read_header(path)["status"] == "running"  # which a replay refuses
+    other = SqliteJournal(SqliteJournalParams(path=str(tmp_path / "b.sqlite")))
+    other._db = Full(other._db)  # type: ignore[assignment]
+    other.append(JournalEntry(1, "input", Settled(Timestamp(5))))
+    with pytest.raises(sqlite3.OperationalError, match="disk is full"):
+        other.close()  # a completed run learns of it

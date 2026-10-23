@@ -95,6 +95,10 @@ from heliograph.plugins.sqlite_journal import (
     read_header,
 )
 
+BARS_RULES = "2"
+"""The rules bars were built by, recorded in a run's header: 2 since D35 (bars from
+trades wait for their source's delay; carried bars stop at their mount's end)."""
+
 JOURNALLED = (
     Point,
     Bar,
@@ -149,6 +153,10 @@ def run_backtest(
     start = Timestamp(min(r.start for r in requests))
     end = Timestamp(max(r.end for r in requests))
     late = max(m.source.capabilities.live_delay for m in mounts)
+    delays = {m.name: m.source.capabilities.live_delay for m in mounts}
+    misaligned = config.misaligned(delays)
+    if misaligned:
+        raise ConfigError("; ".join(misaligned))
     until = Timestamp(end + late + _longest_wait(config))
     header = _header(loaded, mounts, components, start, end, until)
     sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
@@ -357,15 +365,26 @@ def _assembled(
         # before this was recorded had no delays on mounts of bars to record.
         mounts = json.loads(header.get("mounts", "{}"))
         delays = {name: int(m.get("live_delay", 0)) for name, m in mounts.items()}
+        # A journal from before bars from trades waited for their source's delay (D35)
+        # is replayed with the rule it ran under, or its bars would differ.
+        rules_2 = int(header.get("bars", "1")) >= int(BARS_RULES)
+        builders: dict[str, TimeBars | BarsFromBars] = {}
         for stream in config.streams:
             source = config.mounts[stream.mount]
             spec = StreamSpec(instrument=source.instrument.instrument(), bars=stream.bar_spec())
             finer = stream.built_from(source)
+            delay = delays.get(stream.mount, 0)
+            name = f"{stream.mount}@{stream.bar_spec().label()}"
             if source.kind == "trades":
-                TimeBars(spec, bus, engine.scheduler)
+                builders[name] = TimeBars(
+                    spec,
+                    bus,
+                    engine.scheduler,
+                    delay if rules_2 else 0,
+                    ends=source.end_ts if rules_2 else None,
+                )
             elif finer is not None:
-                delay = delays.get(stream.mount, 0)
-                BarsFromBars(spec, finer, bus, engine.scheduler, delay)
+                builders[name] = BarsFromBars(spec, finer, bus, engine.scheduler, delay)
             # Otherwise the stream is the mount's own bars, as they come.
         nodes = [(c, cast(Indicator, p)) for c, p in components if c.kind in GRAPH_KINDS]
         if nodes or config.strategies:
@@ -408,6 +427,13 @@ def _assembled(
                     )
                     broker.on_fill(_holding(running))
         yield engine
+        # What each stream left out for arriving after its bar had closed, which only
+        # the end of the run knows: the report says so when it is not nothing.
+        late = {
+            name: b.late_points if isinstance(b, TimeBars) else b.late_bars
+            for name, b in sorted(builders.items())
+        }
+        sink.record("late", json.dumps(late, sort_keys=True, separators=(",", ":")))
 
 
 def _longest_wait(config: RunConfig) -> int:
@@ -508,5 +534,6 @@ def _header(
         "start": str(start),
         "end": str(end),
         "until": str(until),
+        "bars": BARS_RULES,
         "heliograph": version("heliograph"),
     }

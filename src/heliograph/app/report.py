@@ -17,6 +17,7 @@ the entries. So it is the same for a run and its replay, and can be
 compared as text (the scenario tests, D4c).
 """
 
+import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -147,6 +148,10 @@ def report(journal: Path) -> str:
         f"Backtest {_when(header['start'])} to {_when(header['end'])}",
         f"configuration {header['config_digest'][:16]}",
     ]
+    late = {name: count for name, count in json.loads(header.get("late", "{}")).items() if count}
+    if late:
+        listed = ", ".join(f"{name} {count}" for name, count in late.items())
+        lines.append(f"LATE DATA LEFT OUT (after its bar closed): {listed}")
     if header.get("status") != "complete":
         lines.append(
             f"NOT COMPLETE ({header.get('status')}): the figures cover what was journalled"

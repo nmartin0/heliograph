@@ -238,11 +238,13 @@ def test_two_spellings_of_one_stream_field_read_the_same_input(
     assert values[2] == {"a": 100.5, "b": 100.5}
 
 
-def test_an_indicator_reading_streams_of_different_grace_is_refused(tmp_path: Path) -> None:
+def test_an_indicator_reading_streams_that_close_at_different_times_is_refused(
+    tmp_path: Path,
+) -> None:
     text = config(tmp_path / "btc.csv", indicator("ema", ["btc@1h.close"], name="x"))
     text = text.replace('bars = "4h"', 'bars = "4h"\ngrace = "1m"')
     text += indicator("sma", ["x", "btc@4h.close"], name="mixed")
-    with pytest.raises(ConfigError, match="reads streams of different grace"):
+    with pytest.raises(ConfigError, match="close at different times after their end"):
         parse_config(text)
 
 

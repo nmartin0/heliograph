@@ -88,7 +88,7 @@ from pydantic import (
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.messages import Instrument
 from heliograph.core.streams import BarSpec
-from heliograph.core.time import Timestamp, from_datetime, parse_span
+from heliograph.core.time import Timestamp, format_span, from_datetime, parse_span
 
 
 class ConfigError(HeliographError):
@@ -346,6 +346,11 @@ class StreamConfig(BaseModel):
             )
         if self.gaps != "skip" and spec.size != finer:
             problems.append("bars built from bars skip gaps; carrying them is not offered yet")
+        if spec.size > finer and spec.grace >= spec.size - finer:
+            problems.append(
+                f"grace must be shorter than the bar less one of mounts.{self.mount}'s bars "
+                f"({format_span(spec.size - finer)}), or bars would wait on each other"
+            )
         if (self.price, self.volume) != ("price", "size"):
             problems.append(
                 "price and volume name a trade's values; bars built from bars use the bars' own"
@@ -458,6 +463,16 @@ class RunConfig(BaseModel):
                 continue
             if mount.kind == "bars":
                 problems += [f"{where}: {p}" for p in stream.on_bars(mount)]
+            # Only bars built here can be partial; a mount's own bars come whole.
+            cut = stream.bar_spec()
+            built = mount.kind == "trades" or stream.built_from(mount) is not None
+            for edge, moment in (("start", mount.start_ts), ("end", mount.end_ts)):
+                if built and moment is not None and cut.start_of(moment) != moment:
+                    problems.append(
+                        f"{where}: mounts.{stream.mount}'s {edge} falls inside a {stream.bars} "
+                        f"bar, which would be built from part of its data; put the {edge} "
+                        "on a whole bar"
+                    )
             key = mount.instrument.instrument().key
             sharing = by_instrument[key]
             if len(sharing) > 1:
@@ -481,7 +496,7 @@ class RunConfig(BaseModel):
     @model_validator(mode="after")
     def _components_read_what_exists(self) -> "RunConfig":
         problems = []
-        graces: dict[str, set[int]] = {}  # each graph node's inputs' graces, all the way down
+        nodes: set[str] = set()  # the graph nodes defined so far
         named: set[str] = set()
         exits: list[tuple[str, ComponentConfig]] = []
         for index, component in enumerate(self.components):
@@ -512,41 +527,31 @@ class RunConfig(BaseModel):
                 continue
             if not component.inputs:
                 problems.append(f"{where}: {_article(noun)} {noun} needs inputs")
-            read_graces: set[int] = set()
             for read in component.inputs:
-                found = self.stream_field(read)
-                if read in graces:
-                    read_graces |= graces[read]
-                elif found is not None:
-                    read_graces.add(found[1].bar_spec().grace)
-                else:
+                if read not in nodes and self.stream_field(read) is None:
                     problems.append(
                         f"{where}: reads {read!r}, which is neither an indicator, forecaster or "
                         "gate defined before it nor a stream's field (<mount>@<size>.<field>)"
                     )
-            if len(read_graces) > 1:
-                problems.append(
-                    f"{where}: reads streams of different grace; its inputs would close at "
-                    "different instants, so it would see one of them late"
-                )
-            graces[component.name] = read_graces
+            nodes.add(component.name)
         for where, component in exits:
             unknown = [
                 read
                 for read in component.inputs
-                if read not in graces and self.stream_field(read) is None
+                if read not in nodes and self.stream_field(read) is None
             ]
             if unknown:
                 problems.append(
                     f"{where}: reads {', '.join(map(repr, unknown))}; an exit reads indicators, "
                     "forecasters, gates or streams' fields"
                 )
-        problems += self._strategies_assemble(graces)
+        problems += self._strategies_assemble()
+        problems += self.misaligned(None)
         if problems:
             raise ValueError("; ".join(problems))
         return self
 
-    def _strategies_assemble(self, graces: Mapping[str, set[int]]) -> list[str]:
+    def _strategies_assemble(self) -> list[str]:
         problems = []
         kinds = {c.name: c.kind for c in self.components if c.name is not None}
         owner: dict[str, str] = {}
@@ -559,7 +564,6 @@ class RunConfig(BaseModel):
                 )
             strategy_names.add(strategy.name)
             found = self.stream_field(strategy.price)
-            read_graces: set[int] = set()
             if found is None:
                 problems.append(
                     f"{where}: price {strategy.price!r} is not a stream's field "
@@ -567,8 +571,6 @@ class RunConfig(BaseModel):
                 )
             elif found[2] == "volume":
                 problems.append(f"{where}: price {strategy.price!r} is a volume, not a price")
-            else:
-                read_graces.add(found[1].bar_spec().grace)
             if not strategy.forecasters:
                 problems.append(f"{where}: a strategy needs at least one forecaster")
             if strategy.combiner is None and len(strategy.forecasters) > 1:
@@ -585,25 +587,85 @@ class RunConfig(BaseModel):
                                 "a stage keeps state, so it serves one strategy"
                             )
                         owner.setdefault(name, strategy.name)
-                    read_graces |= graces.get(name, set())
-            for exit_name in strategy.exits:
-                for component in self.components:
-                    if component.name == exit_name:
-                        for read in component.inputs:
-                            field_ = self.stream_field(read)
-                            if field_ is not None:
-                                read_graces.add(field_[1].bar_spec().grace)
-                            read_graces |= graces.get(read, set())
-            if len(read_graces) > 1:
-                problems.append(
-                    f"{where}: reads streams of different grace; it would decide on values "
-                    "of different instants"
-                )
         for index, component in enumerate(self.components):
             if component.kind in STAGE_KINDS and component.name not in owner:
                 problems.append(
                     f"components[{index}] ({component.name}): no strategy uses this "
                     f"{component.kind.removesuffix('s').replace('_', ' ')}"
+                )
+        return problems
+
+    def misaligned(self, delays: Mapping[str, int] | None) -> list[str]:
+        """Graph nodes and strategies reading streams whose bars close at different times.
+
+        A stream's bar is known at its end plus its mount's ``delays`` (how
+        long after the fact the source's data arrives; 0 if not given) plus
+        its grace, for bars built from trades; bars of a mount of bars,
+        as they come or built from them, close on their last part, with no
+        grace. A node or strategy reading streams that close at different
+        offsets would read one of them a bar late (D27, D33). With ``delays``
+        None (the sources' are not known yet), only streams of one mount are
+        compared, since their delay is the same; a run compares the rest.
+        """
+        by_name = {c.name: c for c in self.components if c.name is not None}
+        found_streams: dict[str, set[tuple[str, str]]] = {}
+
+        def streams_of(ref: str) -> set[tuple[str, str]]:
+            field_ = self.stream_field(ref)
+            if field_ is not None:
+                mount, stream, _ = field_
+                return {(mount, stream.bars)}
+            if ref in found_streams:
+                return found_streams[ref]
+            component = by_name.get(ref)
+            reads: set[tuple[str, str]] = set()
+            if component is not None and component.kind in GRAPH_KINDS:
+                found_streams[ref] = reads  # a cycle cannot recurse forever
+                for read in component.inputs:
+                    reads |= streams_of(read)
+            return reads
+
+        def offset(key: tuple[str, str]) -> int:
+            mount_name, bars = key
+            mount = self.mounts[mount_name]
+            stream = next(s for s in self.streams if s.mount == mount_name and s.bars == bars)
+            grace = stream.bar_spec().grace if mount.kind == "trades" else 0
+            return (delays or {}).get(mount_name, 0) + grace
+
+        readers: list[tuple[str, set[tuple[str, str]]]] = []
+        for index, component in enumerate(self.components):
+            if component.kind in GRAPH_KINDS and component.name is not None:
+                where = f"components[{index}] ({component.plugin})"
+                readers.append((where, set().union(*map(streams_of, component.inputs))))
+        for index, strategy in enumerate(self.strategies):
+            reads = set(streams_of(strategy.price))
+            for name in (*strategy.forecasters, *strategy.gates):
+                reads |= streams_of(name)
+            for exit_name in strategy.exits:
+                exit_ = by_name.get(exit_name)
+                for read in exit_.inputs if exit_ is not None else ():
+                    reads |= streams_of(read)
+            readers.append((f"strategies[{index}] ({strategy.name})", reads))
+        problems = []
+        for where, reads in readers:
+            offsets = {
+                f"{mount}@{bars}": offset((mount, bars))
+                for mount, bars in sorted(reads)
+                if mount in self.mounts
+            }
+            if delays is None:
+                by_mount: dict[str, set[int]] = {}
+                for name, value in offsets.items():
+                    by_mount.setdefault(name.split("@")[0], set()).add(value)
+                if all(len(values) == 1 for values in by_mount.values()):
+                    continue
+            if len(set(offsets.values())) > 1:
+                detail = ", ".join(
+                    f"{k} {format_span(v) if v else '0s'}" for k, v in offsets.items()
+                )
+                problems.append(
+                    f"{where}: reads streams whose bars close at different times after their "
+                    f"end ({detail}), so it would read one of them a bar late"
                 )
         return problems
 

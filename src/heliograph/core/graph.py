@@ -18,8 +18,8 @@ input is updated once, in dependency order (an input before what reads it;
 nodes are only added after what they read, so the order they were added in
 is that order). So a 1h indicator reading a 4h one sees the 4h value ending
 at the same instant, never an older one and never a newer one, when the two
-streams close with the same grace; a run refuses indicators reading streams
-of different grace (docs/design.md, "Indicators on other timeframes").
+streams close at the same time after their end; a run refuses indicators
+reading streams that do not (``RunConfig.misaligned``, D35).
 
 Indicators are series, not formulas: an average of 20 closes needs every
 close, even one equal to the last. So a node passes a change on whenever it

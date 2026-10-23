@@ -3,8 +3,9 @@
 
 """Building time bars from points, closed on time by alarms.
 
-A bar is published when its interval ends (plus the spec's grace), whether or
-not another point arrives then. Points are assigned to bars by the time they
+A bar is published when its interval ends (plus the source's ``delay``, how
+long after the fact its data arrives, and the spec's grace), whether or not
+another point arrives then. Points are assigned to bars by the time they
 happened (``event_time``), in any order, and are accepted until their bar
 closes; a point arriving at or after that is late, is counted, and never
 changes a published bar. Each open bar closes at its own time, so a point
@@ -13,7 +14,8 @@ another bar back.
 
 The builder keeps one alarm, set to the earliest close it is waiting for.
 With ``gaps="skip"`` nothing is scheduled while no bar is open; with
-``"carry"`` a flat bar is due at every boundary after the first bar, forever.
+``"carry"`` a flat bar is due at every boundary after the first bar, until
+``ends`` (the end of the data, when it has one), or forever.
 """
 
 import math
@@ -54,6 +56,8 @@ class TimeBars:
     __slots__ = (
         "_bus",
         "_closed_up_to",
+        "_delay",
+        "_ends",
         "_key",
         "_last_close",
         "_late",
@@ -63,9 +67,21 @@ class TimeBars:
         "_stream",
     )
 
-    def __init__(self, stream: StreamSpec, bus: MessageBus, scheduler: Scheduler) -> None:
+    def __init__(
+        self,
+        stream: StreamSpec,
+        bus: MessageBus,
+        scheduler: Scheduler,
+        delay: int = 0,
+        *,
+        ends: int | None = None,
+    ) -> None:
         if stream.bars is None:
             raise InvalidValueError(f"stream {stream.key} has no bar spec to build")
+        if delay < 0:
+            raise InvalidValueError(f"stream {stream.key}: a delay cannot be negative")
+        self._delay = delay
+        self._ends = ends  # carrying stops at the end of the data, when it has one
         self._stream = stream
         self._spec: BarSpec = stream.bars
         self._bus = bus
@@ -85,7 +101,7 @@ class TimeBars:
         return self._late
 
     def _closes_at(self, start: Timestamp) -> Timestamp:
-        return Timestamp(start + self._spec.size + self._spec.grace)
+        return Timestamp(start + self._spec.size + self._delay + self._spec.grace)
 
     def _on_point(self, point: Point) -> None:
         if point.instrument != self._stream.instrument:
@@ -130,8 +146,10 @@ class TimeBars:
         """The start of the next interval to close: the next boundary when
         carrying, otherwise the earliest open bar."""
         earliest_open = min(self._open, default=None)
-        if self._spec.gaps == "carry" and self._closed_up_to is not None:
-            return self._closed_up_to
+        after = self._closed_up_to
+        carrying = self._spec.gaps == "carry" and after is not None
+        if carrying and (self._ends is None or after < self._ends):  # type: ignore[operator]
+            return after
         return earliest_open
 
     def _rearm(self) -> None:

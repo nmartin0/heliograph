@@ -332,3 +332,34 @@ def test_a_bar_closed_at_its_end_carries_no_separate_received_time() -> None:
     seen = collect(bus, clock)
     engine.run([point(10, 100)], until=Timestamp(2 * HOUR))
     assert [bar.received_at for _, bar in seen] == [None, HOUR + 2 * MIN]
+
+
+def test_a_source_known_late_closes_its_bars_later_by_its_delay() -> None:
+    """Trades known a minute after they happen: the bar waits a minute past its end for
+    them, so its last minute is in it (without the delay it would have been late)."""
+    w = world()
+    spec = StreamSpec(instrument=BTC, bars=BarSpec.of("1h"))
+    builder = TimeBars(spec, w.bus, w.engine.scheduler, delay=MIN)
+    seen = collect(w.bus, w.clock)
+    trades = [point(10, 100, delay=1), point(59.5, 150, delay=1), point(70, 120, delay=1)]
+    w.engine.run(trades, until=Timestamp(3 * HOUR))
+    first = seen[0]
+    assert (first[0], first[1].close, first[1].received_at) == (HOUR + MIN, 150, HOUR + MIN)
+    assert builder.late_points == 0
+
+
+def test_a_negative_delay_is_refused() -> None:
+    w = world()
+    with pytest.raises(InvalidValueError, match="a delay cannot be negative"):
+        TimeBars(StreamSpec(instrument=BTC, bars=BarSpec.of("1h")), w.bus, w.engine.scheduler, -1)
+
+
+def test_carried_bars_stop_at_the_end_of_the_data() -> None:
+    """Data to 03:00 and a run going on to 05:00 (another source's delay): no flat bars
+    for 03:00 and 04:00, which lie past what this stream's data covers."""
+    w = world()
+    spec = StreamSpec(instrument=BTC, bars=BarSpec.of("1h", gaps="carry"))
+    TimeBars(spec, w.bus, w.engine.scheduler, ends=3 * HOUR)
+    seen = collect(w.bus, w.clock)
+    w.engine.run([point(10, 100), point(70, 101)], until=Timestamp(5 * HOUR))
+    assert [bar.start // HOUR for _, bar in seen] == [0, 1, 2]

@@ -401,3 +401,62 @@ def test_a_source_that_fails_to_close_does_not_leave_the_others_open(
     alone = f'[mounts.btc]\nsource = "closes_badly"\n{noted}kind = "trades"\n{SPAN}{INSTRUMENT}'
     with pytest.raises(OSError, match="socket already gone"):  # no run error: the close's
         run(alone, registry, tmp_path / "alone.sqlite")
+
+
+def test_a_mount_known_late_still_builds_whole_bars_from_its_trades(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """Trades known 5 minutes late and no grace: the 02:59 trade, known at 03:04, is still
+    in the 02:00 bar, which closes at 03:05 (it once closed at 03:00 and lost it)."""
+    path = trades_csv(tmp_path)
+    text = file_config(path, HOURLY)
+    text = text.replace(f"path = {str(path)!r} }}", f'path = {str(path)!r}, live_delay = "5m" }}')
+    journal = tmp_path / "run.sqlite"
+    run(text, registry, journal)
+    bars = [e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Bar)]
+    assert [b.close for b in bars] == [104, 101, 103]
+    assert [(b.ts - b.end) // 60_000_000_000 for b in bars] == [5, 5, 5]
+
+
+def test_an_indicator_reading_mounts_known_after_different_delays_is_refused_at_the_start(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """BTC known at once, ETH five minutes late: a node reading both hourly streams would
+    read each ETH bar against the next BTC one. Only the run knows the sources' delays."""
+    registry.discover("indicators")
+    path = trades_csv(tmp_path)
+    eth = INSTRUMENT.replace("mounts.btc", "mounts.eth").replace("BTC/USD", "ETH/USD")
+    text = (
+        file_config(path, HOURLY)
+        + '\n[mounts.eth]\nsource = "file"\n'
+        + f'params = {{ path = {str(path)!r}, live_delay = "5m" }}\n'
+        + f'kind = "trades"\n{SPAN}{eth}'
+        + '\n[[streams]]\nmount = "eth"\nbars = "1h"\n'
+        + '\n[[components]]\nkind = "indicators"\nplugin = "atr"\nname = "both"\n'
+        + 'inputs = ["btc@1h.high", "btc@1h.low", "eth@1h.close"]\n'
+    )
+    journal = tmp_path / "run.sqlite"
+    with pytest.raises(ConfigError, match=r"btc@1h 0s, eth@1h 5m"):
+        run(text, registry, journal)
+    assert not journal.exists()
+
+
+def test_a_journal_from_before_bars_waited_for_delays_replays_as_it_ran(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """A journal whose header names no bar rules (before D35) is replayed with the old
+    ones, under which the 02:59 trade, known at 03:04, missed its 03:00 close."""
+    path = trades_csv(tmp_path)
+    text = file_config(path, HOURLY)
+    text = text.replace(f"path = {str(path)!r} }}", f'path = {str(path)!r}, live_delay = "5m" }}')
+    journal = tmp_path / "run.sqlite"
+    run(text, registry, journal)
+    assert read_header(journal)["bars"] == "2"
+    with sqlite3.connect(journal) as db:  # as an older Heliograph wrote it
+        db.execute("DELETE FROM header WHERE key = 'bars'")
+    db.close()
+    replayed = replay_backtest(journal, tmp_path / "replay.sqlite", registry)
+    bars = [
+        e.message for e in read_entries(replayed.journal, JOURNALLED) if isinstance(e.message, Bar)
+    ]
+    assert [b.close for b in bars] == [104, 101, 107]

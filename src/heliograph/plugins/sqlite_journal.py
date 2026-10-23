@@ -32,7 +32,7 @@ from heliograph.core.messages import FrozenValues, Message
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 FORMAT = 1
-RESERVED_HEADER = frozenset({"format", "msgspec", "status"})
+RESERVED_HEADER = frozenset({"format", "msgspec", "status", "late"})
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS header (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -58,6 +58,9 @@ def _encode_hook(value: object) -> object:
 
 
 _ENCODER = msgspec.json.Encoder(enc_hook=_encode_hook, order="deterministic")
+
+
+_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 
 
 class SqliteJournalParams(Params):
@@ -106,6 +109,13 @@ class SqliteJournal(Plugin[SqliteJournalParams]):
 
     def append(self, entry: JournalEntry) -> None:
         message = entry.message
+        if not _INT64_MIN <= message.ts <= _INT64_MAX:
+            # Refused here, so the run fails at this message rather than when its
+            # batch is written, which would lose the batch.
+            raise InvalidValueError(
+                f"a {type(message).__name__} stamped {message.ts} cannot be journalled: "
+                "SQLite holds 64-bit integers"
+            )
         payload = _ENCODER.encode(message)
         self._pending.append(
             (entry.seq, entry.origin, type_name(type(message)), message.ts, payload)
@@ -120,22 +130,55 @@ class SqliteJournal(Plugin[SqliteJournalParams]):
             self._db.commit()
             self._pending.clear()
 
+    def record(self, key: str, value: str) -> None:
+        """Record ``value`` under ``key`` in the header: an outcome known only at the end.
+
+        Raises:
+            InvalidValueError: for a key the journal writes itself, other than ``late``.
+        """
+        if key in RESERVED_HEADER - {"late"}:
+            raise InvalidValueError(f"journal header key {key!r} is the journal's own")
+        self._db.execute("INSERT OR REPLACE INTO header VALUES (?, ?)", (key, value))
+        self._db.commit()
+
     def close(self, status: str = "complete") -> None:
-        """Write what is buffered, record ``status`` and close the file."""
+        """Write what is buffered, record ``status`` and close the file.
+
+        If what is buffered cannot be written (a full disk, say), the journal
+        is still closed and marked failed, saying so, and the error is raised
+        when the run had otherwise completed; a run that had already failed
+        keeps its own error. On a disk too full even for the status, the
+        journal is left marked "running", which a replay refuses as it
+        refuses any run that did not finish.
+        """
         if self._closed:
             return
+        error: Exception | None = None
+        completed = status == "complete"
         try:
-            self.flush()
-            self._db.execute("UPDATE header SET value = ? WHERE key = 'status'", (status,))
-            self._db.commit()
+            try:
+                self.flush()
+            except Exception as exc:  # recorded, and raised below
+                error = exc
+                self._pending.clear()
+                note = f"its last entries could not be written: {type(exc).__name__}: {exc}"
+                status = f"failed: {note}" if completed else f"{status} ({note})"
+            try:
+                self._db.execute("UPDATE header SET value = ? WHERE key = 'status'", (status,))
+                self._db.commit()
+            except sqlite3.Error as exc:  # no room even for that
+                error = error or exc
             # Back to a single file: a reader (read-only, so it cannot tidy up) would
             # otherwise leave -wal and -shm files beside a finished journal. Only
             # tidying: while another connection has the file open, it stays in WAL.
-            with contextlib.suppress(sqlite3.OperationalError):
+            with contextlib.suppress(sqlite3.Error):
                 self._db.execute("PRAGMA journal_mode=DELETE")
         finally:
-            self._db.close()
+            with contextlib.suppress(sqlite3.Error):
+                self._db.close()
             self._closed = True
+        if error is not None and completed:
+            raise error  # a run that had failed already keeps its own error
 
     def __enter__(self) -> Self:
         return self

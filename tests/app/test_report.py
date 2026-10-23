@@ -3,6 +3,8 @@
 
 """A run with simulated fills, and its report, against figures worked out by hand."""
 
+import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,7 @@ from heliograph.plugins.sqlite_journal import (
     SqliteJournal,
     SqliteJournalParams,
     read_entries,
+    read_header,
 )
 from tests.app.test_run_strategies import HOUR, START, component, config, run, strategy
 from tests.support.plugins import Units
@@ -207,3 +210,18 @@ def test_closes_doubted_are_counted_apart_from_signals_refused(
     _, (one,) = figures(journal)
     assert (one.doubted, one.refused) == (1, 0)
     assert "  closes doubted        1\n" in report(journal)
+
+
+def test_late_data_a_run_left_out_is_recorded_and_reported(
+    tmp_path: Path, registry: Registry
+) -> None:
+    journal = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, journal)
+    assert json.loads(read_header(journal)["late"]) == {"btc@1h": 0}
+    assert "LATE" not in report(journal)  # nothing left out, nothing said
+    with sqlite3.connect(journal) as db:  # as if three trades had come after their bar
+        db.execute("UPDATE header SET value = ? WHERE key = 'late'", ('{"btc@1h":3}',))
+    db.close()
+    assert report(journal).splitlines()[2] == (
+        "LATE DATA LEFT OUT (after its bar closed): btc@1h 3"
+    )

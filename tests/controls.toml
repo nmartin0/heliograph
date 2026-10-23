@@ -111,8 +111,8 @@ tests = [
 [[control]]
 describes = "a bar waits its grace for points that happened before its end"
 path = "src/heliograph/core/bars.py"
-old = "        return Timestamp(start + self._spec.size + self._spec.grace)\n"
-new = "        return Timestamp(start + self._spec.size)\n"
+old = "        return Timestamp(start + self._spec.size + self._delay + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size + self._delay)\n"
 tests = ["tests/core/test_bars.py::test_grace_waits_for_points_that_happened_before_the_end"]
 
 [[control]]
@@ -1109,8 +1109,8 @@ tests = ["tests/app/test_run.py::test_a_backtest_on_a_published_snapshot_journal
 [[control]]
 describes = "a run's streams build their bars into the journal"
 path = "src/heliograph/app/run.py"
-old = "            TimeBars(spec, bus, engine.scheduler)\n"
-new = "            assert spec\n"
+old = "                builders[name] = TimeBars(\n"
+new = "                builders[name] = None and TimeBars(\n"
 tests = ["tests/app/test_run.py::test_a_backtest_on_a_published_snapshot_journals_its_trades_and_bars"]
 
 [[control]]
@@ -1308,8 +1308,8 @@ tests = ["tests/app/test_run_indicators.py::test_a_replay_refuses_an_indicator_o
 [[control]]
 describes = "an indicator reads only indicators defined before it or streams' fields"
 path = "src/heliograph/app/config.py"
-old = "                    read_graces.add(found[1].bar_spec().grace)\n                else:\n"
-new = "                    read_graces.add(found[1].bar_spec().grace)\n                elif False:\n"
+old = "            for read in component.inputs:\n                if read not in nodes and self.stream_field(read) is None:\n"
+new = "            for read in component.inputs:\n                if False:\n"
 tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_what_does_not_exist_is_refused_when_read"]
 
 [[control]]
@@ -1334,11 +1334,11 @@ new = "                    component.name, indicator, list(component.inputs)\n"
 tests = ["tests/app/test_run_indicators.py::test_two_spellings_of_one_stream_field_read_the_same_input"]
 
 [[control]]
-describes = "an indicator reading streams of different grace is refused"
+describes = "an indicator reading streams that close at different times is refused"
 path = "src/heliograph/app/config.py"
-old = "            if len(read_graces) > 1:\n                problems.append(\n                    f\"{where}: reads streams of different grace; its inputs"
-new = "            if len(read_graces) > 2:\n                problems.append(\n                    f\"{where}: reads streams of different grace; its inputs"
-tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_streams_of_different_grace_is_refused"]
+old = "            if len(set(offsets.values())) > 1:\n"
+new = "            if False:\n"
+tests = ["tests/app/test_run_indicators.py::test_an_indicator_reading_streams_that_close_at_different_times_is_refused"]
 
 [[control]]
 describes = "a mount's name can be read back in a stream field"
@@ -1775,11 +1775,11 @@ new = "            if False:\n"
 tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assembled_is_refused_when_read"]
 
 [[control]]
-describes = "a strategy reading streams of different grace is refused"
+describes = "a strategy reading streams that close at different times is refused"
 path = "src/heliograph/app/config.py"
-old = "            if len(read_graces) > 1:\n                problems.append(\n                    f\"{where}: reads streams of different grace; it would"
-new = "            if len(read_graces) > 2:\n                problems.append(\n                    f\"{where}: reads streams of different grace; it would"
-tests = ["tests/app/test_run_strategies.py::test_a_strategy_reading_streams_of_different_grace_is_refused"]
+old = "            reads = set(streams_of(strategy.price))\n"
+new = "            reads: set[tuple[str, str]] = set()\n"
+tests = ["tests/app/test_run_strategies.py::test_a_strategy_reading_streams_that_close_at_different_times_is_refused"]
 
 [[control]]
 describes = "a combiner weighting other forecasters is refused before the run"
@@ -1945,8 +1945,8 @@ tests = ["tests/app/test_run_strategies.py::test_a_strategy_that_cannot_be_assem
 [[control]]
 describes = "an exit may read a stream's field"
 path = "src/heliograph/app/config.py"
-old = "                if read not in graces and self.stream_field(read) is None\n"
-new = "                if read not in graces\n"
+old = "                for read in component.inputs\n                if read not in nodes and self.stream_field(read) is None\n"
+new = "                for read in component.inputs\n                if read not in nodes\n"
 tests = ["tests/app/test_run_strategies.py::test_an_exit_may_read_a_streams_field"]
 
 [[control]]
@@ -2194,7 +2194,7 @@ tests = ["tests/plugins/test_registry.py::test_with_no_kinds_named_every_install
 [[control]]
 describes = "a journal closes though another connection has it open"
 path = "src/heliograph/plugins/sqlite_journal.py"
-old = "            with contextlib.suppress(sqlite3.OperationalError):\n                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
+old = "            with contextlib.suppress(sqlite3.Error):\n                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
 new = "            self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
 tests = ["tests/plugins/test_sqlite_journal.py::test_a_journal_closes_while_another_reader_has_it_open"]
 
@@ -2357,7 +2357,7 @@ tests = ["tests/app/test_streams_config.py::test_a_stream_on_bars_is_the_bars_th
 [[control]]
 describes = "a run builds bars from bars"
 path = "src/heliograph/app/run.py"
-old = "                BarsFromBars(spec, finer, bus, engine.scheduler, delay)\n"
+old = "                builders[name] = BarsFromBars(spec, finer, bus, engine.scheduler, delay)\n"
 new = "                pass\n"
 tests = ["tests/app/test_run_bar_streams.py::test_hours_are_built_from_quarters_when_their_last_quarter_is_known"]
 
@@ -2378,8 +2378,8 @@ tests = ["tests/core/test_bars_from_bars.py::test_a_source_known_late_moves_the_
 [[control]]
 describes = "a run gives the builder its mount's delay"
 path = "src/heliograph/app/run.py"
-old = "                delay = delays.get(stream.mount, 0)\n"
-new = "                delay = 0\n"
+old = "            delay = delays.get(stream.mount, 0)\n"
+new = "            delay = 0\n"
 tests = ["tests/app/test_run_bar_streams.py::test_a_mount_known_late_still_builds_whole_hours_and_replays"]
 
 [[control]]
@@ -2580,3 +2580,118 @@ path = "src/heliograph/app/report.py"
 old = "            if message.doubted:\n"
 new = "            if False:\n"
 tests = ["tests/app/test_report.py::test_closes_doubted_are_counted_apart_from_signals_refused"]
+
+# -- F2: bars and timing (the review of 2026-10-23) ----------------------------------------
+
+[[control]]
+describes = "a mount's start and end are on whole bars of each stream built from it"
+path = "src/heliograph/app/config.py"
+old = "                if built and moment is not None and cut.start_of(moment) != moment:\n"
+new = "                if False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_mount_starting_or_ending_inside_a_bar_built_from_it_is_refused"]
+
+[[control]]
+describes = "a built stream's grace is shorter than the bar less one part"
+path = "src/heliograph/app/config.py"
+old = "        if spec.size > finer and spec.grace >= spec.size - finer:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_built_stream_whose_grace_would_make_bars_wait_on_each_other_is_refused"]
+
+[[control]]
+describes = "bars built from bars close at their end, whatever their grace"
+path = "src/heliograph/app/config.py"
+old = "            grace = stream.bar_spec().grace if mount.kind == \"trades\" else 0\n"
+new = "            grace = stream.bar_spec().grace\n"
+tests = ["tests/app/test_streams_config.py::test_streams_that_close_together_may_be_read_together"]
+
+[[control]]
+describes = "a mount's delay moves when its streams' bars close"
+path = "src/heliograph/app/config.py"
+old = "            return (delays or {}).get(mount_name, 0) + grace\n"
+new = "            return grace\n"
+tests = ["tests/app/test_streams_config.py::test_mounts_known_after_different_delays_cannot_be_read_together", "tests/app/test_run.py::test_an_indicator_reading_mounts_known_after_different_delays_is_refused_at_the_start"]
+
+[[control]]
+describes = "a run checks its streams' closes with its sources' delays"
+path = "src/heliograph/app/run.py"
+old = "    misaligned = config.misaligned(delays)\n"
+new = "    misaligned = config.misaligned({})\n"
+tests = ["tests/app/test_run.py::test_an_indicator_reading_mounts_known_after_different_delays_is_refused_at_the_start"]
+
+[[control]]
+describes = "bars built from trades wait for the source's delay"
+path = "src/heliograph/core/bars.py"
+old = "        return Timestamp(start + self._spec.size + self._delay + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size + self._spec.grace)\n"
+tests = ["tests/core/test_bars.py::test_a_source_known_late_closes_its_bars_later_by_its_delay", "tests/app/test_run.py::test_a_mount_known_late_still_builds_whole_bars_from_its_trades"]
+
+[[control]]
+describes = "a journal whose entries cannot be written is marked failed"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "                status = f\"failed: {note}\" if completed else f\"{status} ({note})\"\n"
+new = "                pass\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_entries_that_cannot_be_written_mark_the_journal_failed_and_say_so", "tests/plugins/test_sqlite_journal.py::test_a_run_that_failed_keeps_its_own_error_when_its_entries_cannot_be_written"]
+
+[[control]]
+describes = "a write that failed a completed run is raised"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "            raise error  # a run that had failed already keeps its own error\n"
+new = "            pass\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_entries_that_cannot_be_written_mark_the_journal_failed_and_say_so"]
+
+[[control]]
+describes = "a stamp SQLite cannot hold is refused when the entry is added"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "        if not _INT64_MIN <= message.ts <= _INT64_MAX:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_stamp_sqlite_cannot_hold_is_refused_when_the_entry_is_added"]
+
+[[control]]
+describes = "a run records the late data it left out"
+path = "src/heliograph/app/run.py"
+old = "        sink.record(\"late\", json.dumps(late, sort_keys=True, separators=(\",\", \":\")))\n"
+new = ""
+tests = ["tests/app/test_report.py::test_late_data_a_run_left_out_is_recorded_and_reported"]
+
+[[control]]
+describes = "the report says what late data was left out"
+path = "src/heliograph/app/report.py"
+old = "    if late:\n"
+new = "    if False:\n"
+tests = ["tests/app/test_report.py::test_late_data_a_run_left_out_is_recorded_and_reported"]
+
+[[control]]
+describes = "a mount's own bars may start where its exchange starts them"
+path = "src/heliograph/app/config.py"
+old = "            built = mount.kind == \"trades\" or stream.built_from(mount) is not None\n"
+new = "            built = True\n"
+tests = ["tests/app/test_streams_config.py::test_a_mounts_own_bars_may_start_where_its_exchange_starts_them"]
+
+[[control]]
+describes = "streams of different mounts are compared only once their delays are known"
+path = "src/heliograph/app/config.py"
+old = "                if all(len(values) == 1 for values in by_mount.values()):\n"
+new = "                if False:\n"
+tests = ["tests/app/test_streams_config.py::test_mounts_of_different_kinds_are_compared_only_once_their_delays_are_known"]
+
+[[control]]
+describes = "carried bars stop at the end of the data"
+path = "src/heliograph/core/bars.py"
+old = "        if carrying and (self._ends is None or after < self._ends):  # type: ignore[operator]\n"
+new = "        if carrying:\n"
+tests = ["tests/core/test_bars.py::test_carried_bars_stop_at_the_end_of_the_data"]
+
+[[control]]
+describes = "a journal from before D35 replays under the rules it ran under"
+path = "src/heliograph/app/run.py"
+old = "        rules_2 = int(header.get(\"bars\", \"1\")) >= int(BARS_RULES)\n"
+new = "        rules_2 = True\n"
+tests = ["tests/app/test_run.py::test_a_journal_from_before_bars_waited_for_delays_replays_as_it_ran"]
+
+[[control]]
+describes = "a failed status write does not hide a failed run's own error"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "            except sqlite3.Error as exc:  # no room even for that\n"
+new = "            except ZeroDivisionError as exc:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_on_a_disk_too_full_for_the_status_a_failed_run_keeps_its_own_error"]
+
