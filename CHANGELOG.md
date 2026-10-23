@@ -231,6 +231,20 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- The CCXT source offers trade history only from exchanges known to page it
+  by time (Kraken; `trust_since` for others): many answer with their newest
+  trades, which returned partial history silently. Candles off their grid
+  (Kraken's "2w" is 15 days) are refused, and such timeframes not offered;
+  temporary errors are retried (`retries`, waiting longer each time from
+  `backoff`), permanent ones reported as such, and an exchange's DDoS ban
+  is never retried; every source on one exchange shares one throttle.
+- No source may send a bar crossing its request's end; a mount that
+  delivers nothing fails the run unless it sets `allow_empty`.
+- The store replaces only what a re-download could deliver (whole bars),
+  and refuses to publish a download that does not give back the rows its
+  interval held (more than one in a hundred missing), unless the owner
+  accepts it. Snapshots record
+  the cleaning rules they were made under, and older ones still verify.
 - Bars built from trades wait for their source's delay: a source whose
   trades arrive late lost the end of every bar.
 - A mount's start and end must lie on whole bars of each stream built from

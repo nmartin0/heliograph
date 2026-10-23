@@ -150,13 +150,19 @@ candles.
       candles (D33, D5). Carrying gaps in bars built from bars waits until a
       strategy needs it.
 - Fixes from the review of everything built (2026-10-23), in three
-  batches: F1 signals (D34) done; F2 bars and timing (D35) done; F3
-  sources and the store.
+  batches: F1 signals (D34), F2 bars and timing (D35) and F3 sources
+  and the store (D36), all done.
 - Open, from the review of F1: a doubted price reaches the graph's nodes
   (a forecaster, an ATR a stop reads) before any risk gate can doubt it;
   a sanity filter on bars in front of the graph would keep it out.
-- Open, found in D5's review: CCXT names Kraken's 15-day candles `2w`,
-  which reads as 14 days (F3).
+- Open, from the review of the sources: data "known at" its end is not
+  yet bitemporal (a vendor's later correction replaces what was known);
+  datasets ignore a source's parameters, so two files for one instrument
+  merge; history may end at "now", so a candle still forming could slip
+  through on a skewed clock; a missing store snapshot is reported apart
+  from other mount problems; CCXT reports HTTP 400, 403, 404 and 451 as
+  an exchange being unavailable, so a geo-block is retried before it
+  fails. More exchanges' trade history, once a live test checks each.
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
 - [x] Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate;
@@ -211,8 +217,8 @@ code written for it.
   settled instant as final); SIGTERM must flush and close the journal;
   live alarms must fire and settle before each input, as the backtest
   engine does, so a live day replays; Kraken's websocket replays its last
-  50 trades on each subscribe, trade ids are dropped, and nothing
-  reconnects; a person's took-it or skipped answer must reach the
+  50 trades on each subscribe, trade ids are dropped, nothing reconnects,
+  and a live trade without a time is a TypeError; a person's took-it or skipped answer must reach the
   strategy's position held; stage objects keep state, so optimisation
   must build them afresh per run (Phase 5).
 

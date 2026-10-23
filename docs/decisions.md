@@ -673,3 +673,72 @@ check beside it (two rules for one property, and the first was wrong for
 built bars); journalling late counts as messages during the run (only the
 end knows the total, and the header is where a run's outcome is).
 
+## D36 · Sources are trusted only as far as they are known; the store refuses a short re-download (2026-10-23)
+
+From the review of everything built, for getting data in:
+
+- **Trade history only from exchanges known to page it by time.** Many
+  exchanges' `fetch_trades` ignore `since` and answer with their newest
+  trades (58 in CCXT 4.5, Bybit, KuCoin, Bitstamp and Coinbase Exchange
+  among them): paging them returned a fraction of the history, or nothing,
+  with no error. The CCXT source offers trade history only for
+  `PAGES_TRADES_BY_TIME` (Kraken, which the live tests check), or with
+  `trust_since` set; candles page by time everywhere and stay available.
+  The source's capabilities say why trade history is withheld, and a
+  mount asking for it is told. The live tests ask each exchange in
+  `PAGES_TRADES_BY_TIME` for trades from hours back and check the answer
+  starts there.
+- **Candles must sit on one grid.** CCXT names some timeframes for what
+  they are not (Kraken's `2w` is 15 days): candles not a whole number of
+  sizes apart are refused, and a timeframe whose own value (in minutes or
+  seconds) is another size is not offered at all. The grid is the
+  exchange's, not 1970's (weekly candles start on Mondays).
+- **Temporary errors are retried; permanent ones say so.** A time-out, a
+  rate limit or an outage is tried again `retries` (3) times through the
+  throttle, waiting `backoff` (2 s) before the first retry and twice as
+  long before each after, up to a minute, before the run fails; a bad symbol, an
+  unsupported or rejected request or a refused key is `InvalidValueError`
+  at once, live as in history. An exchange that thinks it is attacked
+  (Binance's 418) is never asked again: its ban grows with each request.
+- **One exchange, one rate limit.** Sources that declare the same
+  `rate_key` (every CCXT source on one exchange, whatever its other
+  parameters) share one throttle.
+- **No bar crosses its request's end.** The file and store sources stop
+  before such a bar, as CCXT's did, and the history feed refuses one from
+  any source.
+- **A mount that delivers nothing fails the run.** A wrong time unit put
+  every row of a file in 1970 and the run "succeeded" on nothing. A mount
+  whose quiet span is expected sets `allow_empty`.
+- **The store refuses a short re-download.** A later download replaces
+  what it could have delivered (for bars, only the bars whole within its
+  interval), and publishing refuses a download that left more than one in
+  a hundred of the most rows its interval had held without a row it
+  brought at the same time (an exchange answering with its newest rows,
+  one that stopped paging halfway, one that skipped rows or stopped
+  sending empty bars), naming it: a source that answered short would
+  otherwise erase good data while the snapshot still claimed the whole
+  span. A source asked again gives back what it gave before, so rows are
+  matched, not counted or compared by span, which let a quarter of an
+  interval, or every other trade, go. Measuring against the most ever
+  held, not the rows replaced, means neither the same short answer given
+  twice nor a run of re-downloads each a little shorter wears data away.
+  A short download counts only if its interval still stands short at the
+  end, so one later downloaded again in full is published. When the
+  source really holds fewer now, the owner publishes accepting that
+  download, which later downloads of its interval are then measured
+  against; the manifest records only acceptances that were needed, and
+  an unknown id is refused.
+- **Cleaning rules are versioned.** The rules above changed what a
+  snapshot holds, so a snapshot records the rules it was cleaned under
+  (`RULES`, apart from the file `FORMAT`) and is verified and rebuilt
+  under them; a snapshot published before keeps its id and still verifies.
+
+**Why:** each was data missing or wrong without a word, or a run lost to a
+moment's outage.
+
+**Rejected:** detecting an exchange that ignores `since` from its answers
+(a quiet market looks the same); dropping off-grid candles (they are
+another size, not noise); keeping the rows a re-download did not bring
+(a vendor's correction may delete); retrying inside the app's throttle for
+every source (only the source knows which errors are temporary).
+

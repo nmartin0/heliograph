@@ -320,6 +320,7 @@ params = { path = "data/btc-usd.parquet", live_delay = "1s" }
 kind = "trades"                 # or "bars", with bar_size = "1m"
 start = 2026-09-01T00:00:00Z    # a backtest needs both; live data has neither
 end = 2026-10-01T00:00:00Z
+# allow_empty = true            # else a mount that delivers nothing fails the run
 
 [mounts.btc.instrument]
 symbol = "BTC/USD"
