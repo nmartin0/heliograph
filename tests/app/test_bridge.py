@@ -305,3 +305,26 @@ def test_the_fake_source_is_a_data_source() -> None:
 
     source: DataSource = ScriptedSource()
     assert source.capabilities is TRADES
+
+
+def test_a_bar_ending_after_the_request_does_is_refused(loop: SourceLoop) -> None:
+    """A source must send only bars whole within the request: the 1:00-2:00 bar is not
+    within one ending at 1:30."""
+    caps = Capabilities(history=frozenset({"bars"}), bar_sizes=frozenset({HOUR}))
+    source = ScriptedSource(
+        history_messages=[flat_bar(0, HOUR), flat_bar(HOUR, 2 * HOUR)], caps=caps
+    )
+    request = HistoryRequest(
+        instrument=BTC, kind="bars", start=Timestamp(0), end=Timestamp(90 * MIN), bar_size=HOUR
+    )
+    with HistoryFeed(loop, source, request) as feed:
+        with pytest.raises(InvalidValueError, match="a bar must be whole within it"):
+            list(feed)
+        assert feed.delivered == 1
+
+
+def test_a_feed_counts_what_its_source_delivered(loop: SourceLoop) -> None:
+    source = ScriptedSource(history_messages=[trade(1), trade(2), trade(3)])
+    with HistoryFeed(loop, source, WHOLE_DAY) as feed:
+        list(feed)
+        assert feed.delivered == 3

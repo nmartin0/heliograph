@@ -460,3 +460,34 @@ def test_a_journal_from_before_bars_waited_for_delays_replays_as_it_ran(
         e.message for e in read_entries(replayed.journal, JOURNALLED) if isinstance(e.message, Bar)
     ]
     assert [b.close for b in bars] == [104, 101, 107]
+
+
+def test_a_mount_that_delivers_nothing_fails_the_run(tmp_path: Path, registry: Registry) -> None:
+    """Trades in milliseconds read as microseconds land in 1970: nothing in the span. A run
+    on nothing would look like a quiet market; it fails, saying which mount."""
+    path = tmp_path / "btc.csv"
+    path.write_text("time,price,size\n1791000000000,100,1\n1791000060000,101,1\n")
+    params = f'{{ path = {str(path)!r}, time_unit = "us" }}'
+    text = (
+        f'[mounts.btc]\nsource = "file"\nparams = {params}\nkind = "trades"\n'
+        f"{SPAN}{INSTRUMENT}{HOURLY}"
+    )
+    journal = tmp_path / "run.sqlite"
+    with pytest.raises(InvalidValueError, match=r"mounts\.btc delivered nothing between"):
+        run(text, registry, journal)
+    assert read_header(journal)["status"].startswith("failed: InvalidValueError: mounts.btc")
+
+
+def test_a_mount_whose_quiet_span_is_expected_may_deliver_nothing(
+    tmp_path: Path, registry: Registry
+) -> None:
+    path = tmp_path / "btc.csv"
+    path.write_text("time,price,size\n1791000000000,100,1\n")
+    params = f'{{ path = {str(path)!r}, time_unit = "us" }}'
+    text = (
+        f'[mounts.btc]\nsource = "file"\nparams = {params}\nkind = "trades"\n'
+        f"allow_empty = true\n{SPAN}{INSTRUMENT}{HOURLY}"
+    )
+    journal = tmp_path / "run.sqlite"
+    run(text, registry, journal)
+    assert read_header(journal)["status"] == "complete"

@@ -234,8 +234,8 @@ tests = ["tests/core/test_sources.py::test_every_reason_a_request_cannot_be_serv
 [[control]]
 describes = "the bridge stamps history with the source's delay"
 path = "src/heliograph/app/bridge.py"
-old = "return known_in_history(self._checked(message), self._delay)"
-new = "return self._checked(message)"
+old = "        known = known_in_history(self._checked(message), self._delay)\n"
+new = "        known = self._checked(message)\n"
 tests = ["tests/app/test_bridge.py::test_history_is_stamped_with_the_sources_declared_delay"]
 
 [[control]]
@@ -576,13 +576,12 @@ path = "src/heliograph/app/mounts.py"
 old = """    if problems:
         raise ConfigError("\\n".join(problems))
 
-    for source in instances.values():
-        source.bind(RateThrottle(source.capabilities, clock, sleep))
 """
-new = """    for source in instances.values():
-        source.bind(RateThrottle(source.capabilities, clock, sleep))
-    if problems:
+new = """    if problems:
+        for source in instances.values():
+            source.bind(RateThrottle(source.capabilities, clock, sleep))
         raise ConfigError("\\n".join(problems))
+
 """
 tests = ["tests/app/test_mounts.py::test_when_any_mount_has_a_problem_no_source_is_bound"]
 
@@ -616,8 +615,8 @@ tests = [
 [[control]]
 describes = "a file's row at the request's end is not delivered"
 path = "src/heliograph/plugins/file_source.py"
-old = "if happened >= request.end:"
-new = "if happened > request.end:"
+old = "                    if happened >= request.end or (\n"
+new = "                    if happened > request.end or (\n"
 tests = [
     "tests/plugins/test_file_source.py::test_a_file_yields_its_trades_in_the_requested_interval_for_the_requested_instrument",
 ]
@@ -625,11 +624,9 @@ tests = [
 [[control]]
 describes = "a file is read no further than the request's end"
 path = "src/heliograph/plugins/file_source.py"
-old = """                    if happened >= request.end:
-                        return
+old = """                        return  # past the request, or a bar not whole within it
 """
-new = """                    if happened >= request.end:
-                        continue
+new = """                        continue  # past the request, or a bar not whole within it
 """
 tests = ["tests/plugins/test_file_source.py::test_reading_stops_at_the_first_row_past_the_end"]
 
@@ -824,8 +821,8 @@ tests = ["tests/plugins/test_static_instruments.py::test_two_instruments_with_on
 [[control]]
 describes = "a later download replaces what an earlier one said about its interval"
 path = "src/heliograph/plugins/store.py"
-old = "        kept = [k for k in kept if not download.start <= k.time < download.end]\n"
-new = "        kept = [k for k in kept if True]\n"
+old = "            staying = [k for k in kept if not _replaces(download, k.time, whole)]\n"
+new = "            staying = [k for k in kept if True]\n"
 tests = ["tests/plugins/test_store.py::test_a_later_download_replaces_what_an_earlier_said_about_its_interval"]
 
 [[control]]
@@ -915,8 +912,8 @@ tests = ["tests/plugins/test_store.py::test_the_store_source_refuses_what_the_sn
 [[control]]
 describes = "the store source delivers the request's interval only"
 path = "src/heliograph/plugins/store.py"
-old = "                    if happened >= request.end:\n                        return\n"
-new = "                    if happened >= request.end + 10**12:\n                        return\n"
+old = "                    if happened >= request.end or (\n"
+new = "                    if happened >= request.end + 10**12 or (\n"
 tests = ["tests/plugins/test_store.py::test_the_store_source_reads_a_snapshot_on_its_sources_terms"]
 
 [[control]]
@@ -986,8 +983,8 @@ tests = ["tests/plugins/test_ccxt_source.py::test_capabilities_are_what_ccxt_dec
 [[control]]
 describes = "a symbol the exchange does not list is invalid, not unavailable"
 path = "src/heliograph/plugins/ccxt_source.py"
-old = "            except ccxt.BadSymbol as exc:\n"
-new = "            except ccxt.InvalidAddress as exc:\n"
+old = "    ccxt.BadRequest,\n"
+new = "    ccxt.InvalidAddress,\n"
 tests = ["tests/plugins/test_ccxt_source.py::test_ccxt_errors_become_the_ports_errors"]
 
 [[control]]
@@ -2695,3 +2692,228 @@ old = "            except sqlite3.Error as exc:  # no room even for that\n"
 new = "            except ZeroDivisionError as exc:\n"
 tests = ["tests/plugins/test_sqlite_journal.py::test_on_a_disk_too_full_for_the_status_a_failed_run_keeps_its_own_error"]
 
+# -- F3: sources and the store (the review of 2026-10-23) ----------------------------------
+
+[[control]]
+describes = "trade history is offered only where CCXT pages it by time"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "        if has.get(\"fetchTrades\") and trusted:\n"
+new = "        if has.get(\"fetchTrades\"):\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_trade_history_is_offered_only_where_ccxt_pages_it_by_time"]
+
+[[control]]
+describes = "a request that failed for now is tried again"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                    if attempt >= self.params.retries:\n"
+new = "                    if True:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_request_that_failed_for_now_is_tried_again_through_the_throttle"]
+
+[[control]]
+describes = "retries are limited"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                    if attempt >= self.params.retries:\n"
+new = "                    if attempt >= self.params.retries + 1:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_request_still_failing_after_its_retries_is_unavailable"]
+
+[[control]]
+describes = "candles off the grid of their size are refused"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if previous is not None and (start - previous) % size:\n"
+new = "                if False:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_candle_off_the_grid_of_its_size_is_refused"]
+
+[[control]]
+describes = "the candle grid is the exchange's, not 1970's"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if previous is not None and (start - previous) % size:\n"
+new = "                if start % size:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_weekly_candles_may_start_on_a_monday"]
+
+[[control]]
+describes = "every source on one exchange shares a throttle"
+path = "src/heliograph/app/mounts.py"
+old = "        key = getattr(source, \"rate_key\", None)\n"
+new = "        key = None\n"
+tests = ["tests/app/test_mounts.py::test_mounts_on_one_exchange_share_one_throttle_whatever_their_params"]
+
+[[control]]
+describes = "a bar ending after the request is refused by the feed"
+path = "src/heliograph/app/bridge.py"
+old = "        if isinstance(data, Bar) and data.end > request.end:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_bridge.py::test_a_bar_ending_after_the_request_does_is_refused"]
+
+[[control]]
+describes = "a file sends no bar that is not whole within the request"
+path = "src/heliograph/plugins/file_source.py"
+old = "                        isinstance(message, Bar) and message.end > request.end\n"
+new = "                        False\n"
+tests = ["tests/plugins/test_file_source.py::test_a_bar_not_whole_within_the_request_is_not_sent"]
+
+[[control]]
+describes = "a mount that delivers nothing fails the run"
+path = "src/heliograph/app/run.py"
+old = "                    if empty:\n"
+new = "                    if False:\n"
+tests = ["tests/app/test_run.py::test_a_mount_that_delivers_nothing_fails_the_run"]
+
+[[control]]
+describes = "a download replaces only the bars whole within its interval"
+path = "src/heliograph/plugins/store.py"
+old = "        return download.start <= time and time + size <= download.end\n"
+new = "        return download.start <= time < download.end\n"
+tests = ["tests/plugins/test_store.py::test_a_download_replaces_only_the_bars_whole_within_its_interval"]
+
+[[control]]
+describes = "a download bringing as many rows but elsewhere is refused"
+path = "src/heliograph/plugins/store.py"
+old = "    return (len(held) - found) * MISSING > len(held)\n"
+new = "    return False\n"
+tests = ["tests/plugins/test_store.py::test_a_download_bringing_as_many_rows_but_elsewhere_is_refused"]
+
+[[control]]
+describes = "a short download later downloaded again in full is published"
+path = "src/heliograph/plugins/store.py"
+old = "    final = times if rules >= 2 else []\n"
+new = "    final: list[int] = []\n"
+tests = ["tests/plugins/test_store.py::test_a_short_download_later_downloaded_again_in_full_is_published"]
+
+[[control]]
+describes = "a snapshot is rebuilt under the cleaning rules it was published under"
+path = "src/heliograph/plugins/store.py"
+old = "    whole = size if rules >= 2 else 0  # the first rules replaced by start alone\n"
+new = "    whole = size\n"
+tests = ["tests/plugins/test_store.py::test_a_snapshot_published_under_the_first_rules_still_verifies"]
+
+[[control]]
+describes = "a short download the owner accepted is published"
+path = "src/heliograph/plugins/store.py"
+old = "            if download not in accepted\n"
+new = "            if True\n"
+tests = ["tests/plugins/test_store.py::test_a_download_that_brings_far_fewer_rows_than_it_replaces_is_refused_at_publish"]
+
+[[control]]
+describes = "the store sends no bar that is not whole within the request"
+path = "src/heliograph/plugins/store.py"
+old = "dataset.bar_size is not None and happened + dataset.bar_size > request.end\n"
+new = "dataset.bar_size is not None and happened > request.end\n"
+tests = ["tests/plugins/test_store.py::test_the_store_sends_no_bar_that_is_not_whole_within_the_request"]
+
+[[control]]
+describes = "an exchange that thinks it is attacked is never asked again"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                except ccxt.DDoSProtection as exc:\n"
+new = "                except ccxt.InvalidAddress as exc:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_an_exchange_that_thinks_it_is_attacked_is_never_asked_again"]
+
+[[control]]
+describes = "retries wait longer each time"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            await asyncio.sleep(min(self.params.backoff * 2**attempt, LONGEST_WAIT))\n"
+new = "            await asyncio.sleep(min(self.params.backoff, LONGEST_WAIT))\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_retries_wait_longer_each_time"]
+
+[[control]]
+describes = "a live error asking again cannot mend is invalid, not unavailable"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "watch_trades_for_symbols(symbols)\n            except _PERMANENT as exc:\n"
+new = "watch_trades_for_symbols(symbols)\n            except ccxt.InvalidAddress as exc:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_live_error_asking_again_cannot_mend_is_the_ports_invalid_value"]
+
+[[control]]
+describes = "a timeframe whose own value is another size is not offered"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "    return number in (seconds, seconds / 60)\n"
+new = "    return True\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_timeframe_whose_own_value_is_another_size_is_not_offered"]
+
+[[control]]
+describes = "why a source withholds history is said"
+path = "src/heliograph/core/sources.py"
+old = "            why = f\" ({self.withheld})\" if self.withheld and not live else \"\"\n"
+new = "            why = \"\"\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_why_trade_history_is_withheld_is_said"]
+
+[[control]]
+describes = "a mount whose quiet span is expected may deliver nothing"
+path = "src/heliograph/app/run.py"
+old = "                        if not f.delivered and not config.mounts[m.name].allow_empty\n"
+new = "                        if not f.delivered\n"
+tests = ["tests/app/test_run.py::test_a_mount_whose_quiet_span_is_expected_may_deliver_nothing"]
+
+[[control]]
+describes = "no wait before a retry is longer than a minute"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            await asyncio.sleep(min(self.params.backoff * 2**attempt, LONGEST_WAIT))\n"
+new = "            await asyncio.sleep(self.params.backoff * 2**attempt)\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_no_wait_before_a_retry_is_longer_than_a_minute"]
+
+[[control]]
+describes = "a short answer given again is still refused"
+path = "src/heliograph/plugins/store.py"
+old = "        if _stands_short(held, _within(final, download, whole))\n"
+new = "        if False\n"
+tests = ["tests/plugins/test_store.py::test_a_short_answer_given_again_is_still_refused"]
+
+[[control]]
+describes = "good data is not worn away half at a time"
+path = "src/heliograph/plugins/store.py"
+old = "                if download.id in accepted or hi - lo > len(most[later.id]):\n"
+new = "                if download.id in accepted or later is download:\n"
+tests = ["tests/plugins/test_store.py::test_good_data_is_not_worn_away_half_at_a_time"]
+
+[[control]]
+describes = "accepting a download that is not there is refused"
+path = "src/heliograph/plugins/store.py"
+old = "        if unknown:\n"
+new = "        if False:\n"
+tests = ["tests/plugins/test_store.py::test_accepting_a_download_that_is_not_there_is_refused"]
+
+[[control]]
+describes = "a snapshot records only the acceptances it needed"
+path = "src/heliograph/plugins/store.py"
+old = "        used.update(d for d, _, _ in cleaned.shrinking if d in accepted)\n"
+new = "        used.update(accepted)\n"
+tests = ["tests/plugins/test_store.py::test_a_snapshot_records_only_the_acceptances_it_needed"]
+
+[[control]]
+describes = "snapshots published before rules were versioned keep their ids"
+path = "src/heliograph/plugins/store.py"
+old = "    if rules != 1:  # snapshots published under rules 1 keep the ids they had\n"
+new = "    if True:\n"
+tests = ["tests/plugins/test_store.py::test_a_snapshot_published_under_the_first_rules_still_verifies"]
+
+[[control]]
+describes = "an accepted correction is what later downloads are measured against"
+path = "src/heliograph/plugins/store.py"
+old = "                if download.id in accepted or hi - lo > len(most[later.id]):\n"
+new = "                if hi - lo > len(most[later.id]):\n"
+tests = ["tests/plugins/test_store.py::test_an_accepted_correction_is_what_later_downloads_are_measured_against"]
+
+[[control]]
+describes = "a download replaces rows whenever the sorted times hold any in its interval"
+path = "src/heliograph/plugins/store.py"
+old = "        if rules < 2 or hi > lo:  # the sorted times say when there is nothing to replace\n"
+new = "        if rules < 2:\n"
+tests = ["tests/plugins/test_store.py::test_a_later_download_replaces_what_an_earlier_said_about_its_interval"]
+
+[[control]]
+describes = "a download is matched row by row, not counted"
+path = "src/heliograph/plugins/store.py"
+old = "    return (len(held) - found) * MISSING > len(held)\n"
+new = "    return len(brought) * 2 < len(held)  # counting rows, not matching them\n"
+tests = ["tests/plugins/test_store.py::test_rows_a_source_gave_before_and_not_again_are_never_lost_quietly"]
+
+[[control]]
+describes = "one row in a hundred may go"
+path = "src/heliograph/plugins/store.py"
+old = "    return (len(held) - found) * MISSING > len(held)\n"
+new = "    return len(held) > found\n"
+tests = ["tests/plugins/test_store.py::test_rows_a_source_gave_before_and_not_again_are_never_lost_quietly"]
+
+[[control]]
+describes = "a download that stopped paging halfway is refused"
+path = "src/heliograph/plugins/store.py"
+old = "            found += 1\n"
+new = "            found += 2\n"
+tests = ["tests/plugins/test_store.py::test_a_download_that_stopped_paging_halfway_is_refused"]

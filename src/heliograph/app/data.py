@@ -16,6 +16,7 @@ Re-running step 1 later adds raw files; publishing again then gives a new
 snapshot, and the old one still rebuilds from the files it was made from.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from heliograph.app.config import ConfigError, RunConfig
@@ -78,10 +79,13 @@ def mount_datasets(config: RunConfig) -> list[Dataset]:
     return list(found.values())
 
 
-def publish_mounts(config: RunConfig, store: Store) -> Snapshot:
+def publish_mounts(config: RunConfig, store: Store, accept: Collection[str] = ()) -> Snapshot:
     """Publish the datasets of ``config``'s mounts, from all their raw files, as one snapshot.
+
+    ``accept`` names downloads that brought far fewer rows than they replaced
+    and are to be published anyway: the source really holds fewer now.
 
     Raises:
         StoreError: if a dataset has nothing downloaded or fails its audit.
     """
-    return store.publish(mount_datasets(config))
+    return store.publish(mount_datasets(config), accept)

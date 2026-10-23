@@ -168,6 +168,20 @@ def run_backtest(
                     for mount, wanted in zip(mounts, requests, strict=True):
                         feeds.append(HistoryFeed(loop, mount.source, wanted))
                     delivered = engine.run(*feeds, until=until)
+                    empty = [
+                        m.name
+                        for m, f in zip(mounts, feeds, strict=True)
+                        if not f.delivered and not config.mounts[m.name].allow_empty
+                    ]
+                    if empty:
+                        # A source that sent nothing for a whole span is almost always
+                        # wrong (a time unit, a symbol, a span outside the file), and a
+                        # run on nothing would look like a quiet market.
+                        raise InvalidValueError(
+                            f"{', '.join(f'mounts.{n}' for n in empty)} delivered nothing "
+                            "between start and end; check the data, its time unit and span, or set "
+                            "allow_empty = true on a mount whose quiet span is expected"
+                        )
                 finally:
                     for feed in feeds:
                         feed.close()

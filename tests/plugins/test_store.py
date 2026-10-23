@@ -5,6 +5,7 @@
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import os
 import shutil
@@ -12,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from pydantic import ValidationError
@@ -36,6 +38,8 @@ from heliograph.plugins.store import (
     StoreSourceParams,
     _audit,
     _build,
+    _snapshot_id,
+    canonical_json,
     clean,
 )
 from tests.support.sources import ScriptedSource, trade
@@ -544,5 +548,208 @@ def test_two_instruments_sharing_a_key_are_refused_not_mixed(tmp_path: Path) -> 
 def test_the_audit_compares_rows_read_with_rows_the_raw_files_declare(tmp_path: Path) -> None:
     store = Store(tmp_path)
     (raw,) = (download(store, [trade(1), trade(2)]),)
-    _, manifest = _build("0" * 16, {TRADES.name: [dataclasses.replace(raw, rows=3)]})
+    _, manifest, _ = _build("0" * 16, {TRADES.name: [dataclasses.replace(raw, rows=3)]})
     assert _audit(manifest) == [f"{TRADES.name}: 2 rows read from raw files that declare 3"]
+
+
+def test_a_download_that_brings_far_fewer_rows_than_it_replaces_is_refused_at_publish(
+    tmp_path: Path,
+) -> None:
+    """An empty re-download of minutes 10-50 would erase four good trades and still claim
+    the whole hour: publishing refuses, saying which download did it."""
+    store = Store(tmp_path)
+    download(store, [priced(m, 100 + m) for m in range(0, 60, 10)], request(0, 60), at=0)
+    short = download(store, [], request(10, 50), at=1)
+    cleaned = clean(store.downloads(TRADES))
+    assert cleaned.shrinking == [(short.id, 4, 0)]
+    refusal = f"download {short.id}'s interval had held 4 rows, but it brought 0"
+    with pytest.raises(StoreError, match=refusal):
+        store.publish([TRADES])
+    accepted = store.publish([TRADES], accept=[short.id])  # the source really holds fewer
+    assert accepted.manifest["accepted"] == [short.id]
+    assert store.verify(accepted.id) == []
+
+
+def test_a_download_replaces_only_the_bars_whole_within_its_interval(tmp_path: Path) -> None:
+    """Two-minute bars for minutes 0-6, then a re-download of 1-5, which can bring only the
+    2-4 bar whole: the 0-2 and 4-6 bars stay (the 4-6 one was once lost)."""
+    store = Store(tmp_path)
+    size, caps = 2 * MIN, Capabilities(history=frozenset({"bars"}), bar_sizes=frozenset({2 * MIN}))
+
+    def wanted(start: int, end: int) -> HistoryRequest:
+        return HistoryRequest(
+            instrument=BTC,
+            kind="bars",
+            start=Timestamp(start * MIN),
+            end=Timestamp(end * MIN),
+            bar_size=size,
+        )
+
+    download(store, [bar(0, 2), bar(2, 2), bar(4, 2)], wanted(0, 6), caps=caps, at=0)
+    download(store, [bar(2, 2, low=0.5)], wanted(1, 5), caps=caps, at=1)
+    (dataset,) = store.datasets()
+    cleaned = clean(store.downloads(dataset))
+    rows = cleaned.table.to_pylist()
+    assert [(row["start"] // MIN, row["low"]) for row in rows] == [(0, 1.0), (2, 0.5), (4, 1.0)]
+    assert cleaned.superseded == 1
+
+
+def test_a_download_bringing_as_many_rows_but_elsewhere_is_refused(tmp_path: Path) -> None:
+    """An exchange ignoring the start it was given answers a request for two days with its
+    newest 24 trades, all on day two: as many as day one had, none where they were."""
+    store = Store(tmp_path)
+    download(store, [priced(m * 60, 100) for m in range(24)], request(0, 24 * 60), at=0)
+    newest = [priced(24 * 60 + m * 60, 200) for m in range(24)]
+    short = download(store, newest, request(0, 48 * 60), at=1)
+    with pytest.raises(StoreError, match=f"download {short.id}'s interval had held 24 rows"):
+        store.publish([TRADES])
+
+
+def test_a_short_download_later_downloaded_again_in_full_is_published(tmp_path: Path) -> None:
+    store = Store(tmp_path)
+    download(store, [priced(m, 100 + m) for m in range(0, 60, 10)], request(0, 60), at=0)
+    download(store, [], request(10, 50), at=1)  # short
+    download(store, [priced(m, 300 + m) for m in range(0, 60, 10)], request(0, 60), at=2)
+    assert store.publish([TRADES]).manifest["datasets"]  # nothing stands short at the end
+
+
+def test_a_snapshot_published_under_the_first_rules_still_verifies(tmp_path: Path) -> None:
+    """Rules 1 superseded a bar re-download's whole interval. A snapshot published then
+    keeps its id and verifies under those rules; publishing again gives a new one."""
+    store = Store(tmp_path)
+    size = 2 * MIN
+    caps = Capabilities(history=frozenset({"bars"}), bar_sizes=frozenset({size}))
+
+    def wanted(start: int, end: int) -> HistoryRequest:
+        return HistoryRequest(
+            instrument=BTC, kind="bars", start=Timestamp(start * MIN),
+            end=Timestamp(end * MIN), bar_size=size,
+        )  # fmt: skip
+
+    download(store, [bar(0, 2), bar(2, 2), bar(4, 2)], wanted(0, 6), caps=caps, at=0)
+    download(store, [bar(2, 2, low=0.5)], wanted(1, 5), caps=caps, at=1)
+    (dataset,) = store.datasets()
+    chosen = {dataset.name: store.downloads(dataset)}
+    ids = {dataset.name: [d.id for d in chosen[dataset.name]]}
+    old_id = _snapshot_id(ids, rules=1)
+    # The id as Heliograph computed it before rules were versioned, written out.
+    before = {"format": 1, "pyarrow": pa.__version__, "datasets": ids}
+    assert old_id == hashlib.sha256(canonical_json(before).encode()).hexdigest()[:16]
+    files, old_manifest, _ = _build(old_id, chosen, rules=1)
+    # Rules 1 let the second download supersede the bar at 4, which ends past its interval.
+    assert old_manifest["datasets"][dataset.name]["rows"] == 2
+    for relative, data in files.items():  # as an older Heliograph published it
+        (store.published / old_id / relative).parent.mkdir(parents=True, exist_ok=True)
+        (store.published / old_id / relative).write_bytes(data)
+    assert "rules" not in store.snapshot(old_id).manifest
+    assert store.verify(old_id) == []
+    new = store.publish([dataset])
+    assert new.id != old_id
+    assert new.manifest["rules"] == 2
+    assert new.manifest["datasets"][dataset.name]["rows"] == 3  # rules 2 keep it
+
+
+def test_the_store_sends_no_bar_that_is_not_whole_within_the_request(tmp_path: Path) -> None:
+    store = Store(tmp_path)
+    download(store, [bar(m) for m in range(6)], request(0, 6, kind="bars"), caps=BAR_CAPS)
+    snapshot = store.publish([BARS])
+    source = reader(store, snapshot.id)
+    two_minutes = HistoryRequest(
+        instrument=BTC,
+        kind="bars",
+        start=Timestamp(0),
+        end=Timestamp(int(2.5 * MIN)),
+        bar_size=MIN,
+    )
+
+    async def read() -> list[Message]:
+        return [m async for m in source.history(two_minutes)]
+
+    assert [m.start // MIN for m in asyncio.run(read()) if isinstance(m, Bar)] == [0, 1]
+
+
+def test_a_short_answer_given_again_is_still_refused(tmp_path: Path) -> None:
+    """A source that answered short once usually does again: the second short download
+    does not excuse the first."""
+    store = Store(tmp_path)
+    download(store, [priced(m, 100 + m) for m in range(0, 60, 10)], request(0, 60), at=0)
+    first = download(store, [], request(10, 50), at=1)
+    again = download(store, [], request(10, 50), at=2)
+    with pytest.raises(StoreError, match=first.id) as refused:
+        store.publish([TRADES])
+    assert again.id in str(refused.value)
+
+
+def test_good_data_is_not_worn_away_half_at_a_time(tmp_path: Path) -> None:
+    """Each re-download brings over half of what the one before left (9, 5, 3, 2), so
+    each alone would pass: measured against the most the hour ever held, they are
+    refused."""
+    store = Store(tmp_path)
+    download(store, [priced(m, 100) for m in range(0, 60, 7)], request(0, 60), at=0)  # 9
+    download(store, [priced(m, 101) for m in (0, 14, 28, 42, 56)], request(0, 60), at=1)
+    download(store, [priced(m, 102) for m in (0, 28, 56)], request(0, 60), at=2)
+    download(store, [priced(m, 103) for m in (0, 56)], request(0, 60), at=3)
+    with pytest.raises(StoreError, match="interval had held 9 rows"):
+        store.publish([TRADES])
+
+
+def test_accepting_a_download_that_is_not_there_is_refused(tmp_path: Path) -> None:
+    store = Store(tmp_path)
+    download(store, [priced(m, 100) for m in range(0, 60, 10)], request(0, 60), at=0)
+    with pytest.raises(StoreError, match="accepting nonsense: no such download"):
+        store.publish([TRADES], accept=["nonsense"])
+
+
+def test_a_snapshot_records_only_the_acceptances_it_needed(tmp_path: Path) -> None:
+    """The same raw files give the same manifest, whatever else was accepted."""
+    store = Store(tmp_path)
+    full = download(store, [priced(m, 100) for m in range(0, 60, 10)], request(0, 60), at=0)
+    snapshot = store.publish([TRADES], accept=[full.id])
+    assert "accepted" not in snapshot.manifest
+
+
+def test_a_download_that_stopped_paging_halfway_is_refused(tmp_path: Path) -> None:
+    """Half the hour's trades, all in its first half: as many as half, all within the
+    span of what was held, and still the second half gone."""
+    store = Store(tmp_path)
+    full = [priced(t / 10, 100) for t in range(600)]  # one every 6 s
+    download(store, full, request(0, 60), at=0)
+    halfway = download(store, full[:300], request(0, 60), at=1)
+    with pytest.raises(StoreError, match=halfway.id):
+        store.publish([TRADES])
+
+
+def test_an_accepted_correction_is_what_later_downloads_are_measured_against(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path)
+    download(store, [priced(m, 100) for m in range(0, 60, 10)], request(0, 60), at=0)
+    corrected = download(store, [priced(m, 100) for m in (0, 50)], request(0, 60), at=1)
+    store.publish([TRADES], accept=[corrected.id])
+    download(store, [priced(m, 100) for m in (0, 50)], request(0, 60), at=2)  # the same again
+    assert store.publish([TRADES], accept=[corrected.id]).manifest["accepted"] == [corrected.id]
+
+
+@pytest.mark.parametrize(
+    "kept",
+    [
+        pytest.param(lambda trades: trades[:-144], id="the last quarter less a little"),
+        pytest.param(lambda trades: trades[::2], id="every other trade"),
+        pytest.param(lambda trades: trades[:300] + trades[301:], id="one in six hundred lost"),
+    ],
+)
+def test_rows_a_source_gave_before_and_not_again_are_never_lost_quietly(
+    tmp_path: Path, kept: Any
+) -> None:
+    """A source asked again gives back what it gave before: losing a block, thinning,
+    or more than one row in a hundred is refused."""
+    store = Store(tmp_path)
+    full = [priced(t / 10, 100) for t in range(600)]
+    download(store, full, request(0, 60), at=0)
+    again = kept(full)
+    short = download(store, again, request(0, 60), at=1)
+    if len(full) - len(again) <= len(full) // 100:
+        assert store.publish([TRADES]).manifest["datasets"][TRADES.name]["rows"] == 599
+    else:
+        with pytest.raises(StoreError, match=short.id):
+            store.publish([TRADES])

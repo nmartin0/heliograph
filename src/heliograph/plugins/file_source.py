@@ -184,8 +184,10 @@ class FileSource(Plugin[FileSourceParams]):
                             )
                         free_from = message.end
                     previous = happened
-                    if happened >= request.end:
-                        return
+                    if happened >= request.end or (
+                        isinstance(message, Bar) and message.end > request.end
+                    ):
+                        return  # past the request, or a bar not whole within it
                     if happened >= request.start:
                         yield message
 

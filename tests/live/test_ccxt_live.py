@@ -11,6 +11,7 @@ truncates the way the offline tests assume.
 """
 
 import asyncio
+import dataclasses
 from itertools import pairwise
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from heliograph.core.clock import WallClock
 from heliograph.core.messages import Bar, Point
 from heliograph.core.sources import HistoryRequest, Subscription
 from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp, to_datetime
-from heliograph.plugins.ccxt_source import CcxtParams, CcxtSource
+from heliograph.plugins.ccxt_source import PAGES_TRADES_BY_TIME, CcxtParams, CcxtSource
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import read_entries, read_header
 from tests.support.world import BTC
@@ -62,6 +63,29 @@ def test_recent_trades_arrive_in_order_with_prices_and_sizes(kraken: CcxtSource)
     assert times == sorted(times)
     assert all(p.values["price"] > 0 and p.values["size"] > 0 for p in points)
     assert all(p.values.get("side") in (1.0, -1.0) for p in points)
+
+
+@pytest.mark.parametrize("exchange", sorted(PAGES_TRADES_BY_TIME))
+def test_trade_history_from_hours_back_starts_where_it_was_asked_to(exchange: str) -> None:
+    """What PAGES_TRADES_BY_TIME claims: asked for trades from six hours back, the
+    exchange answers from then, not with its newest trades."""
+    source = CcxtSource(CcxtParams(exchange=exchange))
+    source.bind(RateThrottle(source.capabilities, CLOCK))
+    recent = last(6 * NANOS_PER_HOUR)
+    wanted = dataclasses.replace(
+        recent,
+        instrument=dataclasses.replace(BTC, venue=exchange),
+        end=Timestamp(recent.start + 30 * NANOS_PER_MINUTE),
+    )
+    with SourceLoop() as loop:
+        feed = HistoryFeed(loop, source, wanted)
+        try:
+            first = next(m for m in feed if isinstance(m, Point))
+        finally:
+            feed.close()
+            loop.run(source.close())
+    assert wanted.start <= first.event_time < wanted.end, f"{exchange} ignored the start"
+    assert first.event_time - wanted.start < 10 * NANOS_PER_MINUTE
 
 
 def test_hourly_bars_for_a_day_are_whole_and_contiguous(kraken: CcxtSource) -> None:

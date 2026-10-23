@@ -86,7 +86,8 @@ class Capabilities:
     reaches, in nanoseconds before now (None: no limit). ``live_delay`` is how
     long after an event the source delivers it live; history is stamped with
     it. ``rate_limit`` and ``concurrency`` are enforced by the app, never by
-    the source itself.
+    the source itself. ``withheld`` says why a kind of history the source
+    could deliver is not offered (shown when one is asked for).
     """
 
     history: frozenset[DataKind] = frozenset()
@@ -97,6 +98,7 @@ class Capabilities:
     rate_limit: RateLimit | None = None
     concurrency: int = 1
     terms: frozenset[Term] = frozenset()
+    withheld: str = ""
 
     def __post_init__(self) -> None:
         for name in ("history", "live", "bar_sizes", "terms"):
@@ -132,7 +134,8 @@ class Capabilities:
         mode, offered = ("live", self.live) if live else ("history", self.history)
         found = []
         if kind not in offered:
-            found.append(f"offers no {kind} {mode}")
+            why = f" ({self.withheld})" if self.withheld and not live else ""
+            found.append(f"offers no {kind} {mode}{why}")
         if kind == "bars" and bar_size not in self.bar_sizes:
             sizes = ", ".join(format_span(s) for s in sorted(self.bar_sizes)) or "none"
             wanted = format_span(bar_size) if bar_size else "no size"

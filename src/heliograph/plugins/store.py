@@ -53,6 +53,7 @@ where ``<dataset>`` is ``<source>/<instrument key, %-escaped>/<trades|bars-1h>``
 """
 
 import asyncio
+import bisect
 import hashlib
 import io
 import json
@@ -60,7 +61,15 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterable, Mapping, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Collection,
+    Generator,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,10 +102,17 @@ from heliograph.plugins.conformance import Conformance
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 FORMAT = 1
-"""The store's file format and cleaning rules; part of every snapshot id.
+"""The store's file format; written in every raw file and part of every snapshot id."""
 
-Change it whenever either changes: the same raw files would otherwise give
+RULES = 2
+"""The cleaning rules; part of every snapshot id from 2 on, and recorded in its manifest.
+
+Raise it whenever cleaning changes: the same raw files would otherwise give
 the old id, and ``publish`` would return a snapshot cleaned by old rules.
+``verify`` rebuilds a snapshot under the rules it was published with. Rules
+2 (D36): a download replaces only what it could deliver (for bars, the bars
+whole within its interval), and one that replaces rows it does not stand
+for is refused unless accepted.
 """
 
 BAR_FIELDS = ("start", "end", "open", "high", "low", "close", "volume")
@@ -224,6 +240,9 @@ class Cleaned:
     quarantine: list[Quarantined]
     raw_rows: int
     superseded: int
+    shrinking: list[tuple[str, int, int]] = field(default_factory=list)
+    """Downloads that stand far short of the most their interval held, and whose
+    interval still does at the end: (id, most held, brought)."""
 
     @property
     def rows(self) -> int:
@@ -406,10 +425,13 @@ class Store:
 
     # published
 
-    def publish(self, datasets: Sequence[Dataset]) -> Snapshot:
+    def publish(self, datasets: Sequence[Dataset], accept: Collection[str] = ()) -> Snapshot:
         """Publish the clean data of ``datasets`` from all their raw files.
 
-        Publishing the same raw files again returns the same snapshot.
+        Publishing the same raw files again returns the same snapshot. A
+        download that replaced earlier rows it does not stand for is
+        refused unless its id is in ``accept`` (the source really holds
+        fewer now); the manifest records what was accepted.
 
         Raises:
             StoreError: if a dataset has no raw files or fails its audit;
@@ -424,8 +446,12 @@ class Store:
         snapshot_id = _snapshot_id({name: [d.id for d in ds] for name, ds in chosen.items()})
         if (self.published / snapshot_id / "manifest.json").is_file():
             return self.snapshot(snapshot_id)
-        files, manifest = _build(snapshot_id, chosen)
-        problems = _audit(manifest)
+        known = {d.id for ds in chosen.values() for d in ds}
+        unknown = sorted(set(accept) - known)
+        if unknown:
+            raise StoreError(f"accepting {', '.join(unknown)}: no such download of these datasets")
+        files, manifest, doubts = _build(snapshot_id, chosen, RULES, frozenset(accept))
+        problems = _audit(manifest) + doubts
         if problems:
             raise StoreError("the snapshot fails its audit:\n" + "\n".join(problems))
         # Staged in a directory of its own, then renamed into place whole, so
@@ -481,10 +507,13 @@ class Store:
             chosen[name] = [have[i] for i in entry["downloads"]]
         if problems:
             return problems
-        rebuilt_id = _snapshot_id({name: [d.id for d in ds] for name, ds in chosen.items()})
+        rules = int(snapshot.manifest.get("rules", 1))
+        accepted = frozenset(snapshot.manifest.get("accepted", ()))
+        downloads = {name: [d.id for d in ds] for name, ds in chosen.items()}
+        rebuilt_id = _snapshot_id(downloads, rules)
         if rebuilt_id != snapshot_id:
             return [f"its raw files give the id {rebuilt_id}, not {snapshot_id}"]
-        files, _ = _build(snapshot_id, chosen)
+        files, _, _ = _build(snapshot_id, chosen, rules, accepted)
         for relative, data in sorted(files.items()):
             path = snapshot.path / relative
             if not path.is_file():
@@ -539,16 +568,23 @@ def _checked(path: Path) -> Download:
     return _download(path)
 
 
-def _snapshot_id(downloads: Mapping[str, Sequence[str]]) -> str:
-    inputs = {"format": FORMAT, "pyarrow": pa.__version__, "datasets": downloads}
+def _snapshot_id(downloads: Mapping[str, Sequence[str]], rules: int = RULES) -> str:
+    inputs: dict[str, Any] = {"format": FORMAT, "pyarrow": pa.__version__, "datasets": downloads}
+    if rules != 1:  # snapshots published under rules 1 keep the ids they had
+        inputs["rules"] = rules
     return _sha256(canonical_json(inputs).encode())[:16]
 
 
 # -- cleaning --------------------------------------------------------------------------
 
 
-def clean(downloads: Sequence[Download]) -> Cleaned:
+def clean(
+    downloads: Sequence[Download], rules: int = RULES, accepted: Collection[str] = ()
+) -> Cleaned:
     """A dataset's clean rows from its raw files (see the module docstring for the rules).
+
+    A download in ``accepted`` is the owner's word that its source holds what it
+    brought: later downloads of its interval are measured against it.
 
     Raises:
         InvalidValueError: if ``downloads`` is empty or mixes datasets.
@@ -562,17 +598,54 @@ def clean(downloads: Sequence[Download]) -> Cleaned:
     kept: list[_Kept] = []
     quarantine: list[Quarantined] = []
     raw_rows = superseded = 0
-    for download in sorted(downloads, key=lambda d: d.order):
-        before = len(kept)
-        kept = [k for k in kept if not download.start <= k.time < download.end]
-        superseded += before - len(kept)
+    size = dataset.bar_size or 0
+    whole = size if rules >= 2 else 0  # the first rules replaced by start alone
+    ordered = sorted(downloads, key=lambda d: d.order)
+    # The most rows each download's interval has held before it, by time: what it is
+    # measured against, so that neither a run of short answers nor one shrinking a
+    # little at a time can wear good data away unremarked.
+    most: dict[str, list[int]] = {d.id: [] for d in ordered}
+    short: list[tuple[Download, list[int], list[int]]] = []
+    times: list[int] = []  # the kept rows' times, sorted
+    for index, download in enumerate(ordered):
+        # A download replaces what it could have delivered: its interval, and for bars
+        # only the bars whole within it (a source sends no bar that is not).
+        lo, hi = _bounds(times, download, whole)
+        if rules < 2 or hi > lo:  # the sorted times say when there is nothing to replace
+            staying = [k for k in kept if not _replaces(download, k.time, whole)]
+            superseded += len(kept) - len(staying)
+            kept = staying
+        brought: list[int] = []
         for number, row in enumerate(pq.read_table(download.path).to_pylist(), start=1):
             raw_rows += 1
             reason = _problem(dataset, download, row)
             if reason is None:
                 kept.append(_Kept(row[time], len(kept) + superseded, download.id, number, row))
+                brought.append(row[time])
             else:
                 quarantine.append(Quarantined(download.id, number, reason, canonical_json(row)))
+        if rules < 2:
+            continue
+        if _stands_short(most[download.id], brought):
+            short.append((download, most[download.id], brought))
+        lo, hi = _bounds(times, download, whole)
+        del times[lo:hi]
+        times.extend(sorted(brought))
+        times.sort()  # two sorted runs: linear
+        # Only the intervals overlapping this download's can hold more now.
+        for later in ordered[index + 1 :]:
+            if later.start < download.end and download.start < later.end:
+                lo, hi = _bounds(times, later, whole)
+                if download.id in accepted or hi - lo > len(most[later.id]):
+                    most[later.id] = times[lo:hi]
+    # A short download counts only if what its interval holds at the end still stands
+    # short: one later downloaded again in full stands for nothing then.
+    final = times if rules >= 2 else []
+    shrinking = [
+        (download, len(held), len(brought))
+        for download, held, brought in short
+        if _stands_short(held, _within(final, download, whole))
+    ]
     kept.sort(key=lambda k: (k.time, k.arrival))
     if dataset.kind == "bars":
         kept, overlapping = _without_overlaps(kept)
@@ -580,7 +653,62 @@ def clean(downloads: Sequence[Download]) -> Cleaned:
     rows = [k.row for k in kept]
     names = {name for row in rows for name, value in row.items() if value is not None}
     names.discard("event_time")
-    return Cleaned(dataset, _table(dataset, rows, names), quarantine, raw_rows, superseded)
+    return Cleaned(
+        dataset,
+        _table(dataset, rows, names),
+        quarantine,
+        raw_rows,
+        superseded,
+        [(download.id, held, brought) for download, held, brought in shrinking],
+    )
+
+
+MISSING = 100
+"""A download is short when more than 1/MISSING of the rows its interval held have no
+row it brought at the same time."""
+
+
+def _stands_short(held: Sequence[int], brought: Sequence[int]) -> bool:
+    """Whether rows at ``brought`` stand short of the rows at ``held`` (sorted) that
+    their interval held: more than 1/MISSING of them with no brought row at the same
+    time, each brought row standing for one. A source asked again gives back what it
+    gave before; an exchange that answered with its newest rows, stopped paging
+    halfway or skipped rows does not."""
+    if not held:
+        return False
+    ordered = sorted(brought)
+    found = i = 0
+    for time in held:
+        while i < len(ordered) and ordered[i] < time:
+            i += 1
+        if i < len(ordered) and ordered[i] == time:
+            found += 1
+            i += 1
+    return (len(held) - found) * MISSING > len(held)
+
+
+def _bounds(times: Sequence[int], download: Download, size: int) -> tuple[int, int]:
+    """Where in the sorted ``times`` lie those ``download`` replaces (see ``_replaces``)."""
+    if size:
+        return (
+            bisect.bisect_left(times, download.start),
+            bisect.bisect_right(times, download.end - size),
+        )
+    return bisect.bisect_left(times, download.start), bisect.bisect_left(times, download.end)
+
+
+def _within(times: Sequence[int], download: Download, size: int) -> list[int]:
+    """The sorted ``times`` that ``download`` replaces (see ``_replaces``)."""
+    lo, hi = _bounds(times, download, size)
+    return list(times[lo:hi])
+
+
+def _replaces(download: Download, time: int, size: int) -> bool:
+    """Whether ``download`` replaces a row at ``time``: one in its interval, or for
+    bars (``size`` > 0) one whole within it."""
+    if size:
+        return download.start <= time and time + size <= download.end
+    return download.start <= time < download.end
 
 
 @dataclass(frozen=True, slots=True)
@@ -657,13 +785,29 @@ def _quarantine_table(quarantine: Sequence[Quarantined]) -> pa.Table:
 
 
 def _build(
-    snapshot_id: str, chosen: Mapping[str, Sequence[Download]]
-) -> tuple[dict[str, bytes], dict[str, Any]]:
-    """A snapshot's files, by path relative to its directory, and its manifest."""
+    snapshot_id: str,
+    chosen: Mapping[str, Sequence[Download]],
+    rules: int = RULES,
+    accepted: frozenset[str] = frozenset(),
+) -> tuple[dict[str, bytes], dict[str, Any], list[str]]:
+    """A snapshot's files, by path relative to its directory, its manifest, and what
+    the audit must also refuse that the manifest does not record."""
     files: dict[str, bytes] = {}
     entries: dict[str, Any] = {}
+    doubts: list[str] = []
+    used: set[str] = set()  # the accepted downloads that needed it
     for name, downloads in sorted(chosen.items()):
-        cleaned = clean(downloads)
+        cleaned = clean(downloads, rules, accepted)
+        doubts += [
+            f"{name}: download {download}'s interval had held {held} rows, but it brought "
+            f"{brought} and its interval still lacks rows it held; a source that answered "
+            "short (an exchange ignoring the start it was given, or one that stopped paging "
+            "or stopped sending empty bars) would erase good data. Download the interval "
+            f"again; or, if the source really holds this now, publish accepting {download}"
+            for download, held, brought in cleaned.shrinking
+            if download not in accepted
+        ]
+        used.update(d for d, _, _ in cleaned.shrinking if d in accepted)
         data = _parquet(cleaned.table)
         quarantined = _parquet(_quarantine_table(cleaned.quarantine))
         files[f"{name}/data.parquet"] = data
@@ -682,9 +826,18 @@ def _build(
             "data": _sha256(data),
             "quarantine": _sha256(quarantined),
         }
-    manifest = {"format": FORMAT, "id": snapshot_id, "pyarrow": pa.__version__, "datasets": entries}
+    manifest: dict[str, Any] = {
+        "format": FORMAT,
+        "id": snapshot_id,
+        "pyarrow": pa.__version__,
+        "datasets": entries,
+    }
+    if rules != 1:
+        manifest["rules"] = rules
+    if used:  # only what was needed, so the same raw files give the same manifest
+        manifest["accepted"] = sorted(used)
     files["manifest.json"] = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
-    return files, manifest
+    return files, manifest, doubts
 
 
 def _covered(downloads: Sequence[Download]) -> list[list[int]]:
@@ -816,8 +969,10 @@ class StoreSource(Plugin[StoreSourceParams]):
             async for batch in reading:
                 for row in batch:
                     happened = row[_time_of(dataset)]
-                    if happened >= request.end:
-                        return
+                    if happened >= request.end or (
+                        dataset.bar_size is not None and happened + dataset.bar_size > request.end
+                    ):
+                        return  # past the request, or a bar not whole within it
                     if happened >= request.start:
                         yield _message(dataset, row)
 

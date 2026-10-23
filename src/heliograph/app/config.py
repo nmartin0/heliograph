@@ -228,7 +228,10 @@ class MountConfig(BaseModel):
     ``start`` and ``end`` bound a backtest's history. They are TOML
     date-times (ISO 8601 text in JSON) with a UTC offset, never numbers,
     whose unit would be a guess, and lie within the years 1678 to 2261,
-    which nanosecond timestamps can hold.
+    which nanosecond timestamps can hold. A mount that delivers nothing
+    between them fails the run unless ``allow_empty`` is set: a span with no
+    data is far more often a mistake (a time unit, a symbol) than a market
+    that did not trade.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -240,6 +243,7 @@ class MountConfig(BaseModel):
     bar_size: str | None = None
     start: Annotated[datetime | None, Field(strict=True)] = None
     end: Annotated[datetime | None, Field(strict=True)] = None
+    allow_empty: bool = False
 
     @field_validator("params", mode="after")
     @classmethod

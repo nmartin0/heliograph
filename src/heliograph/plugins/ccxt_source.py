@@ -33,11 +33,22 @@ candles (Kraken, 720) answers an early start with its latest ones; a first
 candle a bar or more after the start says so (or that nothing traded), and
 the read stops rather than leave a hole.
 
+Trade history is read only from exchanges CCXT pages by time
+(``PAGES_TRADES_BY_TIME``: Kraken), or with ``trust_since``: many answer
+``fetch_trades`` with their newest trades whatever was asked, which would
+return a fraction of the history, or nothing, without an error. A candle
+off the grid of its size is refused: CCXT names some timeframes for what
+they are not (Kraken's ``2w`` is 15 days).
+
 Errors: CCXT's network errors (time-outs, rate limits, an exchange down) are
-``SourceUnavailableError``; a symbol the exchange does not list is
-``InvalidValueError``.
+tried again ``retries`` times through the throttle, then
+``SourceUnavailableError``; one asking again cannot mend (a symbol the
+exchange does not list, a request it does not support, a refused key) is
+``InvalidValueError``. Every source on one exchange shares one throttle
+(``rate_key``).
 """
 
+import asyncio
 import math
 from collections import Counter
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -76,6 +87,25 @@ class CcxtParams(Params):
     terms: tuple[Term, ...] = param(
         (), description="Conditions of the exchange's terms for its market data"
     )
+    trust_since: bool = param(
+        False,
+        description=(
+            "Read trade history from an exchange not known to page it by time "
+            "(run the live tests against it first)"
+        ),
+    )
+    retries: int = param(
+        3,
+        description="Times a request that timed out or was refused for now is tried again",
+        ge=0,
+        le=20,
+    )
+    backoff: float = param(
+        2.0,
+        description="Seconds before the first retry, doubling for each after",
+        ge=0.0,
+        le=600.0,
+    )
 
     @field_validator("exchange")
     @classmethod
@@ -83,6 +113,31 @@ class CcxtParams(Params):
         if exchange not in ccxt.exchanges:
             raise ValueError(f"CCXT has no exchange {exchange!r}")
         return exchange
+
+
+LONGEST_WAIT = 60.0
+"""The longest wait before a retry, in seconds: doubling stops there, so the most
+retries wait minutes, not days."""
+
+_PERMANENT = (
+    ccxt.BadRequest,
+    ccxt.NotSupported,
+    ccxt.AuthenticationError,
+    ccxt.PermissionDenied,
+    ccxt.ArgumentsRequired,
+    ccxt.OperationRejected,
+    ccxt.ExchangeClosedByUser,
+)
+"""CCXT's errors that asking again cannot mend: refused at once, as InvalidValueError."""
+
+PAGES_TRADES_BY_TIME = frozenset({"kraken"})
+"""Exchanges whose trade history CCXT pages by time, checked by the live tests.
+
+Many exchanges' ``fetch_trades`` ignore ``since`` and answer with their
+newest trades (Bybit, KuCoin, Bitstamp and Coinbase Exchange among 58 in
+CCXT 4.5): paging them from a start returns a fraction of the history, or
+nothing, without an error. Their candles page by time and may be read.
+"""
 
 
 @cache
@@ -96,6 +151,19 @@ def _described(exchange: str) -> Mapping[str, Any]:
         "timeframes": dict(rest.timeframes or {}),
         "rate_limit": float(rest.rateLimit),
     }
+
+
+def _means(value: Any, size: int) -> bool:
+    """Whether an exchange's own value for a timeframe agrees with the span its name
+    reads as. Exchanges give minutes, seconds or a word; a number that is neither
+    the span's minutes nor its seconds is another size (Kraken's "2w" is 21600
+    minutes, 15 days; Bitstamp's "1w" 259200 seconds, 3 days), and is dropped."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return True  # a word, such as "1hour": nothing to compare
+    seconds = size / 1_000_000_000
+    return number in (seconds, seconds / 60)
 
 
 def _span_or_none(timeframe: str) -> int | None:
@@ -130,9 +198,20 @@ class CcxtSource(Plugin[CcxtParams]):
         described = _described(self.params.exchange)
         has = described["has"]
         history: set[DataKind] = set()
-        if has.get("fetchTrades"):
+        trusted = self.params.exchange in PAGES_TRADES_BY_TIME or self.params.trust_since
+        withheld = ""
+        if has.get("fetchTrades") and trusted:
             history.add("trades")
-        sizes = {s for t in described["timeframes"] if (s := _span_or_none(t)) is not None}
+        elif has.get("fetchTrades"):
+            withheld = (
+                f"trade history from {self.params.exchange} is not known to page by time, "
+                "so it could come back short; read its candles, or set trust_since"
+            )
+        sizes = {
+            size
+            for name, value in described["timeframes"].items()
+            if (size := _span_or_none(name)) is not None and _means(value, size)
+        }
         if has.get("fetchOHLCV") and sizes:
             history.add("bars")
         period = max(1, round(described["rate_limit"] * MS))
@@ -142,6 +221,7 @@ class CcxtSource(Plugin[CcxtParams]):
             bar_sizes=frozenset(sizes if "bars" in history else set()),
             rate_limit=RateLimit(calls=1, period=period),
             terms=frozenset(self.params.terms),
+            withheld=withheld,
         )
 
     def bind(self, throttle: Throttle) -> None:
@@ -164,18 +244,45 @@ class CcxtSource(Plugin[CcxtParams]):
             self._client = self._connect()
         return self._client
 
+    @property
+    def rate_key(self) -> str:
+        """What shares a rate limit: every source on one exchange shares one throttle."""
+        return f"ccxt:{self.params.exchange}"
+
     async def _call(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        """One request through the throttle, with CCXT's errors translated."""
+        """One request through the throttle, with CCXT's errors translated.
+
+        A request that timed out, or that the exchange refused for now (its
+        rate limit, an outage), is tried again, each time through the
+        throttle, up to ``retries`` times; an error that asking again cannot
+        mend (a bad symbol, a request the exchange does not support, a
+        refused key) is ``InvalidValueError`` at once.
+        """
         throttle = self._throttle
         if throttle is None:
             raise InvalidValueError("the CCXT source was used before it was bound")
-        async with throttle:
-            try:
-                return await getattr(self._exchange, method)(*args, **kwargs)
-            except ccxt.BadSymbol as exc:
-                raise InvalidValueError(f"{self.params.exchange}: {exc}") from exc
-            except (ccxt.NetworkError, ccxt.ExchangeError) as exc:
-                raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
+        attempt = 0
+        while True:
+            async with throttle:
+                try:
+                    return await getattr(self._exchange, method)(*args, **kwargs)
+                except _PERMANENT as exc:
+                    raise InvalidValueError(f"{self.params.exchange}: {exc}") from exc
+                except ccxt.DDoSProtection as exc:
+                    # An exchange that thinks it is attacked (Binance's 418) bans for
+                    # longer each time it is asked again: never retried.
+                    raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
+                except ccxt.NetworkError as exc:
+                    if attempt >= self.params.retries:
+                        raise SourceUnavailableError(
+                            f"{self.params.exchange}: {exc} (tried {attempt + 1} times)"
+                        ) from exc
+                except ccxt.BaseError as exc:
+                    raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
+            # Waiting longer each time: an outage or a lockout lasts more than one
+            # turn of the throttle.
+            await asyncio.sleep(min(self.params.backoff * 2**attempt, LONGEST_WAIT))
+            attempt += 1
 
     async def _markets(self) -> None:
         if not self._markets_loaded:
@@ -265,6 +372,7 @@ class CcxtSource(Plugin[CcxtParams]):
         timeframe = format_span(size)
         since = request.start // MS
         following = request.start  # where the next bar may start
+        previous: int | None = None  # the start of the last candle read
         first = True
         while True:
             page = await self._call(
@@ -282,6 +390,16 @@ class CcxtSource(Plugin[CcxtParams]):
                 return
             for candle in fresh:
                 start = candle[0] * MS
+                if previous is not None and (start - previous) % size:
+                    # CCXT names some timeframes for what they are not (Kraken's "2w"
+                    # is 15 days): candles not a whole number of sizes apart are refused.
+                    # (Not checked against 1970: weekly candles start on Mondays.)
+                    raise InvalidValueError(
+                        f"{self.params.exchange} sent {timeframe} candles starting at "
+                        f"{previous} and {start}, off the {timeframe} grid: its "
+                        f"{timeframe} is not {format_span(size)}"
+                    )
+                previous = start
                 if start + size > request.end:  # not whole within the request
                     return
                 yield _bar(request.instrument, candle, size)
@@ -313,7 +431,9 @@ class CcxtSource(Plugin[CcxtParams]):
                     trades = await self._exchange.watch_trades(symbols[0])
                 else:
                     trades = await self._exchange.watch_trades_for_symbols(symbols)
-            except (ccxt.NetworkError, ccxt.ExchangeError) as exc:
+            except _PERMANENT as exc:
+                raise InvalidValueError(f"{self.params.exchange}: {exc}") from exc
+            except ccxt.BaseError as exc:
                 raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
             for trade in trades:
                 yield _point(wanted[trade["symbol"]], trade)

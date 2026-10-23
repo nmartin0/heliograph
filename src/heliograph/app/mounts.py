@@ -15,6 +15,8 @@ every problem before using anything and reports them all at once:
 
 Mounts naming the same source with the same parameters share one instance,
 so they share its rate limit: two mounts on one exchange are one client.
+Sources that declare the same ``rate_key`` (every CCXT source on one
+exchange, whatever its other parameters) share one throttle.
 Each instance is then bound to a ``RateThrottle`` made from its declared
 limits. Source constructors must not connect to anything; nothing is
 contacted here, though every source that resolves is constructed so that
@@ -139,6 +141,15 @@ def build_mounts(
     if problems:
         raise ConfigError("\n".join(problems))
 
+    # Sources that declare one rate key (every CCXT source on one exchange) share a
+    # throttle, so two mounts with different parameters still keep one rate limit.
+    throttles: dict[str, RateThrottle] = {}
     for source in instances.values():
-        source.bind(RateThrottle(source.capabilities, clock, sleep))
+        key = getattr(source, "rate_key", None)
+        if key is None:
+            source.bind(RateThrottle(source.capabilities, clock, sleep))
+            continue
+        if key not in throttles:
+            throttles[key] = RateThrottle(source.capabilities, clock, sleep)
+        source.bind(throttles[key])
     return tuple(mounts)

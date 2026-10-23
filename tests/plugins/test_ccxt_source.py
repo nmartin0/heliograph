@@ -149,6 +149,7 @@ class Faked(CcxtSource):
 
 def source(exchange: FakeExchange, **params: Any) -> tuple[Faked, Counting]:
     Faked.exchange = exchange
+    params.setdefault("backoff", 0)  # waiting between attempts is tested on its own
     built = Faked(CcxtParams(exchange="kraken", **params))
     throttle = Counting()
     built.bind(throttle)
@@ -337,6 +338,12 @@ def test_an_instrument_on_another_venue_is_refused() -> None:
         (ccxt.RateLimitExceeded("slow down"), SourceUnavailableError, "kraken: slow down"),
         (ccxt.ExchangeNotAvailable("down"), SourceUnavailableError, "kraken: down"),
         (ccxt.BadSymbol("no such pair"), InvalidValueError, "kraken: no such pair"),
+        (ccxt.NotSupported("no candles"), InvalidValueError, "kraken: no candles"),
+        (ccxt.AuthenticationError("bad key"), InvalidValueError, "kraken: bad key"),
+        (ccxt.PermissionDenied("not allowed"), InvalidValueError, "kraken: not allowed"),
+        (ccxt.OperationRejected("rejected"), InvalidValueError, "kraken: rejected"),
+        (ccxt.DDoSProtection("banned"), SourceUnavailableError, "kraken: banned"),
+        (ccxt.ExchangeError("odd"), SourceUnavailableError, "kraken: odd"),
     ],
 )
 def test_ccxt_errors_become_the_ports_errors(
@@ -426,3 +433,154 @@ def test_health_is_whether_the_exchange_answers_and_close_releases_it() -> None:
     health = asyncio.run(built.health_check())
     assert not health.ok
     assert "maintenance" in health.detail
+
+
+def test_a_request_that_failed_for_now_is_tried_again_through_the_throttle() -> None:
+    exchange = FakeExchange([unified_trade(T0 + 100, 100.0)])
+    failures = [ccxt.RequestTimeout("timed out"), ccxt.RateLimitExceeded("slow down")]
+    real = exchange.fetch_trades
+
+    async def flaky(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        if failures:
+            raise failures.pop(0)
+        return await real(*args, **kwargs)
+
+    exchange.fetch_trades = flaky  # type: ignore[method-assign]
+    built, throttle = source(exchange)
+    got = read(built, trades_request(T0, T0 + 1_000))
+    assert [m.values["price"] for m in got if isinstance(m, Point)] == [100.0]
+    assert throttle.entered >= 4  # markets, two failures, and the page that came
+
+
+def test_a_request_still_failing_after_its_retries_is_unavailable() -> None:
+    exchange = FakeExchange()
+    exchange.fail = ccxt.RequestTimeout("timed out")
+    built, throttle = source(exchange, retries=2)
+    with pytest.raises(SourceUnavailableError, match="timed out \\(tried 3 times\\)"):
+        read(built, trades_request(T0, T0 + 1_000))
+    assert throttle.entered == 1 + 3  # the markets, then the page three times
+
+
+def test_trade_history_is_offered_only_where_ccxt_pages_it_by_time() -> None:
+    """Bybit's fetch_trades ignores `since`: its trades would come back short, silently."""
+    assert "trades" not in CcxtSource(CcxtParams(exchange="bybit")).capabilities.history
+    assert "bars" in CcxtSource(CcxtParams(exchange="bybit")).capabilities.history
+    trusted = CcxtSource(CcxtParams(exchange="bybit", trust_since=True)).capabilities
+    assert "trades" in trusted.history
+
+
+def test_a_candle_off_the_grid_of_its_size_is_refused() -> None:
+    """As Kraken's "2w", 15-day candles taken for 14-day ones."""
+    two_weeks = 14 * 24 * HOUR // MS
+    day = 24 * HOUR // MS
+    start = (T0 // two_weeks) * two_weeks
+    candles = [[start + k * (two_weeks + day), 1, 2, 0.5, 1.5, 10] for k in range(3)]
+    built, _ = source(FakeExchange(candles=candles))
+    wanted = HistoryRequest(
+        instrument=BTC,
+        kind="bars",
+        start=Timestamp(start * MS),
+        end=Timestamp((start + 3 * (two_weeks + day)) * MS),
+        bar_size=two_weeks * MS,
+    )
+    with pytest.raises(InvalidValueError, match="off the 2w grid: its 2w is not 2w"):
+        read(built, wanted)
+
+
+def test_every_source_on_one_exchange_shares_one_rate_key() -> None:
+    a = CcxtSource(CcxtParams(exchange="kraken", page=1000))
+    b = CcxtSource(CcxtParams(exchange="kraken", page=500))
+    assert a.rate_key == b.rate_key != CcxtSource(CcxtParams(exchange="bybit")).rate_key
+
+
+def test_weekly_candles_may_start_on_a_monday() -> None:
+    """Exchanges start weekly candles on Mondays, not on 1970's Thursdays."""
+    week = 7 * 24 * HOUR // MS
+    monday = 1_791_158_400_000  # 2026-10-05T00:00:00Z, a Monday
+    candles = [[monday + k * week, 1, 2, 0.5, 1.5, 10] for k in range(3)]
+    built, _ = source(FakeExchange(candles=candles))
+    wanted = HistoryRequest(
+        instrument=BTC,
+        kind="bars",
+        start=Timestamp(monday * MS),
+        end=Timestamp((monday + 3 * week) * MS),
+        bar_size=week * MS,
+    )
+    assert len([m for m in read(built, wanted) if isinstance(m, Bar)]) == 3
+
+
+def test_an_exchange_that_thinks_it_is_attacked_is_never_asked_again() -> None:
+    """Binance's 418 bans for longer each time it is asked again."""
+    exchange = FakeExchange()
+    exchange.fail = ccxt.DDoSProtection("banned")
+    built, throttle = source(exchange, retries=5)
+    with pytest.raises(SourceUnavailableError, match=r"kraken: banned$"):
+        read(built, trades_request(T0, T0 + 1_000))
+    assert throttle.entered == 1 + 1  # the markets, then the page once
+
+
+def test_an_error_asking_again_cannot_mend_is_never_retried() -> None:
+    exchange = FakeExchange()
+    exchange.fail = ccxt.BadSymbol("no such pair")
+    built, throttle = source(exchange, retries=5)
+    with pytest.raises(InvalidValueError):
+        read(built, trades_request(T0, T0 + 1_000))
+    assert throttle.entered == 2
+
+
+def test_retries_wait_longer_each_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr("heliograph.plugins.ccxt_source.asyncio.sleep", sleep)
+    exchange = FakeExchange()
+    exchange.fail = ccxt.RequestTimeout("timed out")
+    built, _ = source(exchange, retries=3, backoff=2.0)
+    with pytest.raises(SourceUnavailableError, match="tried 4 times"):
+        read(built, trades_request(T0, T0 + 1_000))
+    assert waits == [2.0, 4.0, 8.0]
+
+
+def test_a_live_error_asking_again_cannot_mend_is_the_ports_invalid_value() -> None:
+    built, _ = source(FakeExchange(live=[ccxt.BadSymbol("no such pair")]))
+
+    async def scenario() -> list[Message]:
+        return [m async for m in built.subscribe([Subscription(instrument=BTC, kind="trades")])]
+
+    with pytest.raises(InvalidValueError, match="kraken: no such pair"):
+        asyncio.run(scenario())
+
+
+def test_a_timeframe_whose_own_value_is_another_size_is_not_offered() -> None:
+    """Kraken's "2w" is 21600 minutes (15 days); Bitstamp's "1w" 259200 seconds (3 days)."""
+    kraken = CcxtSource(CcxtParams(exchange="kraken")).capabilities.bar_sizes
+    assert parse_span("1w") in kraken
+    assert parse_span("2w") not in kraken
+    bitstamp = CcxtSource(CcxtParams(exchange="bitstamp")).capabilities.bar_sizes
+    assert parse_span("1d") in bitstamp
+    assert parse_span("1w") not in bitstamp
+
+
+def test_why_trade_history_is_withheld_is_said() -> None:
+    caps = CcxtSource(CcxtParams(exchange="bybit")).capabilities
+    assert "not known to page by time" in caps.withheld
+    assert "trust_since" in caps.withheld
+    assert CcxtSource(CcxtParams(exchange="kraken")).capabilities.withheld == ""
+    assert "not known to page by time" in caps.problems("trades", live=False)[0]
+
+
+def test_no_wait_before_a_retry_is_longer_than_a_minute(monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr("heliograph.plugins.ccxt_source.asyncio.sleep", sleep)
+    exchange = FakeExchange()
+    exchange.fail = ccxt.RequestTimeout("timed out")
+    built, _ = source(exchange, retries=8, backoff=1.0)
+    with pytest.raises(SourceUnavailableError):
+        read(built, trades_request(T0, T0 + 1_000))
+    assert waits == [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]

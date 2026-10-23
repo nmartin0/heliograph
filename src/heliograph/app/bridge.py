@@ -125,6 +125,8 @@ class HistoryFeed(Iterator[Message]):
         self._stream = source.history(request)
         self._previous: Timestamp | None = None
         self._done = False
+        self.delivered = 0
+        """How many messages the source has delivered so far."""
 
     def __iter__(self) -> Self:
         return self
@@ -136,7 +138,9 @@ class HistoryFeed(Iterator[Message]):
         if message is None:
             self.close()
             raise StopIteration
-        return known_in_history(self._checked(message), self._delay)
+        known = known_in_history(self._checked(message), self._delay)
+        self.delivered += 1
+        return known
 
     def _checked(self, message: Message) -> Point | Bar:
         request = self._request
@@ -156,6 +160,11 @@ class HistoryFeed(Iterator[Message]):
             raise InvalidValueError(
                 f"{request.instrument.key}: the source sent data from {happened}, "
                 f"outside [{request.start}, {request.end})"
+            )
+        if isinstance(data, Bar) and data.end > request.end:
+            raise InvalidValueError(
+                f"{request.instrument.key}: the source sent a bar ending at {data.end}, "
+                f"after the request does ({request.end}): a bar must be whole within it"
             )
         if self._previous is not None and happened < self._previous:
             raise OutOfOrderError(

@@ -298,3 +298,39 @@ def test_a_config_with_mounts_round_trips_and_hashes_by_value() -> None:
     assert RunConfig.model_validate_json(config.model_dump_json()) == config
     assert hash(config) == hash(parse_config(BACKTEST).config)
     assert config.mounts["btc"].instrument.instrument() == BTC
+
+
+def test_mounts_on_one_exchange_share_one_throttle_whatever_their_params() -> None:
+    """Kraken's limit is Kraken's: a mount with pages of 500 and one of 1000 are two
+    clients, and must still keep one rate between them."""
+    registry = Registry()
+    registry.discover("data_sources")
+    text = f"""
+[mounts.btc]
+source = "ccxt"
+params = {{ exchange = "kraken", page = 1000 }}
+kind = "bars"
+bar_size = "1h"
+{SINCE_JANUARY}
+[mounts.btc.instrument]
+symbol = "BTC/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
+
+[mounts.eth]
+source = "ccxt"
+params = {{ exchange = "kraken", page = 500 }}
+kind = "bars"
+bar_size = "1h"
+{SINCE_JANUARY}
+[mounts.eth.instrument]
+symbol = "ETH/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
+"""
+    time = SimulatedTime(start=NOW)
+    btc, eth = build_mounts(parse_config(text).config, registry, time.clock, time.advance)
+    assert btc.source is not eth.source
+    assert btc.source._throttle is eth.source._throttle  # type: ignore[attr-defined]

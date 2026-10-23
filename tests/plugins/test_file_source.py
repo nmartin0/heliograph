@@ -379,3 +379,16 @@ def test_bars_that_overlap_are_refused(tmp_path: Path) -> None:
     built = source(path, kind="bars", bar_size="1h")
     with pytest.raises(InvalidValueError, match=r"row 3: the bar starting at \d+ overlaps"):
         read(built, request(kind="bars", bar_size=NANOS_PER_HOUR))
+
+
+def test_a_bar_not_whole_within_the_request_is_not_sent(tmp_path: Path) -> None:
+    """Two-minute bars at minutes 0 and 2, asked for minutes 0-3: the second ends at 4."""
+    path = write_csv(
+        tmp_path / "bars.csv",
+        "start,open,high,low,close,volume",
+        f"{iso(0)},10,12,9,11,5",
+        f"{iso(2)},11,11,10,10.5,0",
+    )
+    built = source(path, kind="bars", bar_size="2m", time_column="start")
+    got = read(built, request(0, 3, kind="bars", bar_size=2 * MIN))
+    assert [m.start for m in got if isinstance(m, Bar)] == [T0]
