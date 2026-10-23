@@ -216,7 +216,12 @@ makes the combined forecast 0; the sizer sees every close, so it can follow
 the price while forecasts warm up; exits run in order and the one that sets
 the target is named; risk gates see only proposals that add risk (taking it
 off always leaves), and the first to refuse stops the signal, which is
-journalled as `SignalRefused`. The position a strategy holds is the last
+journalled as `SignalRefused`; a refused reversal goes flat instead (D34),
+since the side held is one the strategy no longer wants. A gate may also
+doubt the price itself (a jump that looks like a bad print): that close is
+not acted on at all, until a close is back near the last one trusted or
+confirms the move (at most `max_doubts` in a row). While the
+sizer cannot size, exits and vetoes still act on the position held. The position a strategy holds is the last
 target it signalled or, with a simulated broker, what has been filled.
 
 Simulated fills (D31, `core/broker.py`): a strategy naming a fill model

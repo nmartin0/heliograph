@@ -399,7 +399,9 @@ differs from the position held (the sizer's buffer keeps small changes from
 trading). Risk gates guard against adding risk: a proposal that only takes
 risk off (to flat, or smaller on the same side) never reaches them, so a
 stop or a veto always leaves. A gate that refuses is published as
-`SignalRefused`, and the position held stays; every gate hears of each signal
+`SignalRefused`, and the position held stays, unless the refused signal was
+a reversal: then the strategy is signalled flat instead; a gate may also
+doubt a close's price, which is then not acted on (D34); every gate hears of each signal
 sent (`sent`), so one counting signals counts only those that left, and sees
 the previous close of the price stream. A signal's id hashes the
 configuration's digest, the strategy, the instant and the target (−0.0 as
@@ -545,3 +547,74 @@ reorder bars); building from bars inside the data source (sources deliver
 what they hold; building is the stream's job, so the same rules serve
 every source).
 
+## D34 · Signals fail safe: refused reversals go flat, doubted closes wait, exits always act (2026-10-23)
+
+A review of everything built found ways a strategy could signal what no
+one should act on; three reviews of the fixes found more. The rules:
+
+- **A refused reversal goes flat.** When a risk gate refuses a signal that
+  would turn a long into a short (or the reverse), the strategy is
+  signalled flat instead: a `Signal` whose `instead_of` names the target
+  refused (schema 2). Flat only takes risk off, so no gate stops it. A
+  refused entry or addition leaves the position held as it was.
+- **A doubted close waits.** A risk gate may doubt the price itself
+  (`Suspicious.suspect`), asked at every close before the sizer and exits
+  see it: a doubted close is not acted on at all, not even to leave, and
+  is journalled as a `SignalRefused` with `doubted` set (the report counts
+  them apart). `limits` doubts a close more than `max_jump` from the last
+  close it trusted; the next is trusted again if it is back near that
+  close (the print is gone) or beyond it on the same side (the move was
+  real: a crash costs one close); one the other way, a second bad print,
+  is doubted too, but never more than `max_doubts` (3) in a row. The
+  graph's nodes have seen a doubted price already: a forecaster, or an
+  ATR a stop reads, carries a bad print for a while; a sanity filter in
+  front of the graph is on the roadmap.
+- **Exits always act.** While the sizer cannot size (warming its
+  volatility, a price that is not positive), exits and vetoes still act on
+  the position held, and a signal that only takes risk off still leaves;
+  nothing that adds risk does.
+- **A trailing stop follows the position held.** Its best close starts
+  when the position held takes a side (from the close the strategy decided
+  to take it on), so a refused or unfilled proposal moves nothing.
+- **A stall is no change** (`plugins/volatility.py`): from the third
+  unchanged price in a row (`stall_after`), unchanged prices are left out
+  of the volatility, so a stalled feed or a market shut between its bars
+  neither drains it nor sizes up, and the first move after is measured
+  against the volatility from before; a market that often closes
+  unchanged, but not for long, is measured as it trades.
+- **Volatility has two floors**, once 100 changes are known: the 5%
+  quantile of its last 500 values, as Carver's `robust_vol_calc`, and half
+  its long-run level (span 500, started from the mean of the first 100
+  squared changes, and taking no change over five of its volatilities, so
+  a bad print or a gap does not hold it up for hundreds of bars). The
+  quantile falls with a long quiet spell; the long-run level falls slowly
+  enough that a crossover divided by it shrinks, for `ewmac` spans up to
+  twice the window (larger are refused). Before 100 changes there is no
+  floor, and `vol_target`'s positions are bounded by its cap alone.
+- **Positions are capped** at `max_leverage` (1) times capital in value,
+  before the no-trade buffer, whose width is a share of the cap when the
+  cap is the smaller, so a capped position does not trade at every close.
+- **Settings that could never work are refused:** `vol_target` without
+  `bars_per_year` (the old default suited only hourly bars; daily ones
+  were sized about 4.9 times too small), a `buffer` of 1 or more,
+  `max_jump` of 0, NaN or infinity in any plug-in parameter.
+
+**Why:** a signal provider is trusted to say what to hold. A gate that
+blocked a reversal kept a full long against a short forecast with its stop
+disarmed (22% down in the review's case); a quiet market or a stalled feed
+sized positions up to 241 times capital; `ewmac` 64/256 read a stall as a
+forecast of -170,163, which the cap turned into the strongest signal
+there is. The first fixes then traded at a bad print, held a long down a
+crash of 30% steps to -84%, froze exits for a day after a stall, and acted
+on a second bad print that followed a doubted close.
+
+**Rejected:** keeping the position on a refused reversal (the side held is
+the one the strategy has left); doubting every close of a run of jumps (a
+crash would never be left); never doubting the close after a doubted one
+(a second bad print was traded on); a stale flag that stops sizing after
+an unchanged run (it froze exits, and a thin feed was stale for good);
+leaving out every unchanged price (a market that often closes unchanged
+was sized at a fraction of its target); the
+quantile floor alone (it falls with a long quiet spell); inferring
+`bars_per_year` from the stream's size (right only for markets that trade
+around the clock; stock exchanges come in Phase 4).

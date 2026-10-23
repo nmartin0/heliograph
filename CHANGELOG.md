@@ -231,6 +231,27 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- A risk gate refusing a reversal no longer keeps the side held: the
+  strategy is signalled flat instead (`Signal.instead_of`, schema 2).
+- A close whose price a risk gate doubts (`limits`: a jump from the last
+  close trusted) is not acted on at all, not even to leave, until a close
+  is back near the last trusted or confirms the move (at most three in a
+  row): a bad print is not traded on and a crash costs one close. The
+  report counts doubted closes apart from refused signals.
+- While the sizer cannot size, exits and vetoes still act on the position
+  held; only signals that take risk off leave.
+- The trailing stop's best close follows the position held, so a refused
+  proposal no longer resets it.
+- `vol_target` and `ewmac` leave a stall's unchanged prices out of their
+  volatility and floor it at the 5% quantile of its recent values
+  (Carver's `robust_vol_calc`) and at half its long-run level; `vol_target` caps
+  positions at `max_leverage` times capital, before its buffer. Quiet or
+  stalled markets sized up to 241 times capital, and `ewmac` 64/256
+  reached -170,163.
+- `vol_target` requires `bars_per_year` (the default suited hourly bars
+  only) and a buffer below 1; `limits` a `max_jump` above 0; `ewmac` a
+  slow span at most twice its floor window; plug-in parameters refuse NaN
+  and infinity.
 - A finished journal is one file: reading it no longer leaves `-wal` and
   `-shm` files beside it.
 - A journal whose name holds `?`, `#` or `%` is read as itself, and a file

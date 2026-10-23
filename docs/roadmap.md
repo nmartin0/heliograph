@@ -149,6 +149,12 @@ candles.
       finer bars (`BarsFromBars`), so strategies run on an exchange's
       candles (D33, D5). Carrying gaps in bars built from bars waits until a
       strategy needs it.
+- Fixes from the review of everything built (2026-10-23), in three
+  batches: F1 signals (D34) done; F2 bars and timing; F3 sources and the
+  store.
+- Open, from the review of F1: a doubted price reaches the graph's nodes
+  (a forecaster, an ATR a stop reads) before any risk gate can doubt it;
+  a sanity filter on bars in front of the graph would keep it out.
 - Open, found in D5's review: late points and late bars are counted but
   not reported or journalled; the check that a graph node's inputs share a
   grace takes grace for the time a bar closes, which a bar built from bars
@@ -203,6 +209,16 @@ code written for it.
   which Alpaca's stocks need (moved from Phase 2).
 - Paper broker on live data; took-it/skipped journal.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
+
+- From the review of 2026-10-23, to settle before live data: a live clock
+  that repeats a timestamp must not end the run (the engine treats a
+  settled instant as final); SIGTERM must flush and close the journal;
+  live alarms must fire and settle before each input, as the backtest
+  engine does, so a live day replays; Kraken's websocket replays its last
+  50 trades on each subscribe, trade ids are dropped, and nothing
+  reconnects; a person's took-it or skipped answer must reach the
+  strategy's position held; stage objects keep state, so optimisation
+  must build them afresh per run (Phase 5).
 
 **Gate:** a paper session survives a restart with positions and clock intact,
 and a replayed day reproduces its signals.

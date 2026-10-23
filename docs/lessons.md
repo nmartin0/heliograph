@@ -237,6 +237,13 @@ within each section.
   silently. Its tests had no delay. Review also found parts off their grid
   taken into the wrong bar, and two bars of one stream at one instant
   stopping the graph.
+- **Review everything, not only the last batch.** A review of the whole
+  project (four reviewers, one per part, each proving its findings) found
+  defects no batch review had: a refused reversal kept a losing long with
+  its stop disarmed, volatility with no floor sized a stalled market at
+  241 times capital, `ewmac` blew up on a stall, many CCXT exchanges ignore
+  `since` for trades, and a short re-download erased stored data. Each
+  batch's review saw only its own diff.
 - **A time limit in a test is a guess about the slowest computer it runs
   on.** The control script's test of a hung control gave the inner pytest 3
   seconds to start and write a pid; on the owner's computer, once
