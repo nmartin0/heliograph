@@ -91,8 +91,17 @@ def running(pid: int) -> bool:
     return state.stdout.strip()[:1] not in ("", "Z")
 
 
-def test_a_hung_control_kills_what_its_tests_started_too(project: Path) -> None:
-    """A test that starts a process and hangs leaves nothing running behind it."""
+def test_a_hung_control_kills_what_its_tests_started_too(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A test that starts a process and hangs leaves nothing running behind it.
+
+    The inner pytest must start, and its test write the child's pid, before
+    the limit: without plug-ins (it needs none) that takes well under a
+    second here, and several on a slower computer, where 3 seconds with
+    every plug-in loading was once not enough.
+    """
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
     child = (
         "import subprocess, sys, pathlib; "
         "pathlib.Path('child.pid').write_text(str(subprocess.Popen("
@@ -100,7 +109,7 @@ def test_a_hung_control_kills_what_its_tests_started_too(project: Path) -> None:
         "return next(i for i in iter(int, 1) if i)"
     )
     outcome = check_controls.check(
-        project, project / "r.json", control("test_mod.py::test_double", new=child), timeout=3
+        project, project / "r.json", control("test_mod.py::test_double", new=child), timeout=10
     )
     assert outcome.hung
     pid = int((project / "child.pid").read_text())

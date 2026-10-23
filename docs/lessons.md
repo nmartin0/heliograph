@@ -237,6 +237,11 @@ within each section.
   silently. Its tests had no delay. Review also found parts off their grid
   taken into the wrong bar, and two bars of one stream at one instant
   stopping the graph.
+- **A time limit in a test is a guess about the slowest computer it runs
+  on.** The control script's test of a hung control gave the inner pytest 3
+  seconds to start and write a pid; on the owner's computer, once
+  inline-snapshot loaded at every start, it did not, and D5 could not be
+  pushed. The inner run now loads no plug-ins and has 10 seconds.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.
