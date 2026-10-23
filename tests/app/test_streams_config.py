@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Nicholas Martin
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
-"""Streams in the run configuration: bars of a size from a mount's trades."""
+"""Streams in the run configuration: bars of a size from a mount's trades or bars."""
 
 import pytest
 
@@ -58,7 +58,13 @@ def test_a_stream_names_a_mount_and_how_its_bars_are_cut() -> None:
     ("tables", "reason"),
     [
         (['mount = "nowhere"\nbars = "1h"'], "streams\\[0\\]: no mount named 'nowhere'"),
-        (['mount = "daily"\nbars = "1d"'], "streams build bars from trades"),
+        (['mount = "daily"\nbars = "36h"'], "not a whole number of them"),
+        (['mount = "daily"\nbars = "12h"'], "not a whole number of them"),
+        (['mount = "daily"\nbars = "1d"\ngrace = "1m"'], "they take no grace or gaps"),
+        (['mount = "daily"\nbars = "1d"\ngaps = "carry"'], "they take no grace or gaps"),
+        (['mount = "daily"\nbars = "7d"\ngaps = "carry"'], "bars built from bars skip gaps"),
+        (['mount = "daily"\nbars = "7d"\nprice = "mid"'], "use the bars' own"),
+        (['mount = "daily"\nbars = "7d"\nvolume = ""'], "use the bars' own"),
         (
             ['mount = "btc"\nbars = "1h"', 'mount = "btc"\nbars = "1h"'],
             "mounts.btc already has 1h bars",
@@ -79,3 +85,13 @@ def test_two_streams_of_one_size_on_one_mount_are_refused_even_with_different_gr
     text = streams('mount = "btc"\nbars = "1h"', 'mount = "btc"\nbars = "1h"\ngrace = "1m"')
     with pytest.raises(ConfigError, match=r"mounts\.btc already has 1h bars"):
         parse_config(text)
+
+
+def test_a_stream_on_bars_is_the_bars_themselves_or_built_from_them() -> None:
+    config = parse_config(
+        streams('mount = "daily"\nbars = "1d"', 'mount = "daily"\nbars = "7d"\ngrace = "1h"')
+    ).config
+    same, weekly = config.streams
+    daily = config.mounts["daily"]
+    assert same.built_from(daily) is None
+    assert weekly.built_from(daily) == 24 * NANOS_PER_HOUR

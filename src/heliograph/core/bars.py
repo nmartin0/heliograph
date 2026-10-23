@@ -16,6 +16,7 @@ With ``gaps="skip"`` nothing is scheduled while no bar is open; with
 ``"carry"`` a flat bar is due at every boundary after the first bar, forever.
 """
 
+import math
 from dataclasses import dataclass
 
 from heliograph.core.alarms import AlarmFired, Scheduler
@@ -163,3 +164,148 @@ class TimeBars:
                 f"stream {self._stream.key} needs {name!r} but a point has only "
                 f"{sorted(point.values)}"
             ) from None
+
+
+class BarsFromBars:
+    """Publishes the bars of one stream from finer bars of its instrument (decision D33).
+
+    A stream's bar is the finer bars whose start falls in its interval, put
+    together: the first open and the last close (by start), the highest
+    high, the lowest low and the summed volume. It is published when the
+    last finer bar of its interval (the one ending at its end) arrives, at
+    that bar's instant, so a bar built from bars is known exactly when its
+    last part is. If that part never comes (nothing traded in it, or the
+    data ends), the bar is published by an alarm at its close: one finer bar
+    after its end, plus the source's ``delay`` (how long after its end a
+    finer bar becomes known) and the spec's grace, by when the next finer
+    bar would have been known. An alarm fires before inputs at its instant,
+    so it cannot be set at the end itself without closing the bar before
+    its last part.
+
+    Bars are published in order, one per instant: a bar whose last part
+    arrives while an earlier bar is still open closes that earlier bar
+    then, and is itself published at its own close. A finer bar of a bar
+    already closed, or arriving at or after its close, is late, counted, and
+    changes nothing. A finer bar that is not on its own grid (its start a
+    whole number of its size since 1970) or repeats a start is refused:
+    nothing is guessed. An interval with no finer bar has no bar (gaps are
+    skipped; carrying them is not offered yet).
+    """
+
+    __slots__ = (
+        "_bus",
+        "_closed_up_to",
+        "_delay",
+        "_finer",
+        "_key",
+        "_late",
+        "_open",
+        "_scheduler",
+        "_spec",
+        "_stream",
+    )
+
+    def __init__(
+        self,
+        stream: StreamSpec,
+        finer: int,
+        bus: MessageBus,
+        scheduler: Scheduler,
+        delay: int = 0,
+    ) -> None:
+        if stream.bars is None:
+            raise InvalidValueError(f"stream {stream.key} has no bar spec to build")
+        spec = stream.bars
+        if finer <= 0 or spec.size <= finer or spec.size % finer or spec.anchor % finer:
+            raise InvalidValueError(
+                f"stream {stream.key} cannot be built from bars of {finer} ns: "
+                "its bars must be a whole number (two or more) of them, edge to edge"
+            )
+        if spec.gaps != "skip":
+            raise InvalidValueError(f"stream {stream.key}: bars built from bars skip gaps")
+        if delay < 0:
+            raise InvalidValueError(f"stream {stream.key}: a delay cannot be negative")
+        self._delay = delay
+        self._stream = stream
+        self._spec = spec
+        self._finer = finer
+        self._bus = bus
+        self._scheduler = scheduler
+        self._key = f"bars:{stream.identity}"
+        scheduler.claim(self._key)
+        self._open: dict[Timestamp, list[Bar]] = {}
+        self._closed_up_to: Timestamp | None = None
+        self._late = 0
+        bus.subscribe(Bar, self._on_bar)
+        bus.subscribe(AlarmFired, self._on_alarm)
+
+    @property
+    def late_bars(self) -> int:
+        """Finer bars that arrived after their bar had closed, and were left out."""
+        return self._late
+
+    def _closes_at(self, start: Timestamp) -> Timestamp:
+        return Timestamp(start + self._spec.size + self._finer + self._delay + self._spec.grace)
+
+    def _on_bar(self, bar: Bar) -> None:
+        if bar.instrument != self._stream.instrument or bar.end - bar.start != self._finer:
+            return
+        if bar.start % self._finer:
+            raise InvalidValueError(
+                f"stream {self._stream.key}: a {self._finer} ns bar starting at {bar.start} "
+                "is not on its own grid, so it cannot be put in a bar"
+            )
+        start = self._spec.start_of(bar.start)
+        closed = self._closed_up_to is not None and start < self._closed_up_to
+        if closed or self._closes_at(start) <= bar.ts:
+            self._late += 1
+            return
+        parts = self._open.setdefault(start, [])
+        if any(part.start == bar.start for part in parts):
+            raise InvalidValueError(
+                f"stream {self._stream.key}: two bars starting at {bar.start}; "
+                "a source delivers each bar once"
+            )
+        parts.append(bar)
+        if bar.end == start + self._spec.size:
+            earlier = [s for s in self._open if s < start]
+            if earlier:
+                # One bar per instant: the earlier ones now, this one at its close.
+                self._close_through(max(earlier), bar.ts)
+            else:
+                self._close_through(start, bar.ts)
+        self._rearm()
+
+    def _on_alarm(self, alarm: AlarmFired) -> None:
+        if alarm.key != self._key:
+            return
+        due = [start for start in self._open if self._closes_at(start) <= alarm.ts]
+        if due:
+            self._close_through(max(due), alarm.ts)
+        self._rearm()
+
+    def _close_through(self, last: Timestamp, now: Timestamp) -> None:
+        """Publish every open bar up to and including the one starting at ``last``."""
+        for start in sorted(s for s in self._open if s <= last):
+            parts = sorted(self._open.pop(start), key=lambda part: part.start)
+            end = Timestamp(start + self._spec.size)
+            self._closed_up_to = end
+            self._bus.publish(
+                Bar(
+                    instrument=self._stream.instrument,
+                    start=start,
+                    end=end,
+                    open=parts[0].open,
+                    high=max(part.high for part in parts),
+                    low=min(part.low for part in parts),
+                    close=parts[-1].close,
+                    volume=math.fsum(part.volume for part in parts),
+                    received_at=None if now == end else now,
+                )
+            )
+
+    def _rearm(self) -> None:
+        if self._open:
+            self._scheduler.at(self._closes_at(min(self._open)), self._key)
+        else:
+            self._scheduler.cancel(self._key)  # its bar closed on its last part

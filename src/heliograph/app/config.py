@@ -32,7 +32,11 @@ A run is described by a TOML file::
 A mount binds a name to a data source and says what to take from it. A
 stream builds bars of one size from a mount's trades (core/bars.py), with
 an optional ``grace``, ``gaps`` ("skip" or "carry"), ``price`` and
-``volume`` (``volume = ""`` for trades without a size). A stream's mount
+``volume`` (``volume = ""`` for trades without a size). On a mount of bars
+(``kind = "bars"``, ``bar_size = "1m"``), a stream of the same size is those
+bars as they come, and a stream of a whole multiple of it is built from
+them (an exchange's 1m candles into 1h bars, D33); either way without
+``price``, ``volume`` or carried gaps, and only the second takes a grace. A stream's mount
 must be the only one on its instrument, since bars take every trade of
 their instrument. What can be checked from the text alone is checked here;
 whether the named source can serve each mount is checked at composition
@@ -289,7 +293,7 @@ class MountConfig(BaseModel):
 
 
 class StreamConfig(BaseModel):
-    """Bars of one size built from one mount's trades."""
+    """Bars of one size, built from one mount's trades or from its finer bars."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -313,6 +317,40 @@ class StreamConfig(BaseModel):
         except InvalidValueError as exc:
             raise ValueError(str(exc)) from exc
         return self
+
+    def built_from(self, mount: "MountConfig") -> int | None:
+        """The size of the finer bars these are built from, or None.
+
+        None for a stream on trades (built by ``TimeBars``) or one that is its
+        mount's bars as they come (the same size); otherwise the mount's bar
+        size (built by ``BarsFromBars``).
+        """
+        finer = mount.bar_size_ns
+        return finer if finer is not None and finer != self.bar_spec().size else None
+
+    def on_bars(self, mount: "MountConfig") -> list[str]:
+        """What is wrong with this stream on ``mount``, a mount of bars (D33)."""
+        finer = mount.bar_size_ns
+        assert finer is not None  # a mount of bars has a size
+        spec = self.bar_spec()
+        problems = []
+        if spec.size % finer:
+            problems.append(
+                f"{self.bars} bars cannot be built from mounts.{self.mount}'s "
+                f"{mount.bar_size} bars (not a whole number of them)"
+            )
+        elif spec.size == finer and (self.grace is not None or self.gaps != "skip"):
+            problems.append(
+                f"{self.bars} bars are mounts.{self.mount}'s own bars, as they come: "
+                "they take no grace or gaps"
+            )
+        if self.gaps != "skip" and spec.size != finer:
+            problems.append("bars built from bars skip gaps; carrying them is not offered yet")
+        if (self.price, self.volume) != ("price", "size"):
+            problems.append(
+                "price and volume name a trade's values; bars built from bars use the bars' own"
+            )
+        return problems
 
     def bar_spec(self) -> BarSpec:
         """How the bars are cut.
@@ -418,10 +456,8 @@ class RunConfig(BaseModel):
             if mount is None:
                 problems.append(f"{where}: no mount named {stream.mount!r}")
                 continue
-            if mount.kind != "trades":
-                problems.append(
-                    f"{where}: mounts.{stream.mount} delivers bars; streams build bars from trades"
-                )
+            if mount.kind == "bars":
+                problems += [f"{where}: {p}" for p in stream.on_bars(mount)]
             key = mount.instrument.instrument().key
             sharing = by_instrument[key]
             if len(sharing) > 1:

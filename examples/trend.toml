@@ -7,8 +7,16 @@
 # buffer; a trailing stop three ATRs behind the best close; a price-jump and
 # rate check; filled at the next hour's open, paying half a 0.1% spread and a
 # 0.1% commission. Robert Carver's design (Systematic Trading, 2015), as
-# docs/design.md describes it. To run it on real trades, point the mount at
-# the ccxt source instead: source = "ccxt", params = { exchange = "kraken" }.
+# docs/design.md describes it. To run it on an exchange's hourly candles,
+# point the mount at the ccxt source instead:
+#
+#     source = "ccxt"
+#     params = { exchange = "kraken" }
+#     kind = "bars"
+#     bar_size = "1h"      # or "1m", which the 1h stream is then built from
+#
+# with start and end inside the exchange's history of candles (Kraken keeps
+# only the latest 720 of each size: 30 days of hours, 12 hours of minutes).
 
 mode = "backtest"
 

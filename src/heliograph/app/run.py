@@ -63,7 +63,7 @@ from heliograph.app.config import (
 from heliograph.app.limits import Sleep
 from heliograph.app.mounts import Mount, build_mounts
 from heliograph.core.alarms import AlarmFired
-from heliograph.core.bars import TimeBars
+from heliograph.core.bars import BarsFromBars, TimeBars
 from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import Clock, SimulatedClock
@@ -149,8 +149,7 @@ def run_backtest(
     start = Timestamp(min(r.start for r in requests))
     end = Timestamp(max(r.end for r in requests))
     late = max(m.source.capabilities.live_delay for m in mounts)
-    grace = max((stream.bar_spec().grace for stream in config.streams), default=0)
-    until = Timestamp(end + late + grace)
+    until = Timestamp(end + late + _longest_wait(config))
     header = _header(loaded, mounts, components, start, end, until)
     sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
     with SourceLoop() as loop:
@@ -354,10 +353,20 @@ def _assembled(
     with SqliteJournal(params, dict(header)) as sink:
         bus = MessageBus(clock, sink)
         engine = BacktestEngine(clock, bus)
+        # How long after its end each mount's data is known; a journal written
+        # before this was recorded had no delays on mounts of bars to record.
+        mounts = json.loads(header.get("mounts", "{}"))
+        delays = {name: int(m.get("live_delay", 0)) for name, m in mounts.items()}
         for stream in config.streams:
-            instrument = config.mounts[stream.mount].instrument.instrument()
-            spec = StreamSpec(instrument=instrument, bars=stream.bar_spec())
-            TimeBars(spec, bus, engine.scheduler)
+            source = config.mounts[stream.mount]
+            spec = StreamSpec(instrument=source.instrument.instrument(), bars=stream.bar_spec())
+            finer = stream.built_from(source)
+            if source.kind == "trades":
+                TimeBars(spec, bus, engine.scheduler)
+            elif finer is not None:
+                delay = delays.get(stream.mount, 0)
+                BarsFromBars(spec, finer, bus, engine.scheduler, delay)
+            # Otherwise the stream is the mount's own bars, as they come.
         nodes = [(c, cast(Indicator, p)) for c, p in components if c.kind in GRAPH_KINDS]
         if nodes or config.strategies:
             graph = Graph(bus)
@@ -399,6 +408,15 @@ def _assembled(
                     )
                     broker.on_fill(_holding(running))
         yield engine
+
+
+def _longest_wait(config: RunConfig) -> int:
+    """How long after its end the last bar of any stream may still close."""
+    waits = [0]
+    for stream in config.streams:
+        finer = stream.built_from(config.mounts[stream.mount])
+        waits.append(stream.bar_spec().grace + (finer or 0))
+    return max(waits)
 
 
 def _holding(strategy: Strategy) -> Callable[[Fill], None]:
@@ -462,6 +480,7 @@ def _header(
             "source": spec.source,
             "version": plugin.manifest.version,
             "params": params,
+            "live_delay": mount.source.capabilities.live_delay,
         }
         if spec.source == "store":
             snapshots.add(params["snapshot"])

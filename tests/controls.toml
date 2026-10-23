@@ -511,8 +511,8 @@ tests = ["tests/core/test_engine.py::test_a_run_may_stop_exactly_where_the_clock
 [[control]]
 describes = "every late point is counted"
 path = "src/heliograph/core/bars.py"
-old = "            self._late += 1\n"
-new = "            self._late = 1\n"
+old = "point.ts:\n            self._late += 1\n"
+new = "point.ts:\n            self._late = 1\n"
 tests = ["tests/core/test_bars.py::test_every_late_point_is_counted"]
 
 [[control]]
@@ -525,8 +525,8 @@ tests = ["tests/core/test_bars.py::test_without_a_volume_value_every_bar_has_zer
 [[control]]
 describes = "a bar closed at its end carries no separate received time"
 path = "src/heliograph/core/bars.py"
-old = "                received_at=None if now == end else now,\n"
-new = "                received_at=now,\n"
+old = "                volume=bar.volume,\n                received_at=None if now == end else now,\n"
+new = "                volume=bar.volume,\n                received_at=now,\n"
 tests = ["tests/core/test_bars.py::test_a_bar_closed_at_its_end_carries_no_separate_received_time"]
 
 [[control]]
@@ -1072,9 +1072,9 @@ new = "                pass\n"
 tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
 
 [[control]]
-describes = "a stream builds bars from a trades mount only"
+describes = "a stream on a mount of bars is checked against those bars"
 path = "src/heliograph/app/config.py"
-old = "            if mount.kind != \"trades\":\n"
+old = "            if mount.kind == \"bars\":\n"
 new = "            if mount.kind == \"quotes\":\n"
 tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
 
@@ -1123,7 +1123,7 @@ tests = ["tests/app/test_run.py::test_a_replay_from_the_journal_alone_reproduces
 [[control]]
 describes = "a run lasts past its end by the longest live delay and grace"
 path = "src/heliograph/app/run.py"
-old = "    until = Timestamp(end + late + grace)\n"
+old = "    until = Timestamp(end + late + _longest_wait(config))\n"
 new = "    until = Timestamp(end)\n"
 tests = [
     "tests/app/test_run.py::test_a_run_lasts_long_enough_for_the_last_trades_to_arrive_and_the_last_bar_to_close",
@@ -2253,3 +2253,160 @@ path = "src/heliograph/app/cli.py"
 old = "    while candidate.exists():\n"
 new = "    while False:\n"
 tests = ["tests/app/test_cli.py::test_two_runs_in_the_same_second_get_journals_of_their_own"]
+
+# -- D5: bars built from bars (D33) -------------------------------------------------------
+
+[[control]]
+describes = "a bar built from bars closes on its last part"
+path = "src/heliograph/core/bars.py"
+old = "        if bar.end == start + self._spec.size:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_bar_is_its_parts_put_together_published_with_its_last_part", "tests/app/test_run_bar_streams.py::test_hours_are_built_from_quarters_when_their_last_quarter_is_known"]
+
+[[control]]
+describes = "a bar closed on its last part takes back its fallback alarm"
+path = "src/heliograph/core/bars.py"
+old = "            self._scheduler.cancel(self._key)  # its bar closed on its last part\n"
+new = "            pass\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_bar_is_its_parts_put_together_published_with_its_last_part"]
+
+[[control]]
+describes = "a bar's parts are put in order by start"
+path = "src/heliograph/core/bars.py"
+old = "            parts = sorted(self._open.pop(start), key=lambda part: part.start)\n"
+new = "            parts = self._open.pop(start)\n"
+tests = ["tests/core/test_bars_from_bars.py::test_the_parts_are_put_in_order_by_start_whatever_order_they_arrive_in"]
+
+[[control]]
+describes = "a part arriving at its bar's close is late"
+path = "src/heliograph/core/bars.py"
+old = "        if closed or self._closes_at(start) <= bar.ts:\n"
+new = "        if closed:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_first_part_arriving_at_or_after_its_bars_close_opens_no_bar"]
+
+[[control]]
+describes = "a part of a bar already published is late"
+path = "src/heliograph/core/bars.py"
+old = "start_of(bar.start)\n        closed = self._closed_up_to is not None and start < self._closed_up_to\n"
+new = "start_of(bar.start)\n        closed = False\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_part_of_a_bar_already_published_is_late_and_changes_nothing"]
+
+[[control]]
+describes = "a bar missing its last part waits one part past its end"
+path = "src/heliograph/core/bars.py"
+old = "        return Timestamp(start + self._spec.size + self._finer + self._delay + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size + self._delay + self._spec.grace)\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_bar_missing_its_last_part_is_published_one_part_after_its_end"]
+
+[[control]]
+describes = "bars built from bars wait their grace"
+path = "src/heliograph/core/bars.py"
+old = "        return Timestamp(start + self._spec.size + self._finer + self._delay + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size + self._finer + self._delay)\n"
+tests = ["tests/core/test_bars_from_bars.py::test_grace_waits_longer_for_parts_known_late"]
+
+[[control]]
+describes = "parts are of the stream's instrument"
+path = "src/heliograph/core/bars.py"
+old = "        if bar.instrument != self._stream.instrument or bar.end - bar.start != self._finer:\n"
+new = "        if bar.end - bar.start != self._finer:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_other_instruments_and_sizes_are_not_parts"]
+
+[[control]]
+describes = "parts are of the finer size"
+path = "src/heliograph/core/bars.py"
+old = "        if bar.instrument != self._stream.instrument or bar.end - bar.start != self._finer:\n"
+new = "        if bar.instrument != self._stream.instrument:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_other_instruments_and_sizes_are_not_parts"]
+
+[[control]]
+describes = "a stream on bars is a whole number of them"
+path = "src/heliograph/app/config.py"
+old = "        if spec.size % finer:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "a stream that is its mount's bars takes no grace or gaps"
+path = "src/heliograph/app/config.py"
+old = "        elif spec.size == finer and (self.grace is not None or self.gaps != \"skip\"):\n"
+new = "        elif False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "bars built from bars skip gaps"
+path = "src/heliograph/app/config.py"
+old = "        if self.gaps != \"skip\" and spec.size != finer:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "bars built from bars use the bars' own values"
+path = "src/heliograph/app/config.py"
+old = "        if (self.price, self.volume) != (\"price\", \"size\"):\n"
+new = "        if False:\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_that_cannot_be_built_is_refused_when_read"]
+
+[[control]]
+describes = "a stream of its mount's size is the mount's bars"
+path = "src/heliograph/app/config.py"
+old = "        return finer if finer is not None and finer != self.bar_spec().size else None\n"
+new = "        return finer\n"
+tests = ["tests/app/test_streams_config.py::test_a_stream_on_bars_is_the_bars_themselves_or_built_from_them"]
+
+[[control]]
+describes = "a run builds bars from bars"
+path = "src/heliograph/app/run.py"
+old = "                BarsFromBars(spec, finer, bus, engine.scheduler, delay)\n"
+new = "                pass\n"
+tests = ["tests/app/test_run_bar_streams.py::test_hours_are_built_from_quarters_when_their_last_quarter_is_known"]
+
+[[control]]
+describes = "a run waits one finer bar past its end for bars built from bars"
+path = "src/heliograph/app/run.py"
+old = "        waits.append(stream.bar_spec().grace + (finer or 0))\n"
+new = "        waits.append(stream.bar_spec().grace)\n"
+tests = ["tests/app/test_run_bar_streams.py::test_hours_are_built_from_quarters_when_their_last_quarter_is_known"]
+
+[[control]]
+describes = "a source's delay moves the close of bars built from its bars"
+path = "src/heliograph/core/bars.py"
+old = "        return Timestamp(start + self._spec.size + self._finer + self._delay + self._spec.grace)\n"
+new = "        return Timestamp(start + self._spec.size + self._finer + self._spec.grace)\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_source_known_late_moves_the_close_by_its_delay"]
+
+[[control]]
+describes = "a run gives the builder its mount's delay"
+path = "src/heliograph/app/run.py"
+old = "                delay = delays.get(stream.mount, 0)\n"
+new = "                delay = 0\n"
+tests = ["tests/app/test_run_bar_streams.py::test_a_mount_known_late_still_builds_whole_hours_and_replays"]
+
+[[control]]
+describes = "the header records each mount's delay, so a replay builds the same bars"
+path = "src/heliograph/app/run.py"
+old = "            \"live_delay\": mount.source.capabilities.live_delay,\n"
+new = ""
+tests = ["tests/app/test_run_bar_streams.py::test_a_mount_known_late_still_builds_whole_hours_and_replays", "tests/app/test_run.py::test_a_backtest_on_a_published_snapshot_journals_its_trades_and_bars"]
+
+[[control]]
+describes = "a part off its grid is refused"
+path = "src/heliograph/core/bars.py"
+old = "        if bar.start % self._finer:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_part_off_its_grid_or_repeated_is_refused"]
+
+[[control]]
+describes = "a repeated part is refused"
+path = "src/heliograph/core/bars.py"
+old = "        if any(part.start == bar.start for part in parts):\n"
+new = "        if False:\n"
+tests = ["tests/core/test_bars_from_bars.py::test_a_part_off_its_grid_or_repeated_is_refused"]
+
+[[control]]
+describes = "bars built from bars are published one per instant"
+path = "src/heliograph/core/bars.py"
+old = "                self._close_through(max(earlier), bar.ts)\n"
+new = "                self._close_through(start, bar.ts)\n"
+tests = ["tests/core/test_bars_from_bars.py::test_bars_are_published_in_order_and_one_per_instant"]
+

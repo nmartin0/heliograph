@@ -12,16 +12,21 @@ truncates the way the offline tests assume.
 
 import asyncio
 from itertools import pairwise
+from pathlib import Path
 
 import pytest
 
 from heliograph.app.bridge import HistoryFeed, SourceLoop
+from heliograph.app.config import parse_config
 from heliograph.app.limits import RateThrottle
+from heliograph.app.run import JOURNALLED, run_backtest
 from heliograph.core.clock import WallClock
 from heliograph.core.messages import Bar, Point
 from heliograph.core.sources import HistoryRequest, Subscription
-from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp
+from heliograph.core.time import NANOS_PER_HOUR, NANOS_PER_MINUTE, Timestamp, to_datetime
 from heliograph.plugins.ccxt_source import CcxtParams, CcxtSource
+from heliograph.plugins.registry import Registry
+from heliograph.plugins.sqlite_journal import read_entries, read_header
 from tests.support.world import BTC
 
 pytestmark = pytest.mark.live
@@ -90,3 +95,49 @@ def test_a_live_trade_arrives_within_a_minute(kraken: CcxtSource) -> None:
 
     trade = asyncio.run(one())
     assert trade.values["price"] > 0
+
+
+def test_a_backtest_on_minute_candles_builds_whole_hours(tmp_path: Path) -> None:
+    """Six hours of Kraken's 1m candles, as they come and built into 1h bars (D33)."""
+    end = CLOCK.now() // NANOS_PER_HOUR * NANOS_PER_HOUR
+    start = end - 6 * NANOS_PER_HOUR
+    text = f"""
+[mounts.btc]
+source = "ccxt"
+params = {{ exchange = "kraken" }}
+kind = "bars"
+bar_size = "1m"
+start = {to_datetime(Timestamp(start)).isoformat()}
+end = {to_datetime(Timestamp(end)).isoformat()}
+
+[mounts.btc.instrument]
+symbol = "BTC/USD"
+venue = "kraken"
+asset_class = "crypto"
+quote_currency = "USD"
+
+[[streams]]
+mount = "btc"
+bars = "1m"
+
+[[streams]]
+mount = "btc"
+bars = "1h"
+"""
+    journal = tmp_path / "run.sqlite"
+    registry = Registry.installed(["data_sources"])
+    run_backtest(parse_config(text), registry, journal, CLOCK, asyncio.sleep)
+    assert read_header(journal)["status"] == "complete"
+    bars = [e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Bar)]
+    minutes = [b for b in bars if b.end - b.start == NANOS_PER_MINUTE]
+    hours = [b for b in bars if b.end - b.start == NANOS_PER_HOUR]
+    assert [h.start for h in hours] == list(range(start, end, NANOS_PER_HOUR))
+    for hour in hours:
+        parts = [m for m in minutes if hour.start <= m.start < hour.end]
+        assert parts, "an hour was built with no minutes in it"
+        assert (hour.open, hour.close) == (parts[0].open, parts[-1].close)
+        assert hour.high == max(m.high for m in parts)
+        assert hour.low == min(m.low for m in parts)
+        assert hour.volume == pytest.approx(sum(m.volume for m in parts))
+        if parts[-1].end == hour.end:  # closed on its last minute, known with it
+            assert hour.ts == parts[-1].ts

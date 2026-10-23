@@ -60,7 +60,7 @@ def test_what_was_delivered_decided_and_filled(run: RunSummary) -> None:
 def test_the_report(run: RunSummary) -> None:
     assert report(run.journal) == snapshot("""\
 Backtest 2026-01-01T00:00:00Z to 2026-05-01T00:00:00Z
-configuration 5b96d99a0fccc7ec
+configuration 3bb4054eb5d03e54
 
 strategy trend (kraken:BTC/USD)
   signals sent          275

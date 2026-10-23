@@ -155,6 +155,7 @@ def test_a_backtest_on_a_published_snapshot_journals_its_trades_and_bars(
             "source": "store",
             "version": "1",
             "params": {"root": str(store.root), "snapshot": snapshot[0], "source": "file"},
+            "live_delay": 0,
         }
     }
     assert (int(header["start"]), int(header["end"])) == (START, START + 3 * NANOS_PER_HOUR)
