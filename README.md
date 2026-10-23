@@ -11,8 +11,10 @@ Heliograph never places real-money orders.
 
 ## Status
 
-Phase 0 (foundations) is done; Phase 1 (data) is next. See
-[docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md).
+Phases 0 (foundations) and 1 (data) are done, and Phase 2 (the backtest
+engine and strategy pipeline) has reached its gate; the graphical workspace
+(Phase 3) is next. See [docs/roadmap.md](docs/roadmap.md) and
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
@@ -27,13 +29,30 @@ uv sync               # create .venv and install the locked dependencies
 ./scripts/check.sh    # lint, format, types and tests
 ```
 
+## Running a backtest
+
+```bash
+uv run heliograph backtest examples/trend.toml   # run it and print its report
+uv run heliograph report runs/<journal>.sqlite   # the report again, from the journal
+uv run heliograph replay runs/<journal>.sqlite   # run it again: is it the same?
+```
+
+`examples/trend.toml` is a trend-following strategy (two EWMAC forecasts,
+volatility targeting, a trailing stop, risk checks, fills at the next open
+with costs) on made-up hourly data. Its comments say how to point it at an
+exchange's trades through CCXT instead. Plug-ins of your own import
+`heliograph.sdk`; its docstring shows one written from scratch.
+
 ## Project layout
 
 ```
 src/heliograph/
   core/      contracts, messages, time, clocks, bus, engine (standard library only)
   plugins/   plug-in manifests, parameter schemas and the registry
-  app/       run configuration and the composition root
+  app/       run configuration, runs, reports and the `heliograph` command
+  sdk/       the names a plug-in written elsewhere imports
+  testkit/   the conformance kit, for plug-ins written elsewhere
+examples/    an example strategy and its made-up data
 tests/       the test suite, mirroring the package
 scripts/     developer scripts
 docs/        design, roadmap, decisions, research and lessons

@@ -207,9 +207,28 @@ All notable changes to Heliograph are recorded here. The format follows
 - A text report of a backtest (app/report.py), computed from its journal
   alone: signals, fills, units and value traded, costs, profit and loss,
   largest drawdown and time in the market; the same for a run and its replay.
+- The `heliograph` command: `backtest` a configuration and print its
+  report, `report` a journal, `replay` one and say whether it is the same.
+  It loads only the plug-in kinds a configuration uses, and a report says
+  when its run failed or did not finish.
+- An example strategy, `examples/trend.toml`: two EWMAC forecasts blended,
+  volatility targeting, a trailing stop on the ATR, risk checks, and fills
+  at the next open with spread and commission, on made-up hourly data
+  written by `scripts/make_example_data.py`.
+- Scenario tests: a backtest worked out by hand, its report matched
+  exactly (Phase 2's gate), and the example's entry counts and report,
+  compared as text with inline-snapshot (a new development dependency, MIT).
+- `heliograph.sdk`: the names a plug-in written outside this repository
+  imports.
+- `Registry.installed()`: the installed plug-ins of the kinds asked for, or of
+  every kind.
 
 ### Fixed
 
+- A finished journal is one file: reading it no longer leaves `-wal` and
+  `-shm` files beside it.
+- A journal whose name holds `?`, `#` or `%` is read as itself, and a file
+  that is not a journal is said to be so instead of a database error.
 - Hypothesis has no deadline anywhere in the suite (tests/conftest.py): on a
   slower computer a correct property test failed for taking 285 ms.
 - `from_iso` keeps fractions of a second to the nanosecond instead of
@@ -263,3 +282,7 @@ All notable changes to Heliograph are recorded here. The format follows
   pipeline as built, and D4 is split into three parts.
 - D31 records simulated fills at the next open and the report from the
   journal; the roadmap marks D4b done.
+- D32 records the command, the SDK and the example; the roadmap marks D4c
+  and Phase 2's gate done, and moves streams on bar mounts to the next
+  batch; testing.md describes the scenarios; the README says how to run
+  the example.

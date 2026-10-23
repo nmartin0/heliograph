@@ -219,6 +219,17 @@ within each section.
   "another size" bar first started before the signal, so the start filter
   refused it and removing the size filter changed nothing; its control said
   so.
+- **A read-only SQLite reader of a WAL database leaves `-wal` and `-shm`
+  files** it is not allowed to remove. A journal is now switched back to
+  rollback mode as it is closed. Found by running the example by hand, as a
+  person would, and listing the folder afterwards. The first fix made
+  closing fail whenever another program had the journal open (the switch
+  needs the only connection); it is now only tidying, and failure to tidy
+  is ignored. An independent review found that, with five other defects in
+  the command: a failed run reported as if complete, a broken plug-in of
+  an unused kind stopping every run, `?` in a journal's name read as a
+  URI's query, a file that is not a journal giving a traceback, and two
+  runs in one second wanting the same journal.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

@@ -138,13 +138,16 @@ tests and the gate.
       check; a softened-checks report; `heliograph.testkit` for outside
       plug-ins ([testing.md](testing.md)) (D2). The adapters' own checks
       wait for a scripted source per adapter.
-- Scenario tests after LEAN's regression algorithms: recorded counts,
-  statistics and signals; reports compared as text with inline-snapshot.
+- [x] Scenario tests after LEAN's regression algorithms: a backtest worked
+      out by hand and the example strategy, their entry counts and reports
+      compared as text with inline-snapshot (D4c).
 - [x] Indicator nodes wrapping TA-Lib streams and talipp (D29); a first
       set: `rsi`, `atr`, `macd`, `bbands`, `stddev` on TA-Lib, `hma` and
       `alma` on talipp, `zlema` in plain Python (D3).
-- Bars built from finer bars where an indicator needs them: moved to D4,
-  with the first strategy that needs it.
+- Bars built from finer bars, and streams on mounts that deliver bars:
+  the example needs neither, so they move to the next batch, before
+  backtesting on an exchange's candles (CCXT's history of trades is slow to
+  page; its candles are not).
 - Session calendars (exchange_calendars) for local days and market hours:
   moved to Phase 4, where Alpaca first needs them.
 - [x] Pipeline ports: forecaster, gate, combiner, sizer, exit, risk gate;
@@ -155,11 +158,13 @@ tests and the gate.
 - [x] Simulated fills at the next bar's open, a cost model (`next_open`:
       spread, slippage, commission), the position held from fills, and a
       text report computed from the journal (D31, D4b).
-- One example strategy.
-- `heliograph.sdk` first cut.
+- [x] One example strategy (`examples/trend.toml`) on made-up data, and
+      the `heliograph` command to run, report and replay it (D32, D4c).
+- [x] `heliograph.sdk` first cut: the names a plug-in imports (D32, D4c).
 
 **Gate:** a snapshot test matches a hand-checked backtest exactly, and the
-conformance kit fails on a deliberately peeking indicator.
+conformance kit fails on a deliberately peeking indicator. Met: the
+hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
 
 ## Phase 3 · Graphical workspace
 

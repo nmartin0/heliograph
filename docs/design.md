@@ -224,10 +224,18 @@ flag kept and its averaging vote dropped (see
 
 ## Strategy SDK
 
-`heliograph.sdk` is the stable surface for strategy authors. It exposes series
-views that end at the last closed value, `ctx.indicator(...)` bound to a stream
-from the run configuration, and `ctx.signal(...)`. A strategy never names a
-timeframe, source or broker, and never sees orders.
+`heliograph.sdk` is the stable surface for plug-in authors (D32): the plug-in
+base class, manifest and parameters, the protocol each kind of stage
+implements, `Proposal` (what a risk gate is handed), the records a run
+journals (`Signal`, `Fill`, `Bar`, for code that reads journals), the
+conformance declarations, errors and time. A plug-in written outside this
+repository imports it and nothing deeper; its docstring shows a forecaster
+written from scratch, and a test keeps that example passing the kit.
+
+Planned: a strategy written as one class, over series views that end at the
+last closed value, with indicators bound to a stream from the run
+configuration. A strategy never names a timeframe, source or broker, and
+never sees orders:
 
 ```python
 class Breakout(Strategy):

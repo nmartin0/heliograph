@@ -472,3 +472,41 @@ the latest); the position held still following the signals when a broker
 exists (the strategy would believe in trades that never happened);
 computing the report from live objects in the run (a replay could not
 reproduce it, and it would need the plug-ins).
+
+## D32 · A `heliograph` command for now; the SDK names what plug-ins import (2026-10-23)
+
+`heliograph backtest CONFIG` runs a backtest, journals it under `runs/` (or
+`--journal`) and prints its report; `heliograph report` prints a journal's
+report (exit 1 if the run did not complete, which the report says) and
+`heliograph replay` runs one again and says whether every entry is the same
+(exit 1 if not). A problem Heliograph can name is one line on stderr and
+exit status 2. Only the installed plug-ins of the kinds a configuration
+uses are loaded, so a broken plug-in of another kind does not stop a run. The command calls the app directly, in its own process; the
+engine process and its JSON API (D18) arrive with the graphical workspace,
+and the command can then become one of its clients.
+
+`heliograph.sdk` re-exports what a plug-in written outside this repository
+needs: the plug-in base class, manifest and parameters, each kind's
+protocol, `Proposal`, the records a run journals, the conformance declarations, errors and
+time. Nothing inside Heliograph imports it, and it imports neither the app
+nor the kit (both checked by import-linter). Its docstring's example is a
+test.
+
+The example strategy (`examples/trend.toml`) runs on made-up data written
+by a seeded script, so it runs offline and its scenario test is exact; the
+same configuration runs on real trades by changing its mount.
+
+A finished journal is switched out of WAL mode as it is closed, so it is one
+file: read-only readers cannot remove the `-wal` and `-shm` files they
+would otherwise leave beside it.
+
+**Why:** the example must be runnable by a person today, before Phase 3;
+a command over the app is the least that does it. Plug-in authors need a
+surface that does not move when modules are rearranged.
+
+**Rejected:** waiting for the engine process to run anything (nothing a
+person could try until Phase 3); real exchange data committed for the
+example (its terms, its size, and a scenario that changes when the data is
+refreshed); the SDK as the strategy-as-one-class API of design.md (that
+waits for the pipeline to need it).
+

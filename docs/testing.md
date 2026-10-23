@@ -20,8 +20,11 @@ section.
   plug-in's build and parameters, and every indicator's no-peeking, edge
   case and reference checks.
 
-The adapters' own conformance checks and the scenarios come later in Phase 2,
-outside-in tests in Phase 3.
+- the scenarios (`tests/scenarios`): a backtest worked out by hand, and the
+  example strategy over its committed data.
+
+The adapters' own conformance checks come later, outside-in tests in
+Phase 3.
 
 ## What a test is for
 
@@ -49,7 +52,7 @@ Three corollaries:
 | State machines | beside the unit tests | a component equals a slow reference model after any sequence of operations (`RuleBasedStateMachine`) | every check |
 | Determinism | `tests/determinism` | the same inputs give the same journal (entry rows byte for byte, and header) in separate processes with different hash seeds and time zones | every check |
 | Conformance | `tests/conformance` | every registered plug-in of a kind meets the kind's contract | every check |
-| Scenarios | `tests/scenarios` (Phase 2) | a whole backtest still gives its recorded counts, statistics and signals | every check |
+| Scenarios | `tests/scenarios` | a whole backtest still gives its recorded counts, statistics and signals | every check |
 | Outside-in | `tests/process` (Phase 3) | the engine process, started as a person would start it, serves what it should through its API; imports nothing from `heliograph` | every check |
 | Live | `tests/live`, marker `live` | an adapter still matches the real service (CCXT exchanges) | on request and on a schedule |
 | Suite rules | `tests/meta` | the suite and the check scripts themselves follow the rules on this page | every check |
@@ -139,21 +142,27 @@ tested once and inherited, never copied.
   (the docstring of `heliograph.testkit`). Shared test builders for this
   repository's own tests stay in `tests/support`.
 
-### Scenarios (Phase 2)
+### Scenarios
 
-These follow LEAN's regression algorithms. A small example strategy runs
-over committed data, and its test records:
+These follow LEAN's regression algorithms: a whole backtest over committed
+data, and what it delivered, decided and reported.
 
-- the number of points and bars delivered;
-- the number of signals;
-- the final status;
-- the statistics of the run.
+- `test_hand_checked.py` runs `tests/scenarios/hand-checked.toml`: six
+  trades and a strategy simple enough to follow by hand. Its docstring
+  works out every figure; the report must match them exactly. This is
+  Phase 2's gate.
+- `test_example.py` runs `examples/trend.toml` over the data
+  `scripts/make_example_data.py` writes (`check.sh` checks the committed
+  file is what the script writes). It records the count of each kind of
+  journal entry, so a feed that delivers less shows as that, and the
+  report.
 
-Counting what was delivered catches a feed that silently delivers less.
-Reports and rendered journals are compared as text with inline-snapshot, in
-the manner of Jane Street's expect tests. A change in behaviour then shows
-as a diff to accept or reject, and writing the helper that prints concisely
-is part of the work.
+Reports are compared as text with inline-snapshot, in the manner of Jane
+Street's expect tests. A change in behaviour shows as a difference to
+accept or reject; to accept one, run
+`uv run pytest tests/scenarios --inline-snapshot=fix` and review the diff
+it writes into the test. A snapshot of the hand-checked report is accepted
+only when the figures in its docstring say the same.
 
 ### Live tests
 
