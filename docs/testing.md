@@ -53,7 +53,7 @@ Three corollaries:
 | Determinism | `tests/determinism` | the same inputs give the same journal (entry rows byte for byte, and header) in separate processes with different hash seeds and time zones | every check |
 | Conformance | `tests/conformance` | every registered plug-in of a kind meets the kind's contract | every check |
 | Scenarios | `tests/scenarios` | a whole backtest still gives its recorded counts, statistics and signals | every check |
-| Outside-in | `tests/process` (Phase 3) | the engine process, started as a person would start it, serves what it should through its API; imports nothing from `heliograph` | every check |
+| Outside-in | `tests/process` | the engine process, started with the `heliograph` command, serves what it should through its API and stops on a signal; imports nothing from `heliograph` (a suite rule), and is measured for coverage in its own process | every check |
 | Live | `tests/live`, marker `live` | an adapter still matches the real service (CCXT exchanges) | on request and on a schedule |
 | Suite rules | `tests/meta` | the suite and the check scripts themselves follow the rules on this page | every check |
 

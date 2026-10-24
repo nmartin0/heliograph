@@ -742,3 +742,54 @@ another size, not noise); keeping the rows a re-download did not bring
 (a vendor's correction may delete); retrying inside the app's throttle for
 every source (only the source knows which errors are temporary).
 
+## D37 · The engine process: Starlette on uvicorn, one worker, a small JSON API (2026-10-24)
+
+The engine's process (D18) is `heliograph serve`: a Starlette application
+on uvicorn, listening on `127.0.0.1:8765` by default, its options from
+arguments or `HELIOGRAPH_*` environment variables (app/server.py lists the
+API). Backtests run one at a time on one worker thread, in the order
+submitted; each journal is `<data>/runs/<id>.sqlite`, the id the
+configuration's name and the UTC second it was submitted. The journals are
+the record: what the process knows of a backtest it did not run itself
+comes from its journal's header, so a restarted engine lists every earlier
+run, and a journal still marked running is reported as interrupted.
+
+SIGTERM or SIGINT, the moment it arrives, tells the running backtest to
+stop at its next input (`run_backtest(stop=)`: its journal is closed as
+failed, saying it was stopped); then the queued ones are dropped, open
+requests get three seconds to finish, and the process exits 0 within ten
+seconds of the signal. The signal handler only sets plain flags (no lock,
+no logging), so signals arriving inside one another cannot deadlock it.
+A backtest that has not stopped by then (blocked reading a file, in a
+thread Python would wait for at exit), or a request still being answered
+on its thread, is left behind: the process exits 1 at once, and a journal
+still marked running reads as interrupted. A start that cannot happen (a port taken or out of range, a
+folder that is not one) is one message and exit 2. Every log line on
+stderr is one JSON object with the time, level and event; a request that
+crashes is a JSON 500 and a logged traceback. Handlers that read files or
+plug-ins run on threads, so a report does not hold up the health check.
+Times in the API are ISO 8601 strings to the nanosecond (`to_iso`, D19);
+a plug-in's parameters are its model's JSON Schema. Backtests are listed
+the latest submitted first; a name is up to 100 characters, so its id
+(the name and the second) stays a plain file name.
+
+The process is tested from outside (tests/process): started with the
+`heliograph` command, spoken to over HTTP, stopped with signals, by tests
+that import nothing from `heliograph` (a suite rule checks it). Coverage
+follows the process (`patch = ["subprocess"]`, saved on SIGTERM) and is
+combined before the per-file floor.
+
+**Why:** Starlette and uvicorn are what NiceGUI itself runs on, so the
+workspace adds no new server; Starlette is small (routes, JSON, lifespan)
+and leaves validation to our own Pydantic models, where FastAPI would add
+a second way to declare them. One worker matches D18 and keeps a run's
+journal the only writer of its file. Ids from names and times read well
+in a folder and sort by time within a configuration.
+
+**Rejected:** FastAPI (its schemas and validation would duplicate the
+manifests'); the standard library's `http.server` (no lifespan, signal
+handling or streaming to build on later); a database of runs beside the
+journals (two records to keep in step); runs in parallel processes (not
+needed for one person's backtests yet; Phase 5's optimisation will ask
+again).
+

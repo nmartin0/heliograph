@@ -378,8 +378,9 @@ what MT5 lacks.
 
 NiceGUI in native mode (a pywebview window) now, served as a web app later. The
 GUI is a client of the engine's JSON API and holds no logic of its own; the
-engine runs in its own supervisable process (D18). Times cross the API as ISO
-8601 strings (D19). Elysium may host these screens later (D20,
+engine runs in its own supervisable process (D18), `heliograph serve`,
+whose API app/server.py lists (D37). Times cross the API as ISO 8601
+strings (D19). Elysium may host these screens later (D20,
 [research/elysium.md](research/elysium.md)). Chart zoom and crosshair stay client-side.
 The view is a function of state; changes go through actions (Jane Street's
 Bonsai idea).

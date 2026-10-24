@@ -183,12 +183,14 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
 
 ## Phase 3 · Graphical workspace
 
-- First: the engine process and its JSON API (D18): supervisable (arguments
-  or environment for port, data and config; `127.0.0.1`; SIGTERM; health;
-  stderr logs; one worker), times as ISO strings (D19), parameter schemas
-  served from `model_json_schema()`. Tested outside-in: the process started
-  as a person would start it, by tests that import nothing from
-  `heliograph`.
+- [x] First: the engine process and its JSON API (D18, D37): `heliograph
+      serve`, supervisable (arguments or environment for port, data and
+      configurations; `127.0.0.1`; SIGTERM; health; JSON logs on stderr;
+      one worker), times as ISO strings (D19), parameter schemas served
+      from `model_json_schema()`, backtests submitted, listed and
+      reported. Tested outside-in, by tests that import nothing from
+      `heliograph`. Next for it: the bars, indicator values and signals of
+      a run for the charts, and streaming a run's progress.
 - Decide how the screens could appear inside Elysium (D20), once Elysium's
   module bundles (its step 1.2) exist.
 

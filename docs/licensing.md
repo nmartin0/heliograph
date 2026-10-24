@@ -76,6 +76,7 @@ decay; re-check before adding.
 | Metrics, reports | empyrical-reloaded 0.7, pyfolio-reloaded 0.10, quantstats 0.0.86, Great Tables 1.1, Jinja2, WeasyPrint 70 | Apache-2.0, MIT, BSD |
 | Scheduling, resilience | APScheduler 3.11, tenacity 9.2, aiolimiter 1.3, websockets 17 | MIT, Apache-2.0, MIT, BSD-3 |
 | HTTP | httpx2 2.16 (httpx has not released since 2024-12) | BSD-3 |
+| Engine API server | Starlette 1.7, uvicorn 0.54 (what NiceGUI runs on) | BSD-3 |
 | Logging, paths, secrets | structlog 26, platformdirs 4.13, keyring 25.7 | MIT or Apache-2.0, MIT, MIT |
 | Data and broker clients | ccxt 4.5, alpaca-py 0.44, ib_async 2.1, databento 0.87, massive 2.9, twelvedata 1.4, fredapi 0.5 | MIT, Apache-2.0, BSD-2, Apache-2.0, MIT, MIT, Apache-2.0 |
 | Notifications | apprise 2.0, desktop-notifier 6.2; ntfy over HTTP | BSD-2, MIT |

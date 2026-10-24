@@ -228,6 +228,14 @@ All notable changes to Heliograph are recorded here. The format follows
   backtest on Kraken's minute candles (`uv run pytest -m live`).
 - `Registry.installed()`: the installed plug-ins of the kinds asked for, or of
   every kind.
+- The engine's process (D18, D37): `heliograph serve` runs a JSON API on
+  `127.0.0.1` (port, data and configurations folders from options or
+  `HELIOGRAPH_*` variables) for health, the installed plug-ins and their
+  parameters' JSON Schemas, the configurations offered, and backtests
+  submitted, listed and reported, one at a time. SIGTERM stops it within
+  ten seconds, closing a running backtest's journal as stopped; every log
+  line is JSON. Times cross it as ISO 8601 text to the nanosecond
+  (`to_iso`).
 
 ### Fixed
 
