@@ -189,8 +189,11 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       one worker), times as ISO strings (D19), parameter schemas served
       from `model_json_schema()`, backtests submitted, listed and
       reported. Tested outside-in, by tests that import nothing from
-      `heliograph`. Next for it: the bars, indicator values and signals of
-      a run for the charts, and streaming a run's progress.
+      `heliograph`.
+- [x] A run's series for the charts (D38): its bars, graph node values,
+      signals sent and refused, fills and equity, from its journal, with
+      ISO times and milliseconds; a running backtest's progress. Streaming
+      progress waits for live sessions (Phase 4).
 - Decide how the screens could appear inside Elysium (D20), once Elysium's
   module bundles (its step 1.2) exist.
 

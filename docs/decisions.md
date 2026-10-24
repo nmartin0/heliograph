@@ -793,3 +793,38 @@ journals (two records to keep in step); runs in parallel processes (not
 needed for one person's backtests yet; Phase 5's optimisation will ask
 again).
 
+## D38 · Chart series come from the journal, with times a chart can use (2026-10-24)
+
+A backtest's bars, graph node values, signals (sent and refused), fills
+and equity are served from its journal alone (app/charts.py), as the
+report is (D31): a run and its replay chart the same, and nothing the
+engine did not journal can appear. Each item carries its times as ISO 8601
+text and `t`, milliseconds since 1970, for a chart's axis (D19). A bar's
+`t` is its start, where charts draw it; anything else's is when it became
+known, so a value computed from a bar sits at that bar's end and a fill at
+the open it was filled at: a chart cannot show a decision before its data.
+`start` and `end` select by the time an entry became known; journal reads
+can now select types and a span in SQL (`read_entries(only=, start=,
+end=)`), so neither a chart nor the report decodes every trade. A running
+backtest can be charted as far as its journal has been written, and its
+status says how far through its span it has got (`progress`), from each
+instant as it settles (`run_backtest(progress=)`): never ahead to a
+feed's first trade, which the engine reads early to merge its feeds. A
+journal read as it closes still ends as one file: SQLite will not leave
+WAL mode while any other connection has it open, so the close tries
+again in the gaps between reads, for up to two seconds (a close may be
+part of the process's stop, with its own deadline), the server tidies it
+once more after the run unless it is stopping (`tidy`), and an engine
+starting on the folder tidies any journal left beside its -wal file.
+
+**Why:** the GUI holds no logic (D18): what a chart may draw, and where,
+is decided here once, where it can be tested against the report's own
+figures. Milliseconds lose nothing a chart can show; ISO text keeps every
+nanosecond for anything else.
+
+**Rejected:** recomputing indicators for display (a second implementation
+to drift from the run's); drawing indicator values at their bar's start
+(it shows each a bar before it could be known, as TradingView's
+`lookahead_on` does); streaming progress over SSE now (a poll every second
+is enough for one person; it waits for live sessions, Phase 4).
+

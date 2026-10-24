@@ -236,6 +236,12 @@ All notable changes to Heliograph are recorded here. The format follows
   ten seconds, closing a running backtest's journal as stopped; every log
   line is JSON. Times cross it as ISO 8601 text to the nanosecond
   (`to_iso`).
+- A backtest's series for charts through the engine's API (D38): its bars
+  by stream, graph node values, signals sent and refused, fills and equity,
+  each with ISO times and milliseconds for a chart's axis, selectable by
+  span, readable while the backtest runs; a running backtest's progress.
+  Journal reads select types and spans in SQL, so the report no longer
+  decodes every trade.
 
 ### Fixed
 
