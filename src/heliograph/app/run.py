@@ -46,7 +46,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from heliograph.app.bridge import HistoryFeed, SourceLoop
 from heliograph.app.composition import build_components
@@ -68,10 +68,10 @@ from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import Clock, SimulatedClock
 from heliograph.core.engine import BacktestEngine
-from heliograph.core.errors import InvalidValueError
+from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import BarField, Graph, Indicator, IndicatorValues
 from heliograph.core.journal import runs
-from heliograph.core.messages import Bar, Point, RunEnded, Settled
+from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
 from heliograph.core.pipeline import (
     Combiner,
     Exit,
@@ -113,6 +113,33 @@ JOURNALLED = (
 """Every message type a backtest run journals."""
 
 
+class RunStoppedError(HeliographError):
+    """A run was asked to stop before it finished; its journal records it as failed."""
+
+
+class Stop(Protocol):
+    """What a run is told to stop by: anything that says whether it is set."""
+
+    def is_set(self) -> bool: ...
+
+
+class StopFlag:
+    """A flag a signal handler may set: one plain attribute and no lock, so setting
+    it can never wait (``threading.Event.set`` takes a lock, which a second signal
+    arriving inside the first would wait on for ever)."""
+
+    __slots__ = ("_set",)
+
+    def __init__(self) -> None:
+        self._set = False
+
+    def set(self) -> None:
+        self._set = True
+
+    def is_set(self) -> bool:
+        return self._set
+
+
 @dataclass(frozen=True, slots=True)
 class RunSummary:
     """What a run did: where its journal is, how many input messages it delivered."""
@@ -128,8 +155,14 @@ def run_backtest(
     journal: Path,
     clock: Clock,
     sleep: Sleep,
+    *,
+    stop: Stop | None = None,
 ) -> RunSummary:
     """Run the backtest ``loaded`` describes, journalling it to a new file.
+
+    Setting ``stop`` (from another thread) ends the run at its next input:
+    the journal is closed as failed, saying it was stopped, and
+    ``RunStoppedError`` is raised.
 
     ``clock`` and ``sleep`` are the real time, as for ``build_mounts``. The
     run itself is on a simulated clock, from the earliest mount's start to
@@ -141,6 +174,7 @@ def run_backtest(
             a run does not run, has no mounts, a component cannot be built
             or is not what its kind needs, or a mount cannot be served.
         InvalidValueError: if ``journal`` already exists.
+        RunStoppedError: if ``stop`` was set before the run finished.
         Whatever a source raised; the journal then records the failure.
     """
     config = loaded.config
@@ -167,7 +201,8 @@ def run_backtest(
                 try:
                     for mount, wanted in zip(mounts, requests, strict=True):
                         feeds.append(HistoryFeed(loop, mount.source, wanted))
-                    delivered = engine.run(*feeds, until=until)
+                    inputs = feeds if stop is None else [_until_stopped(f, stop) for f in feeds]
+                    delivered = engine.run(*inputs, until=until)
                     empty = [
                         m.name
                         for m, f in zip(mounts, feeds, strict=True)
@@ -188,6 +223,13 @@ def run_backtest(
         finally:
             _close_all(loop, sources.values())
     return RunSummary(journal, delivered, header)
+
+
+def _until_stopped(feed: Iterable[Message], stop: Stop) -> Iterator[Message]:
+    for message in feed:
+        if stop.is_set():
+            raise RunStoppedError("the run was stopped before it finished")
+        yield message
 
 
 type Built = list[tuple[ComponentConfig, Plugin[Any]]]

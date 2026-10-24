@@ -27,7 +27,10 @@ run "format"              uv run --frozen ruff format --check .
 run "example data"      uv run --frozen python scripts/make_example_data.py --check
 run "types"               uv run --frozen mypy
 run "layers"              uv run --frozen lint-imports
+run "coverage erased"     uv run --frozen coverage erase
 run "tests"               uv run --frozen coverage run -m pytest
+# The engine's process writes its own coverage data (tests/process); one file then.
+run "coverage combined"   uv run --frozen coverage combine -q
 run "coverage per file"   uv run --frozen python scripts/coverage_floor.py
 run "tests (non-UTC)"     env TZ=America/St_Johns uv run --frozen pytest
 

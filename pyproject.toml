@@ -20,8 +20,10 @@ dependencies = [
     "numpy>=2,<3",
     "pyarrow>=22,<27",
     "pydantic>=2.11,<3",
+    "starlette>=1.7,<2",
     "ta-lib>=0.8.2,<0.9",
     "talipp>=2.7,<3",
+    "uvicorn>=0.54,<1",
 ]
 
 [project.scripts]
@@ -224,6 +226,10 @@ floor = 90
 [tool.coverage.run]
 branch = true
 source_pkgs = ["heliograph"]
+# The engine's process is tested from outside (tests/process): measured in its
+# own process (which exits normally on a stop signal), and combined after.
+patch = ["subprocess"]
+parallel = true
 
 [tool.coverage.report]
 show_missing = true

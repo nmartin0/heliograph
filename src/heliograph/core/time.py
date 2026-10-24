@@ -81,6 +81,21 @@ def from_iso(text: str) -> Timestamp:
     return Timestamp(from_datetime(moment) + extra_nanos)
 
 
+def to_iso(ts: Timestamp) -> str:
+    """``ts`` as ISO 8601 in UTC, such as ``2026-10-20T14:30:00.25Z``: every
+    nanosecond kept, trailing zeros of the fraction dropped (decision D19).
+
+    ``from_iso`` reads it back exactly.
+
+    Raises:
+        InvalidValueError: if the instant is outside the years 1 to 9999.
+    """
+    seconds, nanos = divmod(ts, NANOS_PER_SECOND)
+    whole = to_datetime(Timestamp(seconds * NANOS_PER_SECOND))
+    fraction = f".{nanos:09d}".rstrip("0") if nanos else ""
+    return f"{whole:%Y-%m-%dT%H:%M:%S}{fraction}Z"
+
+
 _SPAN_UNITS = {
     "w": 7 * NANOS_PER_DAY,
     "d": NANOS_PER_DAY,

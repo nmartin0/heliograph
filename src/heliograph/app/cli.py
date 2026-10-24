@@ -6,6 +6,7 @@
     heliograph backtest examples/trend.toml          # run, journal, print the report
     heliograph report runs/trend-20261023T101500Z.sqlite
     heliograph replay runs/trend-20261023T101500Z.sqlite
+    heliograph serve --data ~/heliograph-data --configs examples
 
 A backtest's journal goes to ``runs/<config name>-<UTC time>.sqlite`` in the
 current folder (``-2``, ``-3``... added if that is taken) unless
@@ -20,12 +21,14 @@ problem Heliograph can name (a configuration that does not validate, a
 file that is not a backtest's journal, a source that failed), printed as
 one message. Anything else is a bug and shows its traceback.
 
-This is a front end for one person at a terminal. The engine's own process
-and its JSON API (D18) come with the graphical workspace, in Phase 3.
+``serve`` runs the engine's own process and its JSON API (D18; see
+app/server.py) until it is stopped (SIGTERM, or Ctrl-C), then exits 0, or
+1 if a backtest had not stopped by the deadline.
 """
 
 import argparse
 import asyncio
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -35,6 +38,7 @@ from heliograph.app.config import RunConfig, load_config, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import report
 from heliograph.app.run import replay_backtest, run_backtest
+from heliograph.app.server import DEFAULT_PORT, serve, settings_from
 from heliograph.core.clock import WallClock
 from heliograph.core.errors import HeliographError
 from heliograph.core.time import to_datetime
@@ -81,6 +85,17 @@ def _parser() -> argparse.ArgumentParser:
         "--journal", dest="out", type=Path, help="where to journal the replay (default: beside it)"
     )
     replay.set_defaults(command=_replay)
+
+    serve = commands.add_parser("serve", help="run the engine's process and its JSON API")
+    serve.add_argument("--data", help="the folder for its runs (or HELIOGRAPH_DATA)")
+    serve.add_argument(
+        "--configs", help="a folder of run configurations to offer (or HELIOGRAPH_CONFIGS)"
+    )
+    serve.add_argument("--host", help="the address to listen on (default 127.0.0.1)")
+    serve.add_argument(
+        "--port", type=int, help=f"the port (default {DEFAULT_PORT}; 0: any free port)"
+    )
+    serve.set_defaults(command=_serve)
     return parser
 
 
@@ -128,6 +143,16 @@ def _replay(args: argparse.Namespace) -> int:
         f"({len(before)} entries recorded, {len(after)} replayed)"
     )
     return DIFFERS
+
+
+def _serve(args: argparse.Namespace) -> int:
+    status = serve(settings_from(args.data, args.configs, args.host, args.port))
+    if status:
+        # A backtest still running, perhaps blocked in a thread Python would wait
+        # for: leave now, as the deadline promised, its journal read as interrupted.
+        sys.stderr.flush()
+        os._exit(status)
+    return status
 
 
 def _free(path: Path) -> Path:

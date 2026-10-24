@@ -332,3 +332,63 @@ def test_one_failing_step_fails_the_script_and_is_named() -> None:
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
     assert result.returncode == 1
     assert re.search(r"^FAILED: bad$", result.stdout, re.MULTILINE)
+
+
+# -- 6. the engine's process is tested from outside ----------------------------------
+
+OUTSIDE = [*sorted((TESTS / "process").rglob("*.py")), TESTS / "support" / "engine.py"]
+"""The tests of the engine's process, and the client they share (decision D18)."""
+
+ALLOWED_SUPPORT = {"tests.support.engine"}
+
+
+def inside_imports(tree: ast.AST) -> list[int]:
+    """Lines importing heliograph, or a test helper that might (any but the engine's
+    client): what a test from outside the process may not do."""
+
+    def inside(name: str, allowed: bool) -> bool:
+        return name.split(".")[0] == "heliograph" or (name.startswith("tests") and not allowed)
+
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            bad = any(inside(a.name, a.name in ALLOWED_SUPPORT) for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            bad = any(
+                inside(module, module in ALLOWED_SUPPORT or f"{module}.{a.name}" in ALLOWED_SUPPORT)
+                for a in node.names
+            )
+        else:
+            continue
+        if bad:
+            found.append(node.lineno)
+    return found
+
+
+def test_the_process_tests_import_nothing_from_heliograph() -> None:
+    offending = [f"{p.name}:{n}" for p in OUTSIDE for n in inside_imports(_parse(p.read_text()))]
+    assert len(OUTSIDE) >= 2
+    assert any("tests.support.engine" in p.read_text() for p in OUTSIDE)
+    assert offending == []
+
+
+def test_the_outside_rule_catches_every_way_in() -> None:
+    for source in (
+        "import heliograph",
+        "import heliograph.app.server as s",
+        "from heliograph import __version__",
+        "from heliograph.core.time import to_iso",
+        "from tests.support.world import BTC",
+        "from tests.support import world",
+        "import tests.support.sources",
+    ):
+        assert inside_imports(_parse(source)) == [1], source
+    for source in (
+        "from tests.support.engine import Engine",
+        "from tests.support import engine",
+        "import tests.support.engine",
+        "import json",
+        "from urllib.request import urlopen",
+    ):
+        assert inside_imports(_parse(source)) == [], source

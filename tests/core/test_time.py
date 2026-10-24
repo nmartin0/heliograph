@@ -20,6 +20,7 @@ from heliograph.core.time import (
     from_iso,
     parse_span,
     to_datetime,
+    to_iso,
 )
 
 aware_datetimes = st.datetimes(timezones=st.timezones())
@@ -140,3 +141,21 @@ def test_the_longest_span_is_exactly_the_largest_int64() -> None:
 def test_only_a_positive_int64_count_can_be_written_as_a_span(nanos: object) -> None:
     with pytest.raises(InvalidValueError, match="positive int64"):
         format_span(nanos)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("nanos", "text"),
+    [
+        (1_792_454_400 * NANOS_PER_SECOND, "2026-10-20T00:00:00Z"),
+        (1_792_454_400 * NANOS_PER_SECOND + 250_000_000, "2026-10-20T00:00:00.25Z"),
+        (1_792_454_400 * NANOS_PER_SECOND + 1, "2026-10-20T00:00:00.000000001Z"),
+        (-1, "1969-12-31T23:59:59.999999999Z"),
+    ],
+)
+def test_an_instant_is_written_as_iso_text_to_the_nanosecond(nanos: int, text: str) -> None:
+    assert to_iso(Timestamp(nanos)) == text
+
+
+@given(st.integers(min_value=-(2**63), max_value=2**63 - 1))
+def test_iso_text_reads_back_as_the_same_instant(nanos: int) -> None:
+    assert from_iso(to_iso(Timestamp(nanos))) == nanos

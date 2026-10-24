@@ -6,6 +6,7 @@
 import asyncio
 import json
 import sqlite3
+import threading
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ import pytest
 
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.data import download_mounts, publish_mounts
-from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest
+from heliograph.app.run import JOURNALLED, RunStoppedError, replay_backtest, run_backtest
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.sources import (
@@ -491,3 +492,18 @@ def test_a_mount_whose_quiet_span_is_expected_may_deliver_nothing(
     journal = tmp_path / "run.sqlite"
     run(text, registry, journal)
     assert read_header(journal)["status"] == "complete"
+
+
+def test_a_run_asked_to_stop_ends_and_its_journal_says_so(
+    tmp_path: Path, registry: Registry
+) -> None:
+    stop = threading.Event()
+    stop.set()
+    time = SimulatedTime(start=NOW)
+    journal = tmp_path / "run.sqlite"
+    loaded = parse_config(file_config(trades_csv(tmp_path), HOURLY))
+    with pytest.raises(RunStoppedError, match="stopped before it finished"):
+        run_backtest(loaded, registry, journal, time.clock, time.advance, stop=stop)
+    assert read_header(journal)["status"] == (
+        "failed: RunStoppedError: the run was stopped before it finished"
+    )

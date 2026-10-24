@@ -2917,3 +2917,206 @@ path = "src/heliograph/plugins/store.py"
 old = "            found += 1\n"
 new = "            found += 2\n"
 tests = ["tests/plugins/test_store.py::test_a_download_that_stopped_paging_halfway_is_refused"]
+
+[[control]]
+describes = "the engine listens on this computer only by default"
+path = "src/heliograph/app/server.py"
+old = "        host=host or environ.get(\"HELIOGRAPH_HOST\", \"127.0.0.1\"),\n"
+new = "        host=host or environ.get(\"HELIOGRAPH_HOST\", \"0.0.0.0\"),\n"
+tests = ["tests/process/test_engine_process.py::test_the_engine_listens_on_this_computer_only_and_says_where"]
+
+[[control]]
+describes = "a backtest takes a configuration's text or a name, not both"
+path = "src/heliograph/app/server.py"
+old = "        if not isinstance(body, dict) or len({\"config\", \"config_name\"} & set(body)) != 1:\n"
+new = "        if not isinstance(body, dict) or not {\"config\", \"config_name\"} & set(body):\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_cannot_run_is_refused_saying_why"]
+
+[[control]]
+describes = "a live configuration is not run as a backtest"
+path = "src/heliograph/app/server.py"
+old = "        if loaded.config.mode != \"backtest\":\n"
+new = "        if False:\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_cannot_run_is_refused_saying_why"]
+
+[[control]]
+describes = "a backtest's name is a plain file name"
+path = "src/heliograph/app/server.py"
+old = "        if not isinstance(name, str) or not _NAME.match(name):\n"
+new = "        if not isinstance(name, str):\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_cannot_run_is_refused_saying_why"]
+
+[[control]]
+describes = "two backtests never share an id"
+path = "src/heliograph/app/server.py"
+old = "            while id_ in self._jobs or (self.runs / f\"{id_}.sqlite\").exists():\n"
+new = "            while False:\n"
+tests = ["tests/process/test_engine_process.py::test_two_backtests_of_one_name_get_their_own_ids"]
+
+[[control]]
+describes = "stopping drops the queued backtests"
+path = "src/heliograph/app/server.py"
+old = "                if job.status == \"queued\":\n"
+new = "                if False:\n"
+tests = ["tests/process/test_engine_process.py::test_a_running_backtest_is_stopped_its_journal_closed_and_the_queue_dropped"]
+
+[[control]]
+describes = "stopping stops the running backtest"
+path = "src/heliograph/app/server.py"
+old = "                    stop=self._stop,\n"
+new = "                    stop=None,\n"
+tests = ["tests/process/test_engine_process.py::test_a_running_backtest_is_stopped_its_journal_closed_and_the_queue_dropped"]
+
+[[control]]
+describes = "a journal left running by an engine that died is interrupted"
+path = "src/heliograph/app/server.py"
+old = "        if recorded == \"running\":\n"
+new = "        if False:\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_whose_engine_was_killed_is_reported_as_interrupted"]
+
+[[control]]
+describes = "a file that is not a journal is unreadable"
+path = "src/heliograph/app/server.py"
+old = "        recorded = header.get(\"status\") or \"unreadable: not a backtest's journal\"\n"
+new = "        recorded = header.get(\"status\", \"\")\n"
+tests = ["tests/process/test_engine_process.py::test_a_file_in_the_runs_folder_that_is_not_a_journal_is_listed_as_unreadable"]
+
+[[control]]
+describes = "a backtest not yet finished has no report"
+path = "src/heliograph/app/server.py"
+old = "        if status in (\"queued\", \"running\", \"dropped\") or not journal.is_file():\n"
+new = "        if False:\n"
+tests = ["tests/process/test_engine_process.py::test_a_running_backtest_is_stopped_its_journal_closed_and_the_queue_dropped"]
+
+[[control]]
+describes = "an unreadable journal has no report"
+path = "src/heliograph/app/server.py"
+old = "        if status.startswith(\"unreadable\"):\n"
+new = "        if False:\n"
+tests = ["tests/process/test_engine_process.py::test_a_file_in_the_runs_folder_that_is_not_a_journal_is_listed_as_unreadable"]
+
+[[control]]
+describes = "the data folder may come from the environment"
+path = "src/heliograph/app/server.py"
+old = "    data = data or environ.get(\"HELIOGRAPH_DATA\")\n"
+new = "    data = data\n"
+tests = ["tests/process/test_engine_process.py::test_the_settings_may_come_from_the_environment"]
+
+[[control]]
+describes = "a port from the environment must be a number"
+path = "src/heliograph/app/server.py"
+old = "        if not text.isdigit():\n"
+new = "        if False:\n"
+tests = ["tests/process/test_engine_process.py::test_an_engine_that_cannot_start_says_why_and_exits_2"]
+
+[[control]]
+describes = "a stopped engine exits 0, not of its signal"
+path = "src/heliograph/app/server.py"
+old = "    signal.signal(signal.SIGTERM, stopping.handle)\n"
+new = "    pass\n"
+tests = ["tests/process/test_engine_process.py::test_an_idle_engine_stops_on_a_signal_and_exits_0"]
+
+[[control]]
+describes = "a backtest that crashes does not end the worker"
+path = "src/heliograph/app/server.py"
+old = "            except Exception as exc:  # a bug: logged with its traceback, the worker goes on\n"
+new = "            except ZeroDivisionError as exc:\n"
+tests = ["tests/app/test_server.py::test_a_backtest_that_crashes_is_logged_and_the_worker_goes_on"]
+
+[[control]]
+describes = "a backtest that will not stop does not hold the process"
+path = "src/heliograph/app/server.py"
+old = "        self._worker.join(max(timeout, 0.0))\n"
+new = "        self._worker.join()\n"
+tests = ["tests/app/test_server.py::test_a_backtest_that_will_not_stop_in_time_is_reported"]
+
+[[control]]
+describes = "a run asked to stop stops"
+path = "src/heliograph/app/run.py"
+old = "        if stop.is_set():\n"
+new = "        if False:\n"
+tests = ["tests/app/test_run.py::test_a_run_asked_to_stop_ends_and_its_journal_says_so"]
+
+[[control]]
+describes = "ISO text drops a fraction's trailing zeros"
+path = "src/heliograph/core/time.py"
+old = "    fraction = f\".{nanos:09d}\".rstrip(\"0\") if nanos else \"\"\n"
+new = "    fraction = f\".{nanos:09d}\" if nanos else \"\"\n"
+tests = ["tests/core/test_time.py::test_an_instant_is_written_as_iso_text_to_the_nanosecond"]
+
+[[control]]
+describes = "the process tests may not import heliograph"
+path = "tests/meta/test_suite_rules.py"
+old = "        return name.split(\".\")[0] == \"heliograph\" or (name.startswith(\"tests\") and not allowed)\n"
+new = "        return name.startswith(\"tests\") and not allowed\n"
+tests = ["tests/meta/test_suite_rules.py::test_the_outside_rule_catches_every_way_in"]
+
+[[control]]
+describes = "backtests are listed the latest submitted first"
+path = "src/heliograph/app/server.py"
+old = "        return sorted(known, key=latest_first, reverse=True)\n"
+new = "        return sorted(known)\n"
+tests = ["tests/process/test_engine_process.py::test_backtests_are_listed_the_latest_submitted_first"]
+
+[[control]]
+describes = "a backtest's name leaves room for the time in its id"
+path = "src/heliograph/app/server.py"
+old = "_NAME = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$\")\n"
+new = "_NAME = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$\")\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_cannot_run_is_refused_saying_why"]
+
+[[control]]
+describes = "a backtest is told to stop at the signal"
+path = "src/heliograph/app/server.py"
+old = "            self.backtests.signal_stop()\n"
+new = "            pass\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_is_told_to_stop_at_the_signal_not_after_open_requests"]
+
+[[control]]
+describes = "a configuration that is not UTF-8 is refused, not a crash"
+path = "src/heliograph/app/server.py"
+old = "        except UnicodeDecodeError:\n"
+new = "        except ZeroDivisionError:\n"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_that_is_not_utf8_is_refused_saying_so"]
+
+[[control]]
+describes = "a port out of range is refused by name"
+path = "src/heliograph/app/server.py"
+old = "    if not 0 <= port <= 65535:\n"
+new = "    if False:\n"
+tests = ["tests/process/test_engine_process.py::test_an_engine_given_a_bad_option_says_why_and_exits_2"]
+
+[[control]]
+describes = "a data folder that is a file is refused by name"
+path = "src/heliograph/app/server.py"
+old = "    if settings.data.exists() and not settings.data.is_dir():\n"
+new = "    if False:\n"
+tests = ["tests/process/test_engine_process.py::test_an_engine_given_a_bad_option_says_why_and_exits_2"]
+
+[[control]]
+describes = "an engine past its deadline leaves at once"
+path = "src/heliograph/app/cli.py"
+old = "        os._exit(status)\n"
+new = "        pass\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_will_not_stop_is_left_and_the_engine_exits_1_in_time"]
+
+[[control]]
+describes = "the stop's deadline counts from the signal"
+path = "src/heliograph/app/server.py"
+old = "        return STOP_DEADLINE - (time.monotonic() - since)\n"
+new = "        return STOP_DEADLINE * 3\n"
+tests = ["tests/process/test_engine_process.py::test_a_backtest_that_will_not_stop_is_left_and_the_engine_exits_1_in_time"]
+
+[[control]]
+describes = "threads still running at the deadline are reported"
+path = "src/heliograph/app/server.py"
+old = "        if thread.is_alive():\n"
+new = "        if False:\n"
+tests = ["tests/app/test_server.py::test_threads_still_running_at_the_deadline_are_reported"]
+
+[[control]]
+describes = "a log message of many lines is named by its first"
+path = "src/heliograph/app/server.py"
+old = "        if detail:  # a message of many lines (uvicorn's tracebacks): its name, then the rest\n"
+new = "        if False:\n"
+tests = ["tests/app/test_server.py::test_a_message_of_many_lines_is_named_by_its_first"]
