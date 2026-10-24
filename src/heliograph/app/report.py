@@ -56,15 +56,17 @@ class _Book:
     closes: int = 0
     exposed: int = 0
     equity: list[float] = field(default_factory=list)
+    marked: list[int] = field(default_factory=list)  # when each equity was marked
     opened: tuple[int, float] | None = None  # the latest bar's start and open
 
-    def mark(self) -> None:
+    def mark(self, ts: int) -> None:
         if self.close is None:
             return
         self.last = self.close
         self.closes += 1
         self.exposed += self.position != 0
         self.equity.append(self.cash + self.position * self.close)
+        self.marked.append(ts)
         self.close = None
 
 
@@ -99,6 +101,27 @@ def figures(journal: Path) -> tuple[dict[str, str], list[Figures]]:
     Raises:
         InvalidValueError: if ``journal`` is not a backtest's journal.
     """
+    header, books = _read(journal)
+    return header, [_figures(book) for book in books]
+
+
+def equity(journal: Path) -> dict[str, list[tuple[Timestamp, float]]]:
+    """Each strategy's equity, as the report counts it, and when it was marked: at
+    each close of its price stream, once that instant had settled.
+
+    Raises:
+        InvalidValueError: if ``journal`` is not a backtest's journal.
+    """
+    _, books = _read(journal)
+    return {
+        book.name: [
+            (Timestamp(ts), value) for ts, value in zip(book.marked, book.equity, strict=True)
+        ]
+        for book in books
+    }
+
+
+def _read(journal: Path) -> tuple[dict[str, str], list[_Book]]:
     header = read_header(journal)
     if header.get("kind") != "backtest" or "config_text" not in header:
         raise InvalidValueError(f"{journal} is not the journal of a backtest run")
@@ -112,7 +135,9 @@ def figures(journal: Path) -> tuple[dict[str, str], list[Figures]]:
         books[strategy.name] = _Book(
             strategy.name, instrument, stream.bar_spec().size, strategy.fills is not None
         )
-    for entry in read_entries(journal, JOURNALLED):
+    for entry in read_entries(
+        journal, JOURNALLED, only=(Bar, Signal, SignalRefused, Fill, Settled)
+    ):
         message = entry.message
         if isinstance(message, Bar):
             for book in books.values():
@@ -133,8 +158,8 @@ def figures(journal: Path) -> tuple[dict[str, str], list[Figures]]:
             _fill(books[message.strategy], message)
         elif isinstance(message, Settled):
             for book in books.values():
-                book.mark()
-    return header, [_figures(book) for book in books.values()]
+                book.mark(message.ts)
+    return header, list(books.values())
 
 
 def report(journal: Path) -> str:

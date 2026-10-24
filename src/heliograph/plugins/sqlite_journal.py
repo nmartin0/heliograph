@@ -18,7 +18,8 @@ to ``batch - 1`` of the last entries; live use should set ``batch`` low.
 import contextlib
 import os
 import sqlite3
-from collections.abc import Iterable, Iterator
+import time
+from collections.abc import Iterable, Iterator, Sequence
 from importlib.metadata import version
 from pathlib import Path
 from types import TracebackType
@@ -168,11 +169,7 @@ class SqliteJournal(Plugin[SqliteJournalParams]):
                 self._db.commit()
             except sqlite3.Error as exc:  # no room even for that
                 error = error or exc
-            # Back to a single file: a reader (read-only, so it cannot tidy up) would
-            # otherwise leave -wal and -shm files beside a finished journal. Only
-            # tidying: while another connection has the file open, it stays in WAL.
-            with contextlib.suppress(sqlite3.Error):
-                self._db.execute("PRAGMA journal_mode=DELETE")
+            _single_file(self._db, TIDYING)
         finally:
             with contextlib.suppress(sqlite3.Error):
                 self._db.close()
@@ -192,17 +189,63 @@ class SqliteJournal(Plugin[SqliteJournalParams]):
         self.close("complete" if error is None else f"failed: {type(error).__name__}: {error}")
 
 
+TIDYING = 2.0
+"""Seconds a closing journal tries to become a single file while others read it: short,
+since a run's close may be part of a process's stop, which has its own deadline."""
+
+
+def _single_file(db: sqlite3.Connection, timeout: float) -> bool:
+    """Take a journal out of WAL mode, so a finished journal is one file; whether it is.
+
+    SQLite refuses while any other connection has the file open (a chart
+    reading a run as it goes, say), however briefly, so it is tried again
+    in the gaps between their reads, for up to ``timeout`` seconds. A
+    journal left in WAL mode is still whole with its -wal file beside it,
+    and ``tidy`` can finish the job later.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            mode = db.execute("PRAGMA journal_mode=DELETE").fetchone()
+            return bool(mode and mode[0] == "delete")
+        except sqlite3.OperationalError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.02)
+
+
+def tidy(path: Path, timeout: float = TIDYING) -> bool:
+    """Make the finished journal at ``path`` a single file if it is not yet one (its
+    close was outlasted by readers); whether it is one now."""
+    if not Path(f"{path}-wal").exists():
+        return True
+    db = sqlite3.connect(path)
+    try:
+        return _single_file(db, timeout)
+    finally:
+        db.close()
+
+
 def read_header(path: Path) -> dict[str, str]:
     """The header of a journal file."""
     with _open_existing(path) as db:
         return dict(db.execute("SELECT key, value FROM header ORDER BY key"))
 
 
-def read_entries(path: Path, types: Iterable[type]) -> Iterator[JournalEntry]:
+def read_entries(
+    path: Path,
+    types: Iterable[type],
+    *,
+    only: Iterable[type] | None = None,
+    start: int | None = None,
+    end: int | None = None,
+) -> Iterator[JournalEntry]:
     """The entries of a journal file, decoded into ``types``, in sequence order.
 
-    The file and its format are checked when this is called; entries are read
-    as they are iterated.
+    ``only`` keeps the entries of those types, and ``start`` and ``end`` those
+    known (their ``ts``) in ``[start, end)``; the rest are not read, so a
+    chart's bars come without decoding every trade. The file and its format
+    are checked when this is called; entries are read as they are iterated.
 
     Raises:
         InvalidValueError: if there is no journal at ``path``, it was written
@@ -213,12 +256,29 @@ def read_entries(path: Path, types: Iterable[type]) -> Iterator[JournalEntry]:
     header = read_header(path)
     if header.get("format") != str(FORMAT):
         raise InvalidValueError(f"journal {path} has format {header.get('format')}")
-    return _entries(path, known)
+    where: list[str] = []
+    arguments: list[Any] = []
+    if only is not None:
+        names = sorted({type_name(kind) for kind in only})
+        where.append(f"type IN ({', '.join('?' * len(names))})")
+        arguments += names
+    if start is not None:
+        where.append("ts >= ?")
+        arguments.append(start)
+    if end is not None:
+        where.append("ts < ?")
+        arguments.append(end)
+    query = "SELECT * FROM entries"
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    return _entries(path, known, query + " ORDER BY seq", arguments)
 
 
-def _entries(path: Path, known: dict[str, type]) -> Iterator[JournalEntry]:
+def _entries(
+    path: Path, known: dict[str, type], query: str, arguments: Sequence[Any]
+) -> Iterator[JournalEntry]:
     with _open_existing(path) as db:
-        for seq, origin, name, _, payload in db.execute("SELECT * FROM entries ORDER BY seq"):
+        for seq, origin, name, _, payload in db.execute(query, arguments):
             if name not in known:
                 raise InvalidValueError(f"journal {path} holds {name}, which was not given")
             message = cast(Message, msgspec.json.decode(payload, type=known[name]))

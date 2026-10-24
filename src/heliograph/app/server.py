@@ -38,8 +38,19 @@ The API, every body JSON, every time an ISO 8601 UTC string (D19):
     GET  /api/configs/{name}                  one, with its text
     POST /api/backtests                       {"config": TOML text} or {"config_name": name}
     GET  /api/backtests                       every backtest, the latest submitted first
-    GET  /api/backtests/{id}                  one backtest's status and span
+    GET  /api/backtests/{id}                  one backtest's status and span; while it runs,
+                                              how far it has gone (``at``, ``progress``)
     GET  /api/backtests/{id}/report           its report: figures per strategy, and as text
+    GET  /api/backtests/{id}/contents         what can be charted: streams, nodes, strategies
+    GET  /api/backtests/{id}/bars?stream=     the bars of a stream (``btc@1h``)
+    GET  /api/backtests/{id}/nodes/{name}     an indicator's, forecaster's or gate's values
+    GET  /api/backtests/{id}/signals          the signals sent and refused (``?strategy=``)
+    GET  /api/backtests/{id}/fills            the simulated fills (``?strategy=``)
+    GET  /api/backtests/{id}/equity/{name}    a strategy's equity, as the report counts it
+
+The chart series (app/charts.py, D38) take ``?start=`` and ``?end=`` (ISO
+8601: what became known in between), answer ``{"id", "status", "items"}``,
+and can be read while their backtest runs, as far as it has gone.
 
 An error is ``{"error": message}``: 400 for a request or configuration
 that does not validate, 404 for something that is not there, 405 for a
@@ -48,6 +59,7 @@ method a path does not take, 409 for a report of a backtest that has none
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -60,7 +72,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -73,15 +85,17 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from heliograph import __version__
+from heliograph.app import charts
+from heliograph.app.charts import NotInRunError
 from heliograph.app.config import ConfigError, LoadedConfig, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import figures, report
 from heliograph.app.run import StopFlag, run_backtest
 from heliograph.core.clock import Clock, WallClock
 from heliograph.core.errors import HeliographError
-from heliograph.core.time import Timestamp, to_datetime, to_iso
+from heliograph.core.time import Timestamp, from_datetime, from_iso, to_datetime, to_iso
 from heliograph.plugins.registry import Registry, installed_kinds
-from heliograph.plugins.sqlite_journal import read_header
+from heliograph.plugins.sqlite_journal import read_header, tidy
 
 STOP_DEADLINE = 10.0
 """Seconds from a stop signal to the process's exit."""
@@ -170,6 +184,20 @@ class _Job:
     order: int = 0  # submitted after every job with a smaller one
     status: str = "queued"
     error: str | None = None
+    at: int | None = None  # the time of the latest input delivered, while it runs
+
+    def seen(self, ts: Timestamp) -> None:
+        self.at = ts  # one attribute, read without the lock: at worst a moment old
+
+    def progress(self) -> dict[str, Any]:
+        """How far the run has gone through its span, while it runs."""
+        mounts = self.loaded.config.mounts.values()
+        starts = [from_datetime(m.start) for m in mounts if m.start is not None]
+        ends = [from_datetime(m.end) for m in mounts if m.end is not None]
+        if self.at is None or not starts or not ends or max(ends) <= min(starts):
+            return {}
+        done = (self.at - min(starts)) / (max(ends) - min(starts))
+        return {"at": to_iso(Timestamp(self.at)), "progress": round(min(max(done, 0.0), 1.0), 4)}
 
 
 @dataclass(slots=True)
@@ -195,6 +223,11 @@ class Backtests:
             self.runs.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             raise ConfigError(f"cannot keep runs in {self.runs}: {exc.strerror or exc}") from exc
+        # Journals an earlier engine left beside their -wal file (read as they closed,
+        # or stopped mid-tidy) become single files; nothing else has them open yet.
+        for wal in self.runs.glob("*.sqlite-wal"):
+            with contextlib.suppress(Exception):
+                tidy(wal.with_name(wal.name.removesuffix("-wal")), timeout=0.1)
         # A daemon: a backtest that will not stop by the deadline must not keep the
         # process from exiting (its journal is then left "running": interrupted).
         self._worker = threading.Thread(target=self._work, name="backtests", daemon=True)
@@ -262,6 +295,7 @@ class Backtests:
                     self.clock,
                     asyncio.sleep,
                     stop=self._stop,
+                    progress=job.seen,
                 )
             except HeliographError as exc:
                 self._done(job, str(exc))
@@ -274,6 +308,13 @@ class Backtests:
                 _event("backtest finished", id=job.id, inputs=summary.delivered)
 
     def _done(self, job: _Job, error: str | None) -> None:
+        # A chart read as the run closed may have kept its journal from becoming one
+        # file; it is tried again now, before the run is said to be done. Not while
+        # the process stops: its deadline comes first, and the journal is whole as it
+        # is (the next engine on this folder tidies it).
+        if not self._stop.is_set():
+            with contextlib.suppress(Exception):
+                tidy(job.journal)
         with self._lock:
             job.error = error
             job.status = "done"
@@ -309,8 +350,10 @@ class Backtests:
             status = job.status if job is not None else None
             error = job.error if job is not None else None
         journal = self.runs / f"{id_}.sqlite"
-        if status in ("queued", "dropped", "running"):
-            # A running backtest's journal may not exist yet, or be half written.
+        if status == "running" and job is not None:
+            # Its journal may not exist yet, or be half written.
+            return {"id": id_, "status": status, **job.progress()}
+        if status in ("queued", "dropped"):
             return {"id": id_, "status": status}
         if not journal.is_file():
             if status is None:
@@ -467,6 +510,24 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
             return _error(404, f"no backtest {id_!r}")
         return JSONResponse(described)
 
+    def chart_(id_: str, read: Callable[[Path], Any]) -> Response:
+        """What ``read`` takes from a backtest's journal, as ``{"id", "status", "items"}``:
+        a running backtest's too, as far as it has gone."""
+        described = backtests.describe(id_)
+        if described is None:
+            return _error(404, f"no backtest {id_!r}")
+        status = described["status"]
+        journal = backtests.runs / f"{id_}.sqlite"
+        if not journal.is_file() or status.startswith("unreadable"):
+            return _error(409, f"backtest {id_} has no journal to chart ({status})")
+        try:
+            items = read(journal)
+        except NotInRunError as exc:
+            return _error(404, str(exc))
+        except HeliographError as exc:
+            return _error(409, f"backtest {id_} cannot be charted: {exc}")
+        return JSONResponse({"id": id_, "status": status, "items": items})
+
     def report_(id_: str) -> Response:
         described = backtests.describe(id_)
         if described is None:
@@ -488,6 +549,64 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
 
     async def plugins(request: Request) -> Response:
         return await run_in_threadpool(plugins_)
+
+    def span(request: Request) -> tuple[int | None, int | None] | Response:
+        """The ``start`` and ``end`` a chart request names (ISO 8601), or the error."""
+        found: list[int | None] = []
+        for key in ("start", "end"):
+            text = request.query_params.get(key)
+            try:
+                found.append(None if text is None else from_iso(text))
+            except HeliographError as exc:
+                return _error(400, f"{key}: {exc}")
+        return found[0], found[1]
+
+    async def chart(request: Request, read: Callable[..., Any], *names: str) -> Response:
+        """A chart's series: ``read(journal, *path names, start, end)``."""
+        between = span(request)
+        if isinstance(between, Response):
+            return between
+        args = [request.path_params[n] for n in names]
+        id_ = request.path_params["id"]
+        return await run_in_threadpool(chart_, id_, lambda journal: read(journal, *args, *between))
+
+    async def contents_of(request: Request) -> Response:
+        return await run_in_threadpool(chart_, request.path_params["id"], charts.contents)
+
+    async def bars_of(request: Request) -> Response:
+        stream = request.query_params.get("stream")
+        if not stream:
+            return _error(400, 'name the stream: ?stream=<mount>@<size>, such as "btc@1h"')
+        between = span(request)
+        if isinstance(between, Response):
+            return between
+        return await run_in_threadpool(
+            chart_, request.path_params["id"], lambda j: charts.bars(j, stream, *between)
+        )
+
+    async def node_of(request: Request) -> Response:
+        return await chart(request, charts.node, "name")
+
+    async def signals_of(request: Request) -> Response:
+        strategy = request.query_params.get("strategy")
+        between = span(request)
+        if isinstance(between, Response):
+            return between
+        return await run_in_threadpool(
+            chart_, request.path_params["id"], lambda j: charts.signals(j, strategy, *between)
+        )
+
+    async def fills_of(request: Request) -> Response:
+        strategy = request.query_params.get("strategy")
+        between = span(request)
+        if isinstance(between, Response):
+            return between
+        return await run_in_threadpool(
+            chart_, request.path_params["id"], lambda j: charts.fills(j, strategy, *between)
+        )
+
+    async def equity_of(request: Request) -> Response:
+        return await chart(request, charts.equity_of, "strategy")
 
     async def plugin(request: Request) -> Response:
         params = request.path_params
@@ -525,6 +644,12 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
         Route("/api/backtests", listed),
         Route("/api/backtests/{id}", one),
         Route("/api/backtests/{id}/report", report_of),
+        Route("/api/backtests/{id}/contents", contents_of),
+        Route("/api/backtests/{id}/bars", bars_of),
+        Route("/api/backtests/{id}/nodes/{name}", node_of),
+        Route("/api/backtests/{id}/signals", signals_of),
+        Route("/api/backtests/{id}/fills", fills_of),
+        Route("/api/backtests/{id}/equity/{strategy}", equity_of),
     ]
 
     async def not_found(request: Request, exc: Exception) -> Response:
@@ -665,7 +790,7 @@ def serve(settings: Settings) -> int:
     status = 0
     if not backtests.wait(stopping.left()):
         _event(
-            "a backtest did not stop in time; its journal is left running",
+            "a backtest did not finish stopping in time",
             logging.ERROR,
             id=backtests.running(),
             deadline=STOP_DEADLINE,

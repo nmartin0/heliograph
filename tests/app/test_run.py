@@ -507,3 +507,31 @@ def test_a_run_asked_to_stop_ends_and_its_journal_says_so(
     assert read_header(journal)["status"] == (
         "failed: RunStoppedError: the run was stopped before it finished"
     )
+
+
+def test_a_runs_progress_is_each_instant_as_it_settles_in_order(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """Two mounts, the second's trades days after the first's: progress goes through
+    the instants in time order, never ahead to a feed's first trade read early."""
+    early, late = tmp_path / "early.csv", tmp_path / "late.csv"
+    early.write_text("time,price,size\n2026-10-01T00:10:00Z,100,1\n2026-10-01T01:10:00Z,101,1\n")
+    late.write_text("time,price,size\n2026-10-05T00:10:00Z,200,1\n2026-10-05T01:10:00Z,201,1\n")
+    eth = INSTRUMENT.replace("btc", "eth").replace("BTC", "ETH")
+    text = (
+        f'[mounts.btc]\nsource = "file"\nparams = {{ path = {str(early)!r} }}\nkind = "trades"\n'
+        "start = 2026-10-01T00:00:00Z\nend = 2026-10-06T00:00:00Z\n"
+        f"{INSTRUMENT}"
+        f'[mounts.eth]\nsource = "file"\nparams = {{ path = {str(late)!r} }}\nkind = "trades"\n'
+        "start = 2026-10-01T00:00:00Z\nend = 2026-10-06T00:00:00Z\n"
+        f"{eth}"
+    )
+    seen: list[int] = []
+    time = SimulatedTime(start=NOW)
+    run_backtest(
+        parse_config(text), registry, tmp_path / "run.sqlite", time.clock, time.advance,
+        progress=seen.append,
+    )  # fmt: skip
+    assert seen == sorted(seen)
+    assert seen[0] == from_iso("2026-10-01T00:10:00Z")
+    assert from_iso("2026-10-05T01:10:00Z") in seen

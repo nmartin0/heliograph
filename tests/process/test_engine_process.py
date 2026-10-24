@@ -506,3 +506,92 @@ def test_a_burst_of_signals_stops_the_engine_once_and_in_time(tmp_path: Path) ->
     finally:
         engine.close()
     assert [e["event"] for e in engine.events()].count("stopped") == 1
+
+
+def test_a_finished_backtest_is_charted_from_its_journal(engine: Engine) -> None:
+    queued = engine.request("POST", "/api/backtests", {"config_name": "trend"})[1]
+    engine.until(f"/api/backtests/{queued['id']}", finished)
+    base = f"/api/backtests/{queued['id']}"
+    contents = engine.get(f"{base}/contents")["items"]
+    assert [s["stream"] for s in contents["streams"]] == ["btc@1h"]
+    span = "start=2026-02-01T00:00:00Z&end=2026-02-01T03:00:00Z"
+    bars = engine.get(f"{base}/bars?stream=btc@1h&{span}")["items"]
+    assert [b["start"] for b in bars] == [
+        "2026-01-31T23:00:00Z",
+        "2026-02-01T00:00:00Z",
+        "2026-02-01T01:00:00Z",
+    ]
+    assert bars[1]["t"] == 1_769_904_000_000  # milliseconds, for a chart's axis
+    values = engine.get(f"{base}/nodes/ewmac16?{span}")["items"]
+    assert [v["time"] for v in values] == [b["known"] for b in bars]
+    signals = engine.get(f"{base}/signals?strategy=trend")["items"]
+    fills = engine.get(f"{base}/fills?strategy=trend")["items"]
+    report = engine.get(f"{base}/report")["strategies"][0]
+    assert len(fills) == report["fills"] > 0
+    assert sum(s["kind"] == "signal" for s in signals) == report["signals"]
+    curve = engine.get(f"{base}/equity/trend")["items"]
+    assert curve[-1]["value"] == pytest.approx(report["result"])
+
+
+@pytest.mark.parametrize(
+    ("path", "status", "says"),
+    [
+        ("bars", 400, "name the stream"),
+        ("bars?stream=eth@1h", 404, "no stream 'eth@1h'"),
+        ("bars?stream=btc@1h&start=soon", 400, "start: 'soon' is not an ISO 8601"),
+        ("nodes/nothing", 404, "no indicator, forecaster or gate 'nothing'"),
+        ("signals?strategy=nobody", 404, "no strategy 'nobody'"),
+        ("equity/nobody", 404, "no strategy 'nobody'"),
+    ],
+)
+def test_a_chart_request_the_run_cannot_answer_says_why(
+    engine: Engine, path: str, status: int, says: str
+) -> None:
+    queued = engine.request("POST", "/api/backtests", {"config_name": "trend"})[1]
+    engine.until(f"/api/backtests/{queued['id']}", finished)
+    got, body = engine.request("GET", f"/api/backtests/{queued['id']}/{path}")
+    assert got == status
+    assert says in body["error"]
+
+
+def test_a_backtest_with_no_journal_has_nothing_to_chart(engine: Engine) -> None:
+    status, body = engine.request("GET", "/api/backtests/nonsense/contents")
+    assert (status, body) == (404, {"error": "no backtest 'nonsense'"})
+
+
+def test_a_running_backtest_says_how_far_it_has_gone_and_can_be_charted_so_far(
+    tmp_path: Path,
+) -> None:
+    data = trades_csv(tmp_path / "btc.csv", 40_000)  # four weeks of minutes
+    text = trend_config(data, "2026-01-01T00:00:00Z", "2026-01-28T00:00:00Z")
+    data_dir = tmp_path / "data"
+    engine = Engine("--data", str(data_dir), "--port", "0").started()
+    try:
+        long = engine.request("POST", "/api/backtests", {"config": text, "name": "long"})[1]
+        engine.until("/api/health", lambda h: h["running"] == long["id"])
+        engine.polling(lambda: journalled(data_dir / "runs" / f"{long['id']}.sqlite"))
+        first = engine.get(f"/api/backtests/{long['id']}")
+        assert first["status"] == "running"
+        assert 0.0 <= first["progress"] <= 1.0
+        assert ISO.match(first["at"])
+        bars: list[Any] = []
+        seen: list[dict[str, Any]] = []
+
+        def charted() -> bool:
+            # Charted while it runs: bars as far as its journal is written.
+            reply = engine.get(f"/api/backtests/{long['id']}/bars?stream=btc@1h")
+            bars[:] = reply["items"]
+            return reply["status"] == "running" and len(bars) > 0
+
+        def done() -> bool:
+            seen.append(engine.get(f"/api/backtests/{long['id']}"))
+            return bool(seen[-1]["status"] != "running")
+
+        engine.polling(charted)
+        assert [b["start"] for b in bars][:2] == ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"]
+        engine.polling(done, timeout=120)
+        progress = [first["progress"], *(s["progress"] for s in seen if "progress" in s)]
+        assert progress == sorted(progress)  # it never goes back
+        assert len(set(progress)) > 1
+    finally:
+        engine.close()

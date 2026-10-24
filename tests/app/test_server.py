@@ -7,6 +7,7 @@ tested from outside, in tests/process."""
 
 import json
 import logging
+import sqlite3
 import sys
 import threading
 from pathlib import Path
@@ -20,6 +21,8 @@ from heliograph.app.server import Backtests, _JsonLines
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.errors import HeliographError
 from heliograph.core.time import Timestamp
+from heliograph.plugins import sqlite_journal
+from heliograph.plugins.sqlite_journal import SqliteJournal, SqliteJournalParams
 
 CONFIG = """
 mode = "backtest"
@@ -137,3 +140,91 @@ def test_a_message_of_many_lines_is_named_by_its_first() -> None:
     )
     line = json.loads(_JsonLines(CLOCK).format(record))
     assert (line["event"], line["detail"]) == ("Traceback (most recent call last):", "  x")
+
+
+def _left_in_wal(journal: Path) -> None:
+    """A journal whose close was outlasted by a reader: whole, beside its -wal file."""
+    with SqliteJournal(SqliteJournalParams(path=str(journal)), header={"run": "test"}):
+        reader = sqlite3.connect(f"{journal.as_uri()}?mode=ro", uri=True)
+        reader.execute("SELECT count(*) FROM header").fetchall()
+    reader.close()
+    assert Path(f"{journal}-wal").exists()
+
+
+def test_a_journal_left_in_wal_mode_by_a_reader_is_tidied_after_its_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chart read held the journal open through its close; once the reader has gone,
+    the worker makes it one file before saying the run is done."""
+    monkeypatch.setattr(sqlite_journal, "TIDYING", 0.05)
+    tidied = threading.Event()
+    real = sqlite_journal.tidy
+
+    def run(loaded: Any, registry: Any, journal: Path, *args: Any, **kwargs: Any) -> Any:
+        _left_in_wal(journal)
+        raise HeliographError("done")
+
+    def spy(path: Path, timeout: float = 2.0) -> bool:
+        result = real(path, timeout)
+        tidied.set()
+        return result
+
+    monkeypatch.setattr(server, "run_backtest", run)
+    monkeypatch.setattr(server, "_registry", lambda loaded: None)
+    monkeypatch.setattr(server, "tidy", spy)
+    backtests = Backtests(tmp_path / "runs", CLOCK)
+    backtests.start()
+    job = backtests.submit("a", parse_config(CONFIG))
+    assert tidied.wait(10)
+    backtests.stop()
+    assert backtests.wait(10.0)
+    assert sorted(p.name for p in (tmp_path / "runs").iterdir()) == [f"{job.id}.sqlite"]
+
+
+def test_an_engine_starting_on_a_folder_tidies_the_journals_left_beside_their_wal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sqlite_journal, "TIDYING", 0.05)
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    _left_in_wal(runs / "old.sqlite")
+    backtests = Backtests(runs, CLOCK)
+    backtests.start()
+    backtests.stop()
+    assert backtests.wait(10.0)
+    assert sorted(p.name for p in runs.iterdir()) == ["old.sqlite"]
+
+
+def test_a_journal_is_not_tidied_after_its_run_while_the_process_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stop's deadline comes first; the next engine on the folder tidies it."""
+    tidied: list[Path] = []
+    finished = threading.Event()
+    backtests = Backtests(tmp_path / "runs", CLOCK)
+
+    def run(*args: Any, **kwargs: Any) -> Any:
+        backtests.signal_stop()  # a signal, while the run closes
+        raise HeliographError("stopped")
+
+    real_event = server._event
+
+    def logged(name: str, *args: Any, **fields: Any) -> None:
+        real_event(name, *args, **fields)
+        if name == "backtest failed":  # logged once the run is done
+            finished.set()
+
+    def spy(path: Path, timeout: float = 2.0) -> bool:
+        tidied.append(path)
+        return True
+
+    monkeypatch.setattr(server, "run_backtest", run)
+    monkeypatch.setattr(server, "_registry", lambda loaded: None)
+    monkeypatch.setattr(server, "tidy", spy)
+    monkeypatch.setattr(server, "_event", logged)
+    backtests.start()
+    backtests.submit("a", parse_config(CONFIG))
+    assert finished.wait(10)
+    backtests.stop()
+    assert backtests.wait(10.0)
+    assert tidied == []

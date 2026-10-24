@@ -2156,8 +2156,8 @@ tests = ["tests/app/test_report.py::test_a_strategy_without_fills_reports_its_si
 [[control]]
 describes = "a finished journal is one file"
 path = "src/heliograph/plugins/sqlite_journal.py"
-old = "                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
-new = "                pass\n"
+old = "            _single_file(self._db, TIDYING)\n"
+new = "            pass\n"
 tests = ["tests/plugins/test_sqlite_journal.py::test_a_finished_journal_is_one_file_and_reading_it_leaves_nothing_beside_it"]
 
 [[control]]
@@ -2191,8 +2191,8 @@ tests = ["tests/plugins/test_registry.py::test_with_no_kinds_named_every_install
 [[control]]
 describes = "a journal closes though another connection has it open"
 path = "src/heliograph/plugins/sqlite_journal.py"
-old = "            with contextlib.suppress(sqlite3.Error):\n                self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
-new = "            self._db.execute(\"PRAGMA journal_mode=DELETE\")\n"
+old = "                return False\n"
+new = "                raise\n"
 tests = ["tests/plugins/test_sqlite_journal.py::test_a_journal_closes_while_another_reader_has_it_open"]
 
 [[control]]
@@ -3120,3 +3120,150 @@ path = "src/heliograph/app/server.py"
 old = "        if detail:  # a message of many lines (uvicorn's tracebacks): its name, then the rest\n"
 new = "        if False:\n"
 tests = ["tests/app/test_server.py::test_a_message_of_many_lines_is_named_by_its_first"]
+
+[[control]]
+describes = "a journal read keeps only the types asked for"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "    if only is not None:\n"
+new = "    if False:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_read_may_keep_some_types_and_a_span_of_known_times"]
+
+[[control]]
+describes = "a journal read starts where it is asked to"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "    if start is not None:\n"
+new = "    if False:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_read_may_keep_some_types_and_a_span_of_known_times"]
+
+[[control]]
+describes = "a journal read ends before where it is asked to"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "        where.append(\"ts < ?\")\n"
+new = "        where.append(\"ts <= ?\")\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_read_may_keep_some_types_and_a_span_of_known_times"]
+
+[[control]]
+describes = "a stream's bars are only its own size"
+path = "src/heliograph/app/charts.py"
+old = "        if bar.instrument != instrument or bar.end - bar.start != size:\n"
+new = "        if bar.instrument != instrument:\n"
+tests = ["tests/app/test_charts.py::test_bars_are_those_of_the_stream_asked_for_when_a_run_has_two"]
+
+[[control]]
+describes = "a bar sits at its start on a chart"
+path = "src/heliograph/app/charts.py"
+old = "                \"t\": _t(bar.start),\n"
+new = "                \"t\": _t(bar.end),\n"
+tests = ["tests/app/test_charts.py::test_bars_are_the_journals_bars_of_the_stream_in_order"]
+
+[[control]]
+describes = "a node's values are those it changed to"
+path = "src/heliograph/app/charts.py"
+old = "        if name in values.changed:\n"
+new = "        if name in values.values:\n"
+tests = ["tests/app/test_charts.py::test_bars_are_those_of_the_stream_asked_for_when_a_run_has_two"]
+
+[[control]]
+describes = "a fill sits where it happened on a chart"
+path = "src/heliograph/app/charts.py"
+old = "                \"t\": _t(fill.event_time),\n"
+new = "                \"t\": _t(fill.ts),\n"
+tests = ["tests/app/test_charts.py::test_signals_and_fills_are_the_ones_the_report_counts"]
+
+[[control]]
+describes = "a strategy the run does not have is said"
+path = "src/heliograph/app/charts.py"
+old = "    if strategy not in set(names):\n"
+new = "    if False:\n"
+tests = ["tests/app/test_charts.py::test_what_the_run_does_not_have_is_said"]
+
+[[control]]
+describes = "equity is marked when its close settled"
+path = "src/heliograph/app/report.py"
+old = "        self.marked.append(ts)\n"
+new = "        self.marked.append(0)\n"
+tests = ["tests/app/test_charts.py::test_the_equity_ends_where_the_report_does"]
+
+[[control]]
+describes = "a chart number JSON cannot hold is null"
+path = "src/heliograph/app/charts.py"
+old = "    return value if value is None or math.isfinite(value) else None\n"
+new = "    return value\n"
+tests = ["tests/app/test_charts.py::test_a_number_json_cannot_hold_is_null"]
+
+[[control]]
+describes = "a running backtest says how far it has gone"
+path = "src/heliograph/app/server.py"
+old = "                    progress=job.seen,\n"
+new = "                    progress=None,\n"
+tests = ["tests/process/test_engine_process.py::test_a_running_backtest_says_how_far_it_has_gone_and_can_be_charted_so_far"]
+
+[[control]]
+describes = "a chart request's span must be ISO text"
+path = "src/heliograph/app/server.py"
+old = "                return _error(400, f\"{key}: {exc}\")\n"
+new = "                found.append(None)\n"
+tests = ["tests/process/test_engine_process.py::test_a_chart_request_the_run_cannot_answer_says_why"]
+
+[[control]]
+describes = "a journal read as it closes still ends as one file"
+path = "src/heliograph/plugins/sqlite_journal.py"
+old = "            if time.monotonic() >= deadline:\n"
+new = "            if True:\n"
+tests = ["tests/plugins/test_sqlite_journal.py::test_a_journal_read_as_it_closes_still_ends_as_one_file"]
+
+[[control]]
+describes = "a run's progress is each instant as it settles"
+path = "src/heliograph/app/run.py"
+old = "            bus.subscribe(Settled, lambda settled: progress(settled.ts))\n"
+new = "            pass\n"
+tests = ["tests/app/test_run.py::test_a_runs_progress_is_each_instant_as_it_settles_in_order"]
+
+[[control]]
+describes = "equity keeps to the span asked for"
+path = "src/heliograph/app/charts.py"
+old = "        if (start is None or ts >= start) and (end is None or ts < end)\n"
+new = "        if True\n"
+tests = ["tests/app/test_charts.py::test_signals_and_equity_keep_to_the_span_asked_for"]
+
+[[control]]
+describes = "signals are those of the strategy asked for"
+path = "src/heliograph/app/charts.py"
+old = "        if strategy is not None and message.strategy != strategy:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_charts.py::test_signals_and_fills_are_those_of_the_strategy_asked_for"]
+
+[[control]]
+describes = "fills are those of the strategy asked for"
+path = "src/heliograph/app/charts.py"
+old = "        if strategy is not None and fill.strategy != strategy:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_charts.py::test_signals_and_fills_are_those_of_the_strategy_asked_for"]
+
+[[control]]
+describes = "a stream's bars are only its own instrument's"
+path = "src/heliograph/app/charts.py"
+old = "        if bar.instrument != instrument or bar.end - bar.start != size:\n"
+new = "        if bar.end - bar.start != size:\n"
+tests = ["tests/app/test_charts.py::test_bars_are_those_of_the_streams_instrument_when_a_run_has_two"]
+
+[[control]]
+describes = "a journal is tidied after its run"
+path = "src/heliograph/app/server.py"
+old = "                tidy(job.journal)\n"
+new = "                pass\n"
+tests = ["tests/app/test_server.py::test_a_journal_left_in_wal_mode_by_a_reader_is_tidied_after_its_run"]
+
+[[control]]
+describes = "a journal is not tidied while the process stops"
+path = "src/heliograph/app/server.py"
+old = "        if not self._stop.is_set():\n"
+new = "        if True:\n"
+tests = ["tests/app/test_server.py::test_a_journal_is_not_tidied_after_its_run_while_the_process_stops"]
+
+[[control]]
+describes = "an engine starting tidies journals left beside their wal"
+path = "src/heliograph/app/server.py"
+old = "                tidy(wal.with_name(wal.name.removesuffix(\"-wal\")), timeout=0.1)\n"
+new = "                pass\n"
+tests = ["tests/app/test_server.py::test_an_engine_starting_on_a_folder_tidies_the_journals_left_beside_their_wal"]

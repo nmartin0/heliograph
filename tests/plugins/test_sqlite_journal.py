@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
 
 import sqlite3
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from heliograph.core.errors import InvalidValueError
 from heliograph.core.journal import JournalEntry, runs
 from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
 from heliograph.core.time import NANOS_PER_HOUR, Timestamp
+from heliograph.plugins import sqlite_journal
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
     SqliteJournal,
@@ -22,6 +24,7 @@ from heliograph.plugins.sqlite_journal import (
     raw_rows,
     read_entries,
     read_header,
+    tidy,
 )
 from tests.support.world import BTC, END, Crossed, toy_session
 from tests.support.world import points as btc_points
@@ -140,15 +143,46 @@ def test_a_finished_journal_is_one_file_and_reading_it_leaves_nothing_beside_it(
     assert sorted(p.name for p in tmp_path.iterdir()) == ["run.sqlite"]
 
 
-def test_a_journal_closes_while_another_reader_has_it_open(tmp_path: Path) -> None:
+def test_a_journal_closes_while_another_reader_has_it_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reader that stays open outlasts the close's tidying: the journal is whole in
+    WAL mode, and becomes one file when ``tidy`` finds it alone."""
+    monkeypatch.setattr(sqlite_journal, "TIDYING", 0.1)
     path = tmp_path / "run.sqlite"
     with SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"}) as journal:
         reader = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
         reader.execute("SELECT count(*) FROM header").fetchone()
         toy_session(journal, (points([(10, 100)]), END))
-    reader.close()
     assert read_header(path)["status"] == "complete"
+    assert tidy(path, timeout=0.1) is False  # still open
+    reader.close()
     assert list(read_entries(path, TYPES))
+    assert tidy(path) is True
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["run.sqlite"]
+
+
+def test_a_journal_read_as_it_closes_still_ends_as_one_file(tmp_path: Path) -> None:
+    """A chart reading a running backtest has the journal open as it closes: the close
+    leaves WAL mode once the read is over, trying again until then."""
+    path = tmp_path / "run.sqlite"
+    opened, done = threading.Event(), threading.Event()
+
+    def read() -> None:
+        reader = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        reader.execute("SELECT count(*) FROM header").fetchall()
+        opened.set()
+        done.wait(0.2)  # a read that outlasts the close's first try
+        reader.close()
+
+    with SqliteJournal(SqliteJournalParams(path=str(path)), header={"run": "test"}) as journal:
+        toy_session(journal, (points([(10, 100), (70, 110)]), END))
+        reading = threading.Thread(target=read)
+        reading.start()
+        assert opened.wait(10)
+    reading.join()
+    assert read_header(path)["status"] == "complete"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["run.sqlite"]
 
 
 @pytest.mark.parametrize("name", ["a?b.sqlite", "a#b.sqlite", "a%20b.sqlite"])
@@ -243,3 +277,23 @@ def test_on_a_disk_too_full_for_the_status_a_failed_run_keeps_its_own_error(
     other.append(JournalEntry(1, "input", Settled(Timestamp(5))))
     with pytest.raises(sqlite3.OperationalError, match="disk is full"):
         other.close()  # a completed run learns of it
+
+
+def test_a_read_may_keep_some_types_and_a_span_of_known_times(tmp_path: Path) -> None:
+    path = tmp_path / "run.sqlite"
+    session(path, (points([(10, 100), (70, 110), (300, 104)]), END))
+    every = list(read_entries(path, TYPES))
+    bars = list(read_entries(path, TYPES, only=(Bar,)))
+    assert bars == [e for e in every if isinstance(e.message, Bar)]
+    assert bars
+    middle = every[len(every) // 2].message.ts
+    later = list(read_entries(path, TYPES, start=middle))
+    earlier = list(read_entries(path, TYPES, end=middle))
+    assert later == [e for e in every if e.message.ts >= middle]
+    assert earlier == [e for e in every if e.message.ts < middle]
+    assert later
+    assert earlier
+    both = list(read_entries(path, TYPES, only=(Point, Settled), start=middle, end=middle + 1))
+    assert both == [
+        e for e in later if isinstance(e.message, Point | Settled) and e.message.ts == middle
+    ]

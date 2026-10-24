@@ -157,10 +157,12 @@ def run_backtest(
     sleep: Sleep,
     *,
     stop: Stop | None = None,
+    progress: Callable[[Timestamp], None] | None = None,
 ) -> RunSummary:
     """Run the backtest ``loaded`` describes, journalling it to a new file.
 
-    Setting ``stop`` (from another thread) ends the run at its next input:
+    ``progress`` is told each instant of the run as it settles. Setting
+    ``stop`` (from another thread) ends the run at its next input:
     the journal is closed as failed, saying it was stopped, and
     ``RunStoppedError`` is raised.
 
@@ -196,7 +198,7 @@ def run_backtest(
     sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
     with SourceLoop() as loop:
         try:
-            with _assembled(config, journal, header, components) as engine:
+            with _assembled(config, journal, header, components, progress) as engine:
                 feeds: list[HistoryFeed] = []
                 try:
                     for mount, wanted in zip(mounts, requests, strict=True):
@@ -409,6 +411,7 @@ def _assembled(
     journal: Path,
     header: Mapping[str, str],
     components: Built,
+    progress: Callable[[Timestamp], None] | None = None,
 ) -> Iterator[BacktestEngine]:
     """An engine on a journalled bus: streams build bars, the graph its nodes, strategies decide."""
     start = Timestamp(int(header["start"]))
@@ -417,6 +420,9 @@ def _assembled(
     with SqliteJournal(params, dict(header)) as sink:
         bus = MessageBus(clock, sink)
         engine = BacktestEngine(clock, bus)
+        if progress is not None:
+            # Each instant as it settles: what the run has done, not what it has read ahead.
+            bus.subscribe(Settled, lambda settled: progress(settled.ts))
         # How long after its end each mount's data is known; a journal written
         # before this was recorded had no delays on mounts of bars to record.
         mounts = json.loads(header.get("mounts", "{}"))
