@@ -249,6 +249,12 @@ within each section.
   seconds to start and write a pid; on the owner's computer, once
   inline-snapshot loaded at every start, it did not, and D5 could not be
   pushed. The inner run now loads no plug-ins and has 10 seconds.
+- **"It stops at its next input" is only as prompt as the next input.** The
+  engine's stop test sent its signal once the backtest was marked running;
+  on the owner's computer the run was still reading its 300,000-row file,
+  its first input came four seconds later, and the test failed (here the
+  file loads before the signal lands). It now waits for entries in the
+  journal, so inputs are flowing when the signal comes.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.

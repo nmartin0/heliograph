@@ -52,6 +52,15 @@ def written(journal: Path) -> bool:
         return False
 
 
+def journalled(journal: Path) -> bool:
+    """Whether ``journal`` holds entries: its run is past reading its data, and its
+    inputs are flowing, so it meets its next input at once."""
+    if not written(journal):
+        return False
+    with contextlib.closing(sqlite3.connect(f"{journal.as_uri()}?mode=ro", uri=True)) as db:
+        return bool(db.execute("SELECT 1 FROM entries LIMIT 1").fetchall())
+
+
 def finished(body: dict[str, Any]) -> bool:
     return body["status"] not in ("queued", "running")
 
@@ -453,13 +462,17 @@ def test_a_backtest_is_told_to_stop_at_the_signal_not_after_open_requests(
     tmp_path: Path,
 ) -> None:
     """A request still being sent holds the server's shutdown for its grace; the
-    running backtest stops at the signal all the same."""
+    running backtest stops at the signal all the same. The signal comes once the
+    backtest's inputs are flowing: before that (reading its file, on a slow
+    computer for seconds) its next input is not yet there to stop at."""
     data = trades_csv(tmp_path / "btc.csv", 300_000)
     text = trend_config(data, "2026-01-01T00:00:00Z", "2026-07-01T00:00:00Z")
-    engine = Engine("--data", str(tmp_path / "data"), "--port", "0").started()
+    data_dir = tmp_path / "data"
+    engine = Engine("--data", str(data_dir), "--port", "0").started()
     try:
         long = engine.request("POST", "/api/backtests", {"config": text, "name": "long"})[1]
         engine.until("/api/health", lambda h: h["running"] == long["id"])
+        engine.polling(lambda: journalled(data_dir / "runs" / f"{long['id']}.sqlite"))
         assert engine.port is not None
         with socket.create_connection(("127.0.0.1", engine.port)) as half:
             half.sendall(b"POST /api/backtests HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\n")
