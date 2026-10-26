@@ -104,6 +104,7 @@ def bars(
                 "t": _t(bar.start),
                 "start": to_iso(bar.start),
                 "end": to_iso(bar.end),
+                "end_t": _t(bar.end),
                 "known": to_iso(entry.message.ts),
                 "open": bar.open,
                 "high": bar.high,

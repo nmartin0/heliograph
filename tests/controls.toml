@@ -3267,3 +3267,10 @@ path = "src/heliograph/app/server.py"
 old = "                tidy(wal.with_name(wal.name.removesuffix(\"-wal\")), timeout=0.1)\n"
 new = "                pass\n"
 tests = ["tests/app/test_server.py::test_an_engine_starting_on_a_folder_tidies_the_journals_left_beside_their_wal"]
+
+[[control]]
+describes = "a bar says when it ends, in milliseconds"
+path = "src/heliograph/app/charts.py"
+old = "                \"end_t\": _t(bar.end),\n"
+new = "                \"end_t\": _t(bar.start),\n"
+tests = ["tests/app/test_charts.py::test_bars_are_the_journals_bars_of_the_stream_in_order"]

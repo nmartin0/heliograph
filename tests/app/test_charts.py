@@ -57,6 +57,7 @@ def test_bars_are_the_journals_bars_of_the_stream_in_order(run: RunSummary) -> N
     assert [(b["open"], b["close"]) for b in got] == [(b.open, b.close) for b in journalled]
     assert got[0]["t"] == journalled[0].start // NANOS_PER_MILLISECOND  # a bar sits at its start
     assert (got[0]["start"], got[0]["end"]) == ("2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z")
+    assert got[0]["end_t"] - got[0]["t"] == 3_600_000  # in milliseconds, as ``t`` is
     assert [b["t"] for b in got] == sorted(b["t"] for b in got)
 
 
