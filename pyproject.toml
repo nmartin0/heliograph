@@ -16,7 +16,9 @@ classifiers = [
 ]
 dependencies = [
     "ccxt>=4.5,<5",
+    "httpx>=0.28,<1",
     "msgspec>=0.19,<1",
+    "nicegui>=3.18,<4",
     "numpy>=2,<3",
     "pyarrow>=22,<27",
     "pydantic>=2.11,<3",
