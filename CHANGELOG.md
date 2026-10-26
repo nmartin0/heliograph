@@ -247,6 +247,9 @@ All notable changes to Heliograph are recorded here. The format follows
   signals and fills, graph nodes (on the price or in panes of their own) and
   equity with TradingView's Lightweight Charts, offering what the run holds.
   Bars now say when they end (`end_t`).
+- The Plug-ins screen (D40): every installed plug-in by kind with a settings
+  form generated from its parameter schema, checked as it changes, and the
+  configuration table that sets it up.
 
 ### Fixed
 

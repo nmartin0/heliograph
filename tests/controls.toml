@@ -3365,3 +3365,73 @@ path = "src/heliograph/app/cli.py"
 old = "    engine = args.engine or os.environ.get(\"HELIOGRAPH_ENGINE\") or DEFAULT_ENGINE\n"
 new = "    engine = args.engine or DEFAULT_ENGINE\n"
 tests = ["tests/gui/test_app.py::test_the_gui_command_serves_the_window"]
+
+[[control]]
+describes = "an exclusive lower bound refuses the bound itself"
+path = "src/heliograph/gui/forms.py"
+old = "        if one.exclusive_minimum is not None and value <= one.exclusive_minimum:\n"
+new = "        if one.exclusive_minimum is not None and value < one.exclusive_minimum:\n"
+tests = ["tests/gui/test_forms.py::test_a_value_is_checked_against_what_the_schema_allows"]
+
+[[control]]
+describes = "a setting equal to its default is left out of what is sent"
+path = "src/heliograph/gui/forms.py"
+old = "        if one.required or value != one.default:\n"
+new = "        if True:\n"
+tests = ["tests/gui/test_forms.py::test_only_what_differs_from_its_default_is_worth_sending_and_what_is_required"]
+
+[[control]]
+describes = "an enum behind a reference keeps its own default and help"
+path = "src/heliograph/gui/forms.py"
+old = "    return {**target, **{k: v for k, v in node.items() if k != \"$ref\"}}\n"
+new = "    return target\n"
+tests = ["tests/gui/test_forms.py::test_an_enum_behind_a_ref_is_a_choice_that_keeps_its_own_default_and_help"]
+
+[[control]]
+describes = "a value or null is that value, nullable"
+path = "src/heliograph/gui/forms.py"
+old = "        nullable = len(rest) < len(options)\n"
+new = "        nullable = False\n"
+tests = ["tests/gui/test_forms.py::test_a_value_or_null_is_that_value_and_nullable"]
+
+[[control]]
+describes = "a string in a configuration is escaped"
+path = "src/heliograph/gui/forms.py"
+old = "        return json.dumps(value)  # a JSON string is a TOML basic string\n"
+new = "        return '\"' + value + '\"'\n"
+tests = ["tests/gui/test_forms.py::test_settings_are_written_as_the_inline_table_a_configuration_takes"]
+
+[[control]]
+describes = "a number box's float is a whole number when it says one"
+path = "src/heliograph/gui/form.py"
+old = "        if one.kind == forms.INTEGER and isinstance(value, float) and value.is_integer():\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_catalogue.py::test_what_is_changed_is_shown_as_the_configuration_would_take_it"]
+
+[[control]]
+describes = "a required value missing is shown before anything is touched"
+path = "src/heliograph/gui/form.py"
+old = "            why = forms.problem(one, self.values[one.name])\n"
+new = "            why = None\n"
+tests = ["tests/gui/test_catalogue.py::test_a_required_value_not_yet_given_is_asked_for_from_the_start"]
+
+[[control]]
+describes = "settings with a mistake are not offered as a configuration"
+path = "src/heliograph/gui/catalogue.py"
+old = "        if self.form.valid:\n"
+new = "        if True:\n"
+tests = ["tests/gui/test_catalogue.py::test_what_is_changed_is_shown_as_the_configuration_would_take_it"]
+
+[[control]]
+describes = "the plug-in list is filtered by what is typed"
+path = "src/heliograph/gui/catalogue.py"
+old = "                shown = [p for p in group if needle in f\"{p['name']} {p['summary']} {kind}\".lower()]\n"
+new = "                shown = list(group)\n"
+tests = ["tests/gui/test_catalogue.py::test_the_list_is_filtered_by_what_is_typed"]
+
+[[control]]
+describes = "a kind the window has never heard of is shown under its own name"
+path = "src/heliograph/gui/catalogue.py"
+old = "    return KINDS.get(kind, kind.replace(\"_\", \" \").capitalize())\n"
+new = "    return KINDS[kind]\n"
+tests = ["tests/gui/test_catalogue.py::test_a_plugin_the_window_has_never_heard_of_appears_and_is_configurable"]

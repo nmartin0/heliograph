@@ -869,3 +869,31 @@ language and toolchain for one person); a browser test in the suite
 (Chromium and Playwright on the owner's machine for a half of the chart
 that is a hundred lines; checked by hand with a screenshot instead, and
 the Python half is exercised through NiceGUI's simulated browser).
+
+## D40 · Settings forms are generated from the parameter schemas (2026-10-26)
+
+The Plug-ins screen lists what the engine's `/api/plugins` lists, by kind,
+and draws each plug-in's settings from the JSON Schema of its parameter
+model (`gui/forms.py` reads it; `gui/form.py` draws it). It knows no
+plug-in and no kind: a kind it has no title for is shown under its own
+name, a plug-in installed tomorrow has a form tomorrow. The schema's
+subset Pydantic emits is understood (integers and numbers with bounds,
+exclusive bounds and a `step` hint, strings, booleans, enums behind a
+`$ref`, a value-or-null, lists of strings, each with default and help);
+anything else is a JSON text box, so it can still be set. A value is
+checked as it changes, and a required one not yet given is asked for from
+the start; the engine checks again when the parameters are used. Only
+what differs from its default is sent or shown (a default left out follows
+the plug-in if it changes), written as the inline table a configuration
+takes, inside the table that uses the plug-in (`[[components]]`, or a
+mount for a data source), so what the form makes can be copied into a
+configuration.
+
+**Why:** the gate of Phase 3 is that a new indicator appears,
+configurable, with no GUI code written for it; the schema is the one place
+a plug-in already says what it takes (D3, D9), bounds included.
+
+**Rejected:** JSON Forms (a Vue and JavaScript toolchain for forms a
+hundred lines of Python draw from the same schema); a form per plug-in
+(the code the gate forbids); sending every setting (a configuration that
+no longer follows a changed default).

@@ -395,7 +395,7 @@ Bonsai idea).
 | Wizard | node graph of forecasters, gates, combiner, sizer, exits, risk |
 | Paper account | positions, fills, equity, your own trade journal |
 | Data manager | sources, mounts, downloads, quality report, quarantine |
-| Plug-ins | installed plug-ins, versions, licences, parameter docs |
+| Plug-ins | installed plug-ins, versions, parameter settings from their schemas (D40); licences later |
 
 Libraries per view are in [licensing.md](licensing.md).
 

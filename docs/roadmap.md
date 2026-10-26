@@ -201,12 +201,17 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       the Workspace screen with a Lightweight Charts element (candles, volume,
       lines, markers, panes, steps), a run's streams, strategies and graph
       nodes offered from what it holds, nodes on the price or in a pane.
-- Indicator catalogue with settings panels generated from parameter schemas.
+- [x] The Plug-ins screen (D40): every installed plug-in by kind, with a
+      settings form generated from its parameter schema (numbers with bounds,
+      choices, switches, text, lists, JSON for the rest; required values
+      asked for) and the configuration table that sets it up, ready to copy.
 - Single-run Strategy Tester with report and equity view.
 - Wizard first cut on Vue Flow.
 
 **Gate:** a new indicator plug-in appears in the GUI, configurable, with no GUI
-code written for it.
+code written for it. (Met by the Plug-ins screen, D40: a test gives the window
+a plug-in of a kind it has never heard of. The phase goes on with the Tester
+and the Wizard.)
 
 ## Phase 4 · Signals and paper trading
 

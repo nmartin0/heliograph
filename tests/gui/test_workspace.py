@@ -4,39 +4,25 @@
 """The Workspace screen, driven as a person would, in NiceGUI's simulated browser
 (no JavaScript runs there: what the chart would draw is what the page hands it)."""
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import httpx
 from nicegui.testing.user import User
-from nicegui.testing.user_simulation import user_simulation
 
 from heliograph.gui.app import workspace
 from heliograph.gui.chart import Chart
 from heliograph.gui.client import Engine
 from heliograph.gui.workspace import Workspace
+from tests.support import window
 from tests.support.api import RUN
+from tests.support.window import fake
 
 
 def scenario(
     engine_at: Callable[[], Engine], play: Callable[[User, Workspace], Awaitable[None]]
 ) -> None:
     """Open the Workspace page on an engine and play ``play`` on it."""
-
-    async def go() -> None:
-        engine = engine_at()
-        shown: list[Workspace] = []
-
-        async def root() -> None:
-            shown.append(await workspace(engine))
-
-        async with user_simulation(root) as user:
-            await user.open("/")
-            await play(user, shown[0])
-        await engine.close()
-
-    asyncio.run(go())
+    window.scenario(engine_at, workspace, play)
 
 
 def drawn(screen: Workspace) -> list[dict[str, Any]]:
@@ -119,25 +105,6 @@ def test_choosing_a_stream_or_strategy_the_run_lacks_is_told_by_the_engine(
         assert "no stream 'eth@1h'" in screen.message.text
 
     scenario(engine_at, play)
-
-
-def fake(answers: dict[str, Any]) -> Callable[[], Engine]:
-    """An engine that answers each path (and no other, with 500) with the JSON given for it."""
-
-    def answer(request: httpx.Request) -> httpx.Response:
-        path = request.url.path.removeprefix("/api")
-        if path in answers:
-            found = answers[path]
-            if isinstance(found, int):
-                return httpx.Response(found, json={"error": f"engine says {found}"})
-            return httpx.Response(200, json=found)
-        return httpx.Response(500, json={"error": f"nothing for {path}"})
-
-    def engine() -> Engine:
-        http = httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://fake")
-        return Engine("http://fake", http)
-
-    return engine
 
 
 def test_an_engine_with_no_runs_shows_an_empty_chart(engine_at: Callable[[], Engine]) -> None:

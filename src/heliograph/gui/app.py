@@ -5,33 +5,63 @@
 
 from nicegui import app, ui
 
+from heliograph.gui.catalogue import Catalogue
 from heliograph.gui.client import DEFAULT_ENGINE, Engine
 from heliograph.gui.workspace import Workspace
 
 TITLE = "Heliograph"
 DEFAULT_PORT = 8766
+PAGE_TIMEOUT = 30.0
+"""Seconds a page may take to be built: it asks the engine, whose first answer about
+plug-ins imports every one of them (NiceGUI's own limit is 3)."""
+
+SCREENS = (("Workspace", "/"), ("Plug-ins", "/plugins"))
+"""The screens, in the order the header offers them."""
+
+
+def frame(current: str) -> None:
+    """The header every screen has: the name, and a link to each screen."""
+    ui.page_title(TITLE)
+    ui.colors(primary="#34506b")
+    dark = ui.dark_mode(True)
+    with ui.header().classes("items-center gap-4"):
+        ui.label(TITLE).classes("text-h6")
+        for name, path in SCREENS:
+            link = ui.link(name, path).classes("text-white")
+            if path == current:
+                link.classes("text-bold underline")
+        ui.space()
+        ui.switch("dark", value=True).bind_value_to(dark)
 
 
 async def workspace(engine: Engine) -> Workspace:
     """The Workspace page, built for the person who opened it, and filled from ``engine``."""
-    ui.page_title(TITLE)
-    ui.colors(primary="#34506b")
-    dark = ui.dark_mode(True)
-    with ui.header().classes("items-center justify-between"):
-        ui.label(TITLE).classes("text-h6")
-        ui.switch("dark", value=True).bind_value_to(dark)
+    frame("/")
     screen = Workspace(engine)
     screen.build()
     await screen.load_runs()
     return screen
 
 
+async def plugins(engine: Engine) -> Catalogue:
+    """The Plug-ins page, filled from ``engine``."""
+    frame("/plugins")
+    screen = Catalogue(engine)
+    screen.build()
+    await screen.load()
+    return screen
+
+
 def create(engine: Engine) -> None:
     """Register the pages, which speak to ``engine``."""
 
-    @ui.page("/")
+    @ui.page("/", response_timeout=PAGE_TIMEOUT)
     async def home() -> None:
         await workspace(engine)
+
+    @ui.page("/plugins", response_timeout=PAGE_TIMEOUT)
+    async def catalogue() -> None:
+        await plugins(engine)
 
     app.on_shutdown(engine.close)
 

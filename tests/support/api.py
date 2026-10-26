@@ -4,6 +4,7 @@
 """The engine's own API app, in this process, over ASGI: its real handlers on a real
 run, with no port and no second process (tests/process starts the real process)."""
 
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
@@ -40,4 +41,12 @@ def engine_holding_a_run(folder: Path) -> Callable[[], Engine]:
         http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://engine")
         return Engine("http://engine", http)
 
+    # The first answer about plug-ins imports them all, which takes longer than a
+    # simulated page may (3 s): do it now, once.
+    asyncio.run(_warmed(engine()))
     return engine
+
+
+async def _warmed(engine: Engine) -> None:
+    await engine.plugins()
+    await engine.close()
