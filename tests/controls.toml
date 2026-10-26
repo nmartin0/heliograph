@@ -3323,3 +3323,45 @@ path = "src/heliograph/gui/client.py"
 old = "        except httpx.HTTPError as exc:\n"
 new = "        except ZeroDivisionError as exc:\n"
 tests = ["tests/gui/test_client.py::test_an_engine_that_cannot_be_reached_is_said_to_be_so"]
+
+[[control]]
+describes = "a node is offered on the price or in a pane as chosen"
+path = "src/heliograph/gui/workspace.py"
+old = "        if where == \"price\":\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_workspace.py::test_a_node_the_run_holds_is_offered_and_drawn_in_a_pane_or_over_the_price"]
+
+[[control]]
+describes = "signals are drawn only while the Signals box is ticked"
+path = "src/heliograph/gui/workspace.py"
+old = "    if strategy is not None and choices.signals:\n"
+new = "    if strategy is not None:\n"
+tests = ["tests/gui/test_workspace.py::test_what_is_drawn_follows_the_checkboxes"]
+
+[[control]]
+describes = "only runs whose journal can be charted are offered"
+path = "src/heliograph/gui/workspace.py"
+old = "    return run[\"status\"].split(\" \")[0].split(\":\")[0] in CHARTED\n"
+new = "    return True\n"
+tests = ["tests/gui/test_workspace.py::test_only_the_runs_that_can_be_charted_are_offered_and_a_choice_opens_that_run"]
+
+[[control]]
+describes = "a failing engine is told to the person, not swallowed"
+path = "src/heliograph/gui/workspace.py"
+old = "            found = await self.engine.backtests()\n        except EngineError as exc:\n            self.message.text = str(exc)\n"
+new = "            found = await self.engine.backtests()\n        except EngineError as exc:\n            found = []\n"
+tests = ["tests/gui/test_workspace.py::test_an_engine_that_fails_is_told_to_the_person"]
+
+[[control]]
+describes = "the chart's page maps the chart library"
+path = "src/heliograph/gui/chart.py"
+old = "    esm={\"heliograph-lightweight-charts\": \"static/lightweight_charts\"},\n"
+new = "    esm={\"heliograph-lightweight-charts-x\": \"static/lightweight_charts\"},\n"
+tests = ["tests/gui/test_app.py::test_the_page_the_browser_gets_loads_the_chart_and_its_library"]
+
+[[control]]
+describes = "the gui command defaults to the engine's own address"
+path = "src/heliograph/app/cli.py"
+old = "    engine = args.engine or os.environ.get(\"HELIOGRAPH_ENGINE\") or DEFAULT_ENGINE\n"
+new = "    engine = args.engine or DEFAULT_ENGINE\n"
+tests = ["tests/gui/test_app.py::test_the_gui_command_serves_the_window"]

@@ -828,3 +828,44 @@ to drift from the run's); drawing indicator values at their bar's start
 `lookahead_on` does); streaming progress over SSE now (a poll every second
 is enough for one person; it waits for live sessions, Phase 4).
 
+
+## D39 · The window is a client of the API, and draws what the run holds (2026-10-26)
+
+The window (`heliograph gui`, package `heliograph.gui`) is a NiceGUI app
+served to a browser, and a client of the engine's JSON API only: it
+imports nothing else of Heliograph (an import-linter contract), takes the
+engine's address (`--engine`, `HELIOGRAPH_ENGINE`; default
+`http://127.0.0.1:8765`) and holds no logic of its own. The engine runs
+first, in its own process (D18, D37); the window does not start it. A
+screen offers what the engine says exists: the Workspace lists a run's
+streams, graph nodes and strategies from `contents` (D38), so a plug-in
+the engine installs appears with no code written for it here. The view is
+a function of the choices made (run, stream, strategy, the nodes shown and
+whether on the price or in a pane of their own): each change redraws it,
+and what a choice sets going is counted, so a screen can say when it has
+settled. Series become what a chart draws in `gui/series.py`, pure
+functions of the API's rows, tested without a browser: a signal sits on
+the bar whose close it was made on (bars now say when they end, `end_t`),
+a fill on the bar it filled on; a value unknown is a gap; one point a
+second. The chart is TradingView's Lightweight Charts 5.2.1 (Apache-2.0),
+vendored with its licence beside the element that wraps it
+(`gui/static/lightweight_charts`), showing its attribution logo and a
+credit line; its panes share a time axis and a crosshair, and zoom stays
+in the browser. Served as a web page first (`127.0.0.1`); a native
+window (pywebview, D7) is the same app in another frame, and comes when
+wanted.
+
+**Why:** a client that imports the engine would hold logic, and the gate
+for Phase 3 (a new indicator appears with no GUI code) holds only if the
+window learns what exists by asking. A page is also what Elysium could
+frame or replace (D20) without a second UI codebase; native mode waits
+because pywebview adds a platform dependency for nothing a browser tab
+does not do.
+
+**Rejected:** starting the engine from the window (two lifetimes in one
+process, and the engine must outlive a closed tab: sessions in Phase 4);
+drawing indicator lists in GUI code; a React front end (a second
+language and toolchain for one person); a browser test in the suite
+(Chromium and Playwright on the owner's machine for a half of the chart
+that is a hundred lines; checked by hand with a screenshot instead, and
+the Python half is exercised through NiceGUI's simulated browser).

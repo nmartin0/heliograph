@@ -242,6 +242,11 @@ All notable changes to Heliograph are recorded here. The format follows
   span, readable while the backtest runs; a running backtest's progress.
   Journal reads select types and spans in SQL, so the report no longer
   decodes every trade.
+- The window (D39): `heliograph gui` serves a NiceGUI page, a client of the
+  engine's API only. Its Workspace screen draws a run's candles, volume,
+  signals and fills, graph nodes (on the price or in panes of their own) and
+  equity with TradingView's Lightweight Charts, offering what the run holds.
+  Bars now say when they end (`end_t`).
 
 ### Fixed
 

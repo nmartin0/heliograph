@@ -197,8 +197,10 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
 - Decide how the screens could appear inside Elysium (D20), once Elysium's
   module bundles (its step 1.2) exist.
 
-- NiceGUI window; Lightweight Charts element (candles, lines, markers, panes,
-  steps); series labelled by stream.
+- [x] The window (D39): `heliograph gui`, NiceGUI, a client of the API only;
+      the Workspace screen with a Lightweight Charts element (candles, volume,
+      lines, markers, panes, steps), a run's streams, strategies and graph
+      nodes offered from what it holds, nodes on the price or in a pane.
 - Indicator catalogue with settings panels generated from parameter schemas.
 - Single-run Strategy Tester with report and equity view.
 - Wizard first cut on Vue Flow.

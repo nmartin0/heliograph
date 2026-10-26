@@ -7,6 +7,7 @@
     heliograph report runs/trend-20261023T101500Z.sqlite
     heliograph replay runs/trend-20261023T101500Z.sqlite
     heliograph serve --data ~/heliograph-data --configs examples
+    heliograph gui --engine http://127.0.0.1:8765
 
 A backtest's journal goes to ``runs/<config name>-<UTC time>.sqlite`` in the
 current folder (``-2``, ``-3``... added if that is taken) unless
@@ -96,6 +97,18 @@ def _parser() -> argparse.ArgumentParser:
         "--port", type=int, help=f"the port (default {DEFAULT_PORT}; 0: any free port)"
     )
     serve.set_defaults(command=_serve)
+
+    window = commands.add_parser(
+        "gui", help="serve the window: a web page that speaks to a running engine"
+    )
+    window.add_argument(
+        "--engine",
+        default=None,
+        help="the engine's address (or HELIOGRAPH_ENGINE; default http://127.0.0.1:8765)",
+    )
+    window.add_argument("--host", help="the address to listen on (default 127.0.0.1)")
+    window.add_argument("--port", type=int, help="the port (default 8766)")
+    window.set_defaults(command=_gui)
     return parser
 
 
@@ -153,6 +166,15 @@ def _serve(args: argparse.Namespace) -> int:
         sys.stderr.flush()
         os._exit(status)
     return status
+
+
+def _gui(args: argparse.Namespace) -> int:
+    from heliograph.gui.app import serve as serve_window  # NiceGUI loads only when asked for
+    from heliograph.gui.client import DEFAULT_ENGINE
+
+    engine = args.engine or os.environ.get("HELIOGRAPH_ENGINE") or DEFAULT_ENGINE
+    serve_window(engine, args.host or "127.0.0.1", args.port or 8766)
+    return 0
 
 
 def _free(path: Path) -> Path:

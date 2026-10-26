@@ -54,6 +54,7 @@ Three corollaries:
 | Conformance | `tests/conformance` | every registered plug-in of a kind meets the kind's contract | every check |
 | Scenarios | `tests/scenarios` | a whole backtest still gives its recorded counts, statistics and signals | every check |
 | Outside-in | `tests/process` | the engine process, started with the `heliograph` command, serves what it should through its API and stops on a signal; imports nothing from `heliograph` (a suite rule), and is measured for coverage in its own process | every check |
+| Window | `tests/gui` | the window's client, series and Workspace screen against the engine's real API app (in this process, over ASGI) on a real run, through NiceGUI's simulated browser; no JavaScript runs there, so the chart's browser half is checked by hand with a real browser and a screenshot | every check |
 | Live | `tests/live`, marker `live` | an adapter still matches the real service (CCXT exchanges) | on request and on a schedule |
 | Suite rules | `tests/meta` | the suite and the check scripts themselves follow the rules on this page | every check |
 

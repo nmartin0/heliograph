@@ -259,6 +259,24 @@ within each section.
   workspace (an environment variable there, not the project); filter it when
   scanning output.
 
+## The window
+
+- **NiceGUI's simulated browser removes modules from `sys.modules` on exit**:
+  the module of every page function it served, and its parents (so
+  `heliograph` itself), unless the function's module starts with `tests.`.
+  A test that registers a page with `create()` must clear
+  `Client.page_routes` before the simulation ends, or every later test
+  meets a second copy of Heliograph and its classes. Tests that pass a
+  `root` function to the simulation register no page and are safe.
+- **A handler NiceGUI calls with an argument but written without one fails
+  quietly** (the error goes to the app's exception handler, not to the
+  test). A change of signature needs a test that reaches the handler.
+- **A second library's `mjs` may import a third.** Lightweight Charts'
+  `production.mjs` imports `fancy-canvas` by name; the `standalone` build
+  bundles it, and is the one that loads in a NiceGUI ESM folder.
+- **Headless Chromium here reports `Invalid language tag: en-US@posix`**
+  (the workspace's locale) unless the page is opened with `locale="en-US"`.
+
 ## Trading platforms
 
 - MQL5's signal average counts silent modules, so adding a filter quietly
