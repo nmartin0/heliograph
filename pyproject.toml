@@ -197,6 +197,25 @@ type = "forbidden"
 source_modules = ["heliograph.core", "heliograph.plugins", "heliograph.app", "heliograph.testkit"]
 forbidden_modules = ["heliograph.sdk"]
 
+[[tool.importlinter.contracts]]
+name = "The window is a client of the API: it imports nothing else of Heliograph"
+type = "forbidden"
+source_modules = ["heliograph.gui"]
+forbidden_modules = [
+    "heliograph.app",
+    "heliograph.core",
+    "heliograph.plugins",
+    "heliograph.sdk",
+    "heliograph.testkit",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the command starts the window"
+type = "forbidden"
+source_modules = ["heliograph.core", "heliograph.plugins", "heliograph.sdk", "heliograph.testkit"]
+forbidden_modules = ["heliograph.gui"]
+allow_indirect_imports = true  # the testkit reaches the command through the app
+
 [tool.heliograph.licences]
 # Read by scripts/licence_report.py; the policy is docs/licensing.md.
 

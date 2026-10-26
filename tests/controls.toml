@@ -3274,3 +3274,52 @@ path = "src/heliograph/app/charts.py"
 old = "                \"end_t\": _t(bar.end),\n"
 new = "                \"end_t\": _t(bar.start),\n"
 tests = ["tests/app/test_charts.py::test_bars_are_the_journals_bars_of_the_stream_in_order"]
+
+[[control]]
+describes = "a chart gets one point a second, the last of them"
+path = "src/heliograph/gui/series.py"
+old = "        latest[point[\"time\"]] = point\n"
+new = "        latest.setdefault(point[\"time\"], point)\n"
+tests = ["tests/gui/test_series.py::test_a_chart_gets_one_point_a_second_the_last_of_them"]
+
+[[control]]
+describes = "an unknown value leaves a gap in a line, not a zero"
+path = "src/heliograph/gui/series.py"
+old = "        if row[\"value\"] is None\n"
+new = "        if False\n"
+tests = ["tests/gui/test_series.py::test_a_line_leaves_a_gap_for_an_unknown_value"]
+
+[[control]]
+describes = "a signal sits on the bar whose close it was made on"
+path = "src/heliograph/gui/series.py"
+old = "        time = _seconds(signal[\"t\"] if start is None else start)\n"
+new = "        time = _seconds(signal[\"t\"])\n"
+tests = ["tests/gui/test_series.py::test_a_signal_sits_on_the_bar_whose_close_it_was_made_on"]
+
+[[control]]
+describes = "volume is coloured by whether the bar closed up"
+path = "src/heliograph/gui/series.py"
+old = "            \"role\": \"up\" if bar[\"close\"] >= bar[\"open\"] else \"down\",\n"
+new = "            \"role\": \"up\",\n"
+tests = ["tests/gui/test_series.py::test_volume_is_coloured_by_whether_the_bar_closed_up"]
+
+[[control]]
+describes = "a fill is marked as a buy or a sell by its quantity's sign"
+path = "src/heliograph/gui/series.py"
+old = "        role = \"up\" if fill[\"quantity\"] > 0 else \"down\"\n"
+new = "        role = \"up\"\n"
+tests = ["tests/gui/test_series.py::test_a_fill_is_a_circle_that_says_buy_or_sell"]
+
+[[control]]
+describes = "the window says what the engine said, not a bare status"
+path = "src/heliograph/gui/client.py"
+old = "            said = body.get(\"error\") if isinstance(body, dict) else None\n"
+new = "            said = None\n"
+tests = ["tests/gui/test_client.py::test_what_the_engine_refuses_is_said_in_its_words"]
+
+[[control]]
+describes = "an engine that cannot be reached is an EngineError, not a crash"
+path = "src/heliograph/gui/client.py"
+old = "        except httpx.HTTPError as exc:\n"
+new = "        except ZeroDivisionError as exc:\n"
+tests = ["tests/gui/test_client.py::test_an_engine_that_cannot_be_reached_is_said_to_be_so"]
