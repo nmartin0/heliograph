@@ -207,6 +207,16 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       asked for) and the configuration table that sets it up, ready to copy.
 - Single-run Strategy Tester with report and equity view.
 - Wizard first cut on Vue Flow.
+- Open, from the review of the window: it has no sign-in and NiceGUI's socket
+  checks no Origin, so a hostile web page could read it by DNS rebinding (the
+  engine's port is the same); keep both on `127.0.0.1` until a sign-in
+  exists (`--host` beyond it prints a warning). The chart draws a run's
+  whole series and fits it to the view at every redraw, so zoom is lost on a
+  toggle and a year of minute bars is slow: spans (the API takes them) and
+  paging, and keeping the visible range. A node's line ends one bar after
+  the last candle (a value sits at its bar's end, D38). The attribution
+  text on the page is the library's licence header; compare it with the
+  NOTICE file of Lightweight Charts, which could not be fetched here.
 
 **Gate:** a new indicator plug-in appears in the GUI, configurable, with no GUI
 code written for it. (Met by the Plug-ins screen, D40: a test gives the window

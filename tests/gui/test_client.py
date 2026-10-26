@@ -122,3 +122,66 @@ def test_an_answer_that_is_not_json_is_still_an_error_with_its_status() -> None:
     with pytest.raises(EngineError, match="answered 502") as caught:
         asyncio.run(ask())
     assert caught.value.status == 502
+
+
+@pytest.mark.parametrize(
+    ("call", "body"),
+    [
+        (lambda e: e.health(), "not json at all"),
+        (lambda e: e.plugins(), {"nope": []}),
+        (lambda e: e.plugins(), {"plugins": "x"}),
+        (lambda e: e.backtests(), [1, 2]),
+        (lambda e: e.contents("r"), {"items": []}),
+        (lambda e: e.bars("r", "s"), {"items": {}}),
+        (lambda e: e.config("c"), {"text": 4}),
+        (lambda e: e.configs(), {"configs": [{"nope": 1}]}),
+        (lambda e: e.configs(), {"configs": [3]}),
+        (lambda e: e.submit("c"), ["queued"]),
+    ],
+)
+def test_an_answer_in_a_shape_the_engine_never_gives_is_an_engine_error(
+    call: Callable[[Engine], Any], body: Any
+) -> None:
+    """A web server that is not the engine answering 200: the person is told, not shown
+    a traceback."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if isinstance(body, str):
+            return httpx.Response(200, text=body)
+        return httpx.Response(200, json=body)
+
+    async def ask() -> None:
+        http = httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://other")
+        await call(Engine("http://other", http))
+
+    with pytest.raises(EngineError, match=r"other"):
+        asyncio.run(ask())
+
+
+def test_a_timeout_says_what_happened_though_httpx_says_nothing_of_it() -> None:
+    def slow(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    async def ask() -> None:
+        http = httpx.AsyncClient(transport=httpx.MockTransport(slow), base_url="http://slow")
+        await Engine("http://slow", http).health()
+
+    with pytest.raises(EngineError, match="cannot be reached: ReadTimeout"):
+        asyncio.run(ask())
+
+
+def test_a_slash_in_a_name_stays_in_its_segment_of_the_path() -> None:
+    seen: list[str] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.decode())
+        return httpx.Response(200, json={"items": []})
+
+    async def ask() -> None:
+        http = httpx.AsyncClient(transport=httpx.MockTransport(record), base_url="http://e")
+        engine = Engine("http://e", http)
+        await engine.node("run", "a/b")
+        await engine.equity("run", "x/y")
+
+    asyncio.run(ask())
+    assert seen == ["/api/backtests/run/nodes/a%2Fb", "/api/backtests/run/equity/x%2Fy"]

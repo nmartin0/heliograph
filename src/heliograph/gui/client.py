@@ -35,7 +35,8 @@ class Engine:
         try:
             response = await self._http.request(method, "/api" + path, **kwargs)
         except httpx.HTTPError as exc:
-            raise EngineError(f"the engine at {self.url} cannot be reached: {exc}") from exc
+            why = str(exc) or type(exc).__name__  # a timeout says nothing of itself
+            raise EngineError(f"the engine at {self.url} cannot be reached: {why}") from exc
         try:
             body = response.json()
         except ValueError:
@@ -47,20 +48,38 @@ class Engine:
             )
         return body
 
+    async def _take[T](self, kind: type[T], path: str, key: str | None = None, **kwargs: Any) -> T:
+        """What ``GET path`` answers (under ``key``, if given), which must be a ``kind``:
+        an answer in any other shape is not the engine's, and is said so."""
+        body = await self._call("GET", path, **kwargs)
+        found = body if key is None else (body.get(key) if isinstance(body, dict) else None)
+        if not isinstance(found, kind):
+            raise EngineError(
+                f"what answers at {self.url}/api{path} is not the Heliograph engine's "
+                f"(expected {key or 'an object'} to be a {kind.__name__})"
+            )
+        return found
+
     async def health(self) -> dict[str, Any]:
-        return dict(await self._call("GET", "/health"))
+        return await self._take(dict, "/health")
 
     async def plugins(self) -> list[dict[str, Any]]:
-        return list((await self._call("GET", "/plugins"))["plugins"])
+        return await self._take(list, "/plugins", "plugins")
 
     async def plugin(self, kind: str, name: str) -> dict[str, Any]:
-        return dict(await self._call("GET", f"/plugins/{quote(kind)}/{quote(name)}"))
+        return await self._take(dict, f"/plugins/{_part(kind)}/{_part(name)}")
 
     async def configs(self) -> list[str]:
-        return [str(c["name"]) for c in (await self._call("GET", "/configs"))["configs"]]
+        found = await self._take(list, "/configs", "configs")
+        try:
+            return [str(c["name"]) for c in found]
+        except (KeyError, TypeError) as exc:
+            raise EngineError(
+                f"the engine at {self.url} lists configurations oddly: {exc!r}"
+            ) from exc
 
     async def config(self, name: str) -> str:
-        return str((await self._call("GET", f"/configs/{quote(name)}"))["text"])
+        return await self._take(str, f"/configs/{_part(name)}", "text")
 
     async def submit(
         self, config_name: str | None = None, *, text: str | None = None, name: str = "backtest"
@@ -68,34 +87,45 @@ class Engine:
         """Queue a backtest of the engine's configuration ``config_name``, or of ``text``
         (named ``name``); its ``id`` and status."""
         body = {"config_name": config_name} if text is None else {"config": text, "name": name}
-        return dict(await self._call("POST", "/backtests", json=body))
+        answer = await self._call("POST", "/backtests", json=body)
+        if not isinstance(answer, dict):
+            raise EngineError(f"the engine at {self.url} did not say what it queued")
+        return answer
 
     async def backtests(self) -> list[dict[str, Any]]:
-        return list((await self._call("GET", "/backtests"))["backtests"])
+        return await self._take(list, "/backtests", "backtests")
 
     async def backtest(self, id_: str) -> dict[str, Any]:
-        return dict(await self._call("GET", f"/backtests/{quote(id_)}"))
+        return await self._take(dict, f"/backtests/{_part(id_)}")
 
     async def report(self, id_: str) -> dict[str, Any]:
-        return dict(await self._call("GET", f"/backtests/{quote(id_)}/report"))
-
-    async def _items(self, id_: str, what: str, **params: str) -> Any:
-        return (await self._call("GET", f"/backtests/{quote(id_)}/{what}", params=params))["items"]
+        return await self._take(dict, f"/backtests/{_part(id_)}/report")
 
     async def contents(self, id_: str) -> dict[str, Any]:
-        return dict(await self._items(id_, "contents"))
+        return await self._take(dict, f"/backtests/{_part(id_)}/contents", "items")
 
     async def bars(self, id_: str, stream: str) -> list[dict[str, Any]]:
-        return list(await self._items(id_, "bars", stream=stream))
+        return await self._take(
+            list, f"/backtests/{_part(id_)}/bars", "items", params={"stream": stream}
+        )
 
     async def node(self, id_: str, name: str) -> list[dict[str, Any]]:
-        return list(await self._items(id_, f"nodes/{quote(name)}"))
+        return await self._take(list, f"/backtests/{_part(id_)}/nodes/{_part(name)}", "items")
 
     async def signals(self, id_: str, strategy: str) -> list[dict[str, Any]]:
-        return list(await self._items(id_, "signals", strategy=strategy))
+        return await self._take(
+            list, f"/backtests/{_part(id_)}/signals", "items", params={"strategy": strategy}
+        )
 
     async def fills(self, id_: str, strategy: str) -> list[dict[str, Any]]:
-        return list(await self._items(id_, "fills", strategy=strategy))
+        return await self._take(
+            list, f"/backtests/{_part(id_)}/fills", "items", params={"strategy": strategy}
+        )
 
     async def equity(self, id_: str, strategy: str) -> list[dict[str, Any]]:
-        return list(await self._items(id_, f"equity/{quote(strategy)}"))
+        return await self._take(list, f"/backtests/{_part(id_)}/equity/{_part(strategy)}", "items")
+
+
+def _part(text: str) -> str:
+    """``text`` as one segment of a path: a ``/`` in it is part of the name."""
+    return quote(text, safe="")

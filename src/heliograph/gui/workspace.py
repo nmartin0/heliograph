@@ -31,6 +31,8 @@ class Choices:
     run: str | None = None
     stream: str | None = None
     strategy: str | None = None
+    trades_on: str | None = None
+    """The stream the strategy chosen decides on: its signals and fills are drawn there."""
     nodes: dict[str, str] = field(default_factory=dict)
     """Node name -> where it is drawn: ``"price"`` over the candles, or ``"pane"``."""
     volume: bool = True
@@ -55,15 +57,16 @@ async def draw(engine: Engine, choices: Choices) -> list[series.Spec]:
     run, stream, strategy = choices.run, choices.stream, choices.strategy
     bars = await engine.bars(run, stream)
     markers: list[dict[str, Any]] = []
-    if strategy is not None and choices.signals:
-        markers += series.signal_markers(await engine.signals(run, strategy), bars)
-    if strategy is not None and choices.fills:
-        markers += series.fill_markers(await engine.fills(run, strategy))
+    if strategy is not None and choices.trades_on == stream:  # on other streams, none
+        if choices.signals:
+            markers += series.signal_markers(await engine.signals(run, strategy), bars)
+        if choices.fills:
+            markers += series.fill_markers(await engine.fills(run, strategy))
     price = series.price_pane(stream, bars, sorted(markers, key=lambda m: m["time"]))
     if not choices.volume:
         price["series"] = [s for s in price["series"] if s["type"] != "volume"]
     panes = [price]
-    for name, where in choices.nodes.items():
+    for name, where in dict(choices.nodes).items():  # a copy: a choice may change it meanwhile
         rows = await engine.node(run, name)
         if where == "price":
             series.overlay(price, name, rows)
@@ -79,7 +82,7 @@ async def draw(engine: Engine, choices: Choices) -> list[series.Spec]:
 class Workspace:
     """The screen: its controls on the left, its chart filling the rest."""
 
-    def __init__(self, engine: Engine, *, dark: bool = True) -> None:
+    def __init__(self, engine: Engine) -> None:
         self.engine = engine
         self.choices = Choices()
         self.runs: dict[str, dict[str, str]] = {}
@@ -88,10 +91,13 @@ class Workspace:
         self._working = 0
         self._idle = asyncio.Event()
         self._idle.set()
-        self.dark = dark
+        self.dark_mode: ui.dark_mode | None = None
+        self._generation = 0
+        """Counts the choices made: an answer that arrives after a later choice is dropped."""
 
-    def build(self) -> None:
-        """Lay the screen out in the page being served."""
+    def build(self, dark_mode: ui.dark_mode | None = None) -> None:
+        """Lay the screen out in the page being served. The chart follows ``dark_mode``."""
+        self.dark_mode = dark_mode
         with ui.left_drawer(fixed=True).props("width=300 bordered").classes("gap-2") as drawer:
             self.drawer = drawer
             self.run_select = ui.select(
@@ -119,12 +125,15 @@ class Workspace:
             self.nodes_box = ui.column().classes("w-full gap-0")
         with ui.column().classes("w-full h-full gap-1"):
             self.message = ui.label("").classes("text-negative")
-            self.chart = (
-                Chart(dark=self.dark).classes("w-full").style("height: calc(100vh - 150px)")
-            )
-            with ui.row().classes("text-caption"):
-                ui.label("Charts: TradingView Lightweight Charts™, © TradingView, Inc.")
-                ui.link("tradingview.com", "https://www.tradingview.com/", new_tab=True)
+            dark = True if dark_mode is None else bool(dark_mode.value)
+            self.chart = Chart(dark=dark).classes("w-full").style("height: calc(100vh - 150px)")
+            if dark_mode is not None:
+                dark_mode.on_value_change(lambda e: self.chart.set_dark(bool(e.value)))
+            with ui.row().classes("text-caption gap-1"):
+                ui.label("TradingView Lightweight Charts™ Copyright (c) 2026 TradingView, Inc.")
+                ui.link(
+                    "https://www.tradingview.com/", "https://www.tradingview.com/", new_tab=True
+                )
 
     def _start(self, work: Awaitable[None]) -> None:
         """Run what a person's choice calls for, in the background, counted as work."""
@@ -135,6 +144,9 @@ class Workspace:
     async def _count(self, work: Awaitable[None]) -> None:
         try:
             await work
+        except Exception as exc:  # a bug: say so on the screen, and let NiceGUI log it
+            self.message.text = f"something went wrong in the window: {exc!r}"
+            raise
         finally:
             self._working -= 1
             if not self._working:
@@ -158,29 +170,49 @@ class Workspace:
             await self.open_run(next(iter(self.runs), None))
 
     async def open_run(self, run: str | None) -> None:
-        """Show ``run``: what it holds is offered, its first stream and strategy are drawn."""
-        self.choices = Choices(run=run)
+        """Show ``run``: what it holds is offered, its first stream and strategy are drawn.
+        The display choices (volume, signals, fills, equity) stay as they were."""
+        self._generation += 1
+        mine = self._generation
+        was = self.choices
+        self.choices = Choices(
+            run=run, volume=was.volume, signals=was.signals, fills=was.fills, equity=was.equity
+        )
         self.message.text = ""
         self.run_select.set_value(run)  # the choice is made already: its handler sees that
         self.nodes_box.clear()
+        self._on_price = {}
+        self.stream_select.set_options([], value=None)  # nothing of the run before this one
+        self.strategy_select.set_options([], value=None)
         if run is None:
             self.chart.show([])
             return
         try:
-            self.contents = await self.engine.contents(run)
+            contents = await self.engine.contents(run)
         except EngineError as exc:
-            self.message.text = str(exc)
+            self._failed(mine, exc)
             return
-        streams = [s["stream"] for s in self.contents["streams"]]
-        strategies = [s["name"] for s in self.contents["strategies"]]
+        if mine != self._generation:
+            return  # another choice was made while the engine answered
+        self.contents = contents
+        streams = [s["stream"] for s in contents["streams"]]
+        strategies = [s["name"] for s in contents["strategies"]]
         self.choices.stream = streams[0] if streams else None
         self.choices.strategy = strategies[0] if strategies else None
+        self.choices.trades_on = self._trades_on(self.choices.strategy)
         self.stream_select.set_options(streams, value=self.choices.stream)
         self.strategy_select.set_options(strategies, value=self.choices.strategy)
         with self.nodes_box:
-            for node in self.contents["nodes"]:
+            for node in contents["nodes"]:
                 self._node_row(str(node["name"]), str(node["plugin"]))
-        await self.redraw()
+        await self._draw(mine)
+
+    def _trades_on(self, strategy: str | None) -> str | None:
+        """The stream ``strategy`` decides on (its price, without the field: ``btc@1h``)."""
+        for found in self.contents.get("strategies", ()):
+            if found["name"] == strategy:
+                return str(found["price"]).rsplit(".", 1)[0]
+        return None
 
     async def _picked_run(self) -> None:
         if self.run_select.value != self.choices.run:
@@ -196,6 +228,8 @@ class Workspace:
             ui.switch("on price", on_change=lambda e: self._start(self._node_place(name, e.value)))
 
     async def _node(self, name: str, shown: bool, on_price: bool) -> None:
+        if name not in self._on_price:
+            return  # a node of the run before this one
         if shown:
             self.choices.nodes[name] = "price" if on_price else "pane"
         else:
@@ -216,6 +250,7 @@ class Workspace:
     async def _picked_strategy(self) -> None:
         if self.strategy_select.value != self.choices.strategy:
             self.choices.strategy = self.strategy_select.value
+            self.choices.trades_on = self._trades_on(self.choices.strategy)
             await self.redraw()
 
     async def _toggled(self, key: str, value: bool) -> None:
@@ -223,10 +258,25 @@ class Workspace:
         await self.redraw()
 
     async def redraw(self) -> None:
+        """Draw the choices as they are now; a draw overtaken by a later choice is dropped."""
+        self._generation += 1
+        await self._draw(self._generation)
+
+    async def _draw(self, generation: int) -> None:
         try:
             panes = await draw(self.engine, self.choices)
         except EngineError as exc:
-            self.message.text = str(exc)
+            self._failed(generation, exc)
+            return
+        if generation != self._generation:
             return
         self.message.text = ""
         self.chart.show(panes)
+
+    def _failed(self, generation: int, exc: EngineError) -> None:
+        """Say what the engine said, and draw nothing: the chart left on show would belong
+        to choices no longer made. (An error overtaken by a later choice is not shown.)"""
+        if generation != self._generation:
+            return
+        self.message.text = str(exc)
+        self.chart.show([])

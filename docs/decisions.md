@@ -851,7 +851,14 @@ second. The chart is TradingView's Lightweight Charts 5.2.1 (Apache-2.0),
 vendored with its licence beside the element that wraps it
 (`gui/static/lightweight_charts`), showing its attribution logo and a
 credit line; its panes share a time axis and a crosshair, and zoom stays
-in the browser. Served as a web page first (`127.0.0.1`); a native
+in the browser. A choice overtaken by a later one is dropped when its
+answer arrives (a count of the choices made), an engine error clears the
+chart so none is left that belongs to other choices, and the display
+choices (volume, signals, fills, equity) stay when another run is opened;
+signals and fills are drawn on the stream their strategy decides on, not
+on others. The client takes an answer in any shape the engine never gives
+(a web server that is not the engine) as an engine error to say, not a
+traceback. Served as a web page first (`127.0.0.1`); a native
 window (pywebview, D7) is the same app in another frame, and comes when
 wanted.
 

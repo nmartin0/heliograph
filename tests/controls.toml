@@ -3334,8 +3334,8 @@ tests = ["tests/gui/test_workspace.py::test_a_node_the_run_holds_is_offered_and_
 [[control]]
 describes = "signals are drawn only while the Signals box is ticked"
 path = "src/heliograph/gui/workspace.py"
-old = "    if strategy is not None and choices.signals:\n"
-new = "    if strategy is not None:\n"
+old = "        if choices.signals:\n"
+new = "        if True:\n"
 tests = ["tests/gui/test_workspace.py::test_what_is_drawn_follows_the_checkboxes"]
 
 [[control]]
@@ -3435,3 +3435,87 @@ path = "src/heliograph/gui/catalogue.py"
 old = "    return KINDS.get(kind, kind.replace(\"_\", \" \").capitalize())\n"
 new = "    return KINDS[kind]\n"
 tests = ["tests/gui/test_catalogue.py::test_a_plugin_the_window_has_never_heard_of_appears_and_is_configurable"]
+
+[[control]]
+describes = "a run answered after a later choice is dropped"
+path = "src/heliograph/gui/workspace.py"
+old = "        if mine != self._generation:\n            return  # another choice was made while the engine answered\n"
+new = "        if False:\n            return\n"
+tests = ["tests/gui/test_workspace.py::test_the_last_run_chosen_wins_though_an_earlier_one_answers_later"]
+
+[[control]]
+describes = "a draw overtaken by a later choice is dropped"
+path = "src/heliograph/gui/workspace.py"
+old = "        if generation != self._generation:\n            return\n        self.message.text = \"\"\n"
+new = "        self.message.text = \"\"\n"
+tests = ["tests/gui/test_workspace.py::test_a_draw_overtaken_by_a_later_choice_is_dropped"]
+
+[[control]]
+describes = "the display choices stay when another run is opened"
+path = "src/heliograph/gui/workspace.py"
+old = "            run=run, volume=was.volume, signals=was.signals, fills=was.fills, equity=was.equity\n"
+new = "            run=run\n"
+tests = ["tests/gui/test_workspace.py::test_the_display_choices_stay_as_they_were_when_another_run_is_opened"]
+
+[[control]]
+describes = "markers are drawn only on the stream the strategy decides on"
+path = "src/heliograph/gui/workspace.py"
+old = "    if strategy is not None and choices.trades_on == stream:  # on other streams, none\n"
+new = "    if strategy is not None:\n"
+tests = ["tests/gui/test_workspace.py::test_signals_and_fills_are_drawn_on_the_stream_the_strategy_decides_on_only"]
+
+[[control]]
+describes = "the chart follows the dark switch"
+path = "src/heliograph/gui/workspace.py"
+old = "                dark_mode.on_value_change(lambda e: self.chart.set_dark(bool(e.value)))\n"
+new = "                pass\n"
+tests = ["tests/gui/test_workspace.py::test_the_chart_follows_the_dark_switch"]
+
+[[control]]
+describes = "an engine error clears the chart"
+path = "src/heliograph/gui/workspace.py"
+old = "        self.message.text = str(exc)\n        self.chart.show([])\n"
+new = "        self.message.text = str(exc)\n"
+tests = ["tests/gui/test_workspace.py::test_an_error_from_the_engine_leaves_no_chart_that_belongs_to_other_choices"]
+
+[[control]]
+describes = "a node of the run before is not added to this one"
+path = "src/heliograph/gui/workspace.py"
+old = "        if name not in self._on_price:\n            return  # a node of the run before this one\n"
+new = "        if False:\n            return\n"
+tests = ["tests/gui/test_workspace.py::test_a_node_of_the_run_before_is_not_added_to_this_one"]
+
+[[control]]
+describes = "a bug in the window is said on the screen"
+path = "src/heliograph/gui/workspace.py"
+old = "            self.message.text = f\"something went wrong in the window: {exc!r}\"\n"
+new = "            pass\n"
+tests = ["tests/gui/test_workspace.py::test_a_bug_in_the_window_is_said_on_the_screen"]
+
+[[control]]
+describes = "an answer in a shape the engine never gives is an engine error"
+path = "src/heliograph/gui/client.py"
+old = "        if not isinstance(found, kind):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_client.py::test_an_answer_in_a_shape_the_engine_never_gives_is_an_engine_error"]
+
+[[control]]
+describes = "a slash in a name stays in its segment of the path"
+path = "src/heliograph/gui/client.py"
+old = "    return quote(text, safe=\"\")\n"
+new = "    return quote(text)\n"
+tests = ["tests/gui/test_client.py::test_a_slash_in_a_name_stays_in_its_segment_of_the_path"]
+
+[[control]]
+describes = "the chart's two halves name the library alike"
+path = "src/heliograph/gui/chart.js"
+old = "} from \"heliograph-lightweight-charts\";\n"
+new = "} from \"lightweight-charts\";\n"
+tests = ["tests/gui/test_app.py::test_the_chart_element_imports_the_library_under_the_name_its_python_half_maps"]
+
+[[control]]
+describes = "a window opened beyond this computer says it has no sign-in"
+path = "src/heliograph/app/cli.py"
+old = "    if host not in (\"127.0.0.1\", \"::1\", \"localhost\"):\n"
+new = "    if False:\n"
+tests = ["tests/gui/test_app.py::test_a_window_open_beyond_this_computer_says_it_has_no_sign_in"]

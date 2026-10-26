@@ -4,18 +4,21 @@
 """The Workspace screen, driven as a person would, in NiceGUI's simulated browser
 (no JavaScript runs there: what the chart would draw is what the page hands it)."""
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import pytest
 from nicegui.testing.user import User
 
+from heliograph.gui import series
 from heliograph.gui.app import workspace
 from heliograph.gui.chart import Chart
 from heliograph.gui.client import Engine
 from heliograph.gui.workspace import Workspace
 from tests.support import window
 from tests.support.api import RUN
-from tests.support.window import fake
+from tests.support.window import Gate, fake, run_answers
 
 
 def scenario(
@@ -175,5 +178,161 @@ def test_a_page_opened_again_offers_the_runs_again(engine_at: Callable[[], Engin
         await screen.load_runs()  # as when the person asks for the list again
         assert screen.choices.run == RUN
         assert len(drawn(screen)) == 2
+
+    scenario(engine_at, play)
+
+
+def runs_of(*ids: str) -> dict[str, Any]:
+    return {"backtests": [{"id": i, "status": "complete"} for i in ids]}
+
+
+def titles(screen: Workspace) -> list[str]:
+    return [s["title"] for p in drawn(screen) for s in p["series"]]
+
+
+def test_the_last_run_chosen_wins_though_an_earlier_one_answers_later(
+    engine_at: Callable[[], Engine],
+) -> None:
+    slow = Gate()
+    answers = {
+        "/backtests": runs_of("c-3", "a-2", "b-1"),
+        **run_answers("c-3", ("c@1h",)),
+        **run_answers("a-2", ("a@1h",), held={"contents": slow}),
+        **run_answers("b-1", ("b@1h",)),
+    }
+
+    async def play(user: User, screen: Workspace) -> None:
+        assert screen.choices.run == "c-3"
+        screen.run_select.set_value("a-2")  # the engine is slow to say what a-2 holds
+        await slow.arrived.wait()
+        screen.run_select.set_value("b-1")  # and b-1 is chosen before it does
+        await asyncio.sleep(0)
+        slow.open()
+        await screen.settled()
+        assert screen.choices.run == "b-1"
+        assert (screen.stream_select.options, screen.strategy_select.value) == (["b@1h"], "trend")
+        assert "b@1h" in titles(screen)
+        assert not any("a@1h" in t for t in titles(screen))
+        assert list(screen._on_price) == ["fast"]  # the nodes are b-1's, once
+
+    scenario(fake(answers), play)
+
+
+def test_a_draw_overtaken_by_a_later_choice_is_dropped(engine_at: Callable[[], Engine]) -> None:
+    slow = Gate()
+    answers = {
+        "/backtests": runs_of("r-1"),
+        **run_answers("r-1", ("x@1h", "y@1h"), held={"bars:y@1h": slow}),
+    }
+
+    async def play(user: User, screen: Workspace) -> None:
+        assert "x@1h" in titles(screen)
+        screen.stream_select.set_value("y@1h")  # its bars are slow
+        await slow.arrived.wait()
+        screen.stream_select.set_value("x@1h")  # the first stream again, at once
+        await asyncio.sleep(0)
+        slow.open()
+        await screen.settled()
+        assert screen.choices.stream == "x@1h"
+        assert "x@1h" in titles(screen)
+        assert "y@1h" not in titles(screen)
+
+    scenario(fake(answers), play)
+
+
+def test_the_display_choices_stay_as_they_were_when_another_run_is_opened(
+    engine_at: Callable[[], Engine],
+) -> None:
+    answers = {
+        "/backtests": runs_of("b-2", "a-1"),
+        **run_answers("b-2", ("b@1h",)),
+        **run_answers("a-1", ("a@1h",)),
+    }
+
+    async def play(user: User, screen: Workspace) -> None:
+        await screen._toggled("volume", False)
+        await screen._toggled("equity", False)
+        screen.run_select.set_value("a-1")
+        await screen.settled()
+        assert (screen.choices.volume, screen.choices.equity) == (False, False)
+        assert titles(screen) == ["a@1h"]  # no volume, no equity
+
+    scenario(fake(answers), play)
+
+
+def test_signals_and_fills_are_drawn_on_the_stream_the_strategy_decides_on_only(
+    engine_at: Callable[[], Engine],
+) -> None:
+    answers = {
+        "/backtests": runs_of("r-1"),
+        **run_answers("r-1", ("btc@1h", "btc@4h"), price="btc@1h.close"),
+    }
+
+    async def play(user: User, screen: Workspace) -> None:
+        def markers() -> list[Any]:
+            return list(drawn(screen)[0]["series"][0]["markers"])
+
+        assert len(markers()) == 2  # a signal and a fill, on btc@1h
+        screen.stream_select.set_value("btc@4h")
+        await screen.settled()
+        assert markers() == []
+        screen.stream_select.set_value("btc@1h")
+        await screen.settled()
+        assert len(markers()) == 2
+
+    scenario(fake(answers), play)
+
+
+def test_the_chart_follows_the_dark_switch(engine_at: Callable[[], Engine]) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        def dark() -> bool:
+            return bool(screen.chart._props["dark"])
+
+        assert screen.dark_mode is not None
+        assert dark() is True
+        screen.dark_mode.set_value(False)
+        assert dark() is False
+        screen.dark_mode.set_value(True)
+        assert dark() is True
+
+    scenario(engine_at, play)
+
+
+def test_an_error_from_the_engine_leaves_no_chart_that_belongs_to_other_choices(
+    engine_at: Callable[[], Engine],
+) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        assert drawn(screen)
+        screen.strategy_select.set_options(["trend", "ghost"])
+        screen.strategy_select.set_value("ghost")
+        await screen.settled()
+        assert "no strategy 'ghost'" in screen.message.text
+        assert drawn(screen) == []
+
+    scenario(engine_at, play)
+
+
+def test_a_node_of_the_run_before_is_not_added_to_this_one(
+    engine_at: Callable[[], Engine],
+) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        await screen._node("gone", True, False)  # a click on a row of another run, answered late
+        assert screen.choices.nodes == {}
+
+    scenario(engine_at, play)
+
+
+def test_a_bug_in_the_window_is_said_on_the_screen(
+    engine_at: Callable[[], Engine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        def broken(rows: Any) -> Any:
+            raise RuntimeError("a bug")
+
+        monkeypatch.setattr(series, "candles", broken)
+        screen.strategy_select.set_options(["trend", "x"])
+        screen.strategy_select.set_value("x")
+        await screen.settled()
+        assert "something went wrong in the window: RuntimeError('a bug')" in screen.message.text
 
     scenario(engine_at, play)

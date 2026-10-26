@@ -96,3 +96,24 @@ def test_the_gui_command_serves_the_window(
         monkeypatch.setenv("HELIOGRAPH_ENGINE", environment)
     assert cli.main(["gui", *arguments]) == 0
     assert seen == [expected]
+
+
+def test_the_chart_element_imports_the_library_under_the_name_its_python_half_maps() -> None:
+    """The browser half and the Python half name the library in two files, by hand."""
+    python = (Path(window.__file__).parent / "chart.py").read_text()
+    script = (Path(window.__file__).parent / "chart.js").read_text()
+    mapped = re.search(r'esm=\{"([^"]+)":', python)
+    imported = re.search(r'from "([^"]+)";', script)
+    assert mapped
+    assert imported
+    assert mapped.group(1) == imported.group(1)
+
+
+def test_a_window_open_beyond_this_computer_says_it_has_no_sign_in(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(window, "serve", lambda *args: None)
+    assert cli.main(["gui", "--host", "0.0.0.0"]) == 0
+    assert "no sign-in" in capsys.readouterr().err
+    assert cli.main(["gui", "--host", "::1"]) == 0
+    assert capsys.readouterr().err == ""

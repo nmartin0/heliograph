@@ -173,7 +173,14 @@ def _gui(args: argparse.Namespace) -> int:
     from heliograph.gui.client import DEFAULT_ENGINE
 
     engine = args.engine or os.environ.get("HELIOGRAPH_ENGINE") or DEFAULT_ENGINE
-    serve_window(engine, args.host or "127.0.0.1", args.port or 8766)
+    host = args.host or "127.0.0.1"
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        print(
+            f"heliograph: the window has no sign-in; anyone who can reach {host} can read "
+            "every run the engine holds",
+            file=sys.stderr,
+        )
+    serve_window(engine, host, args.port or 8766)
     return 0
 
 

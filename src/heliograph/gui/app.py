@@ -19,8 +19,9 @@ SCREENS = (("Workspace", "/"), ("Plug-ins", "/plugins"))
 """The screens, in the order the header offers them."""
 
 
-def frame(current: str) -> None:
-    """The header every screen has: the name, and a link to each screen."""
+def frame(current: str) -> ui.dark_mode:
+    """The header every screen has: the name, a link to each screen and the dark switch,
+    whose mode is returned."""
     ui.page_title(TITLE)
     ui.colors(primary="#34506b")
     dark = ui.dark_mode(True)
@@ -32,13 +33,14 @@ def frame(current: str) -> None:
                 link.classes("text-bold underline")
         ui.space()
         ui.switch("dark", value=True).bind_value_to(dark)
+    return dark
 
 
 async def workspace(engine: Engine) -> Workspace:
     """The Workspace page, built for the person who opened it, and filled from ``engine``."""
-    frame("/")
+    dark = frame("/")
     screen = Workspace(engine)
-    screen.build()
+    screen.build(dark)
     await screen.load_runs()
     return screen
 

@@ -31,3 +31,8 @@ class Chart(
         """Draw ``panes`` in place of what was drawn."""
         self._props["spec"] = {"panes": list(panes)}
         self.update()
+
+    def set_dark(self, dark: bool) -> None:
+        """Draw in the dark theme, or the light one."""
+        self._props["dark"] = dark
+        self.update()

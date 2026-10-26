@@ -268,6 +268,14 @@ within each section.
   `Client.page_routes` before the simulation ends, or every later test
   meets a second copy of Heliograph and its classes. Tests that pass a
   `root` function to the simulation register no page and are safe.
+- **NiceGUI answers a page as soon as the browser has connected**, while a
+  page function that asks the engine is still being built (and gives up on
+  one that takes 3 s: pages here allow 30). A test that opens a page must wait
+  for the builder, not for time, or it plays on a half-built screen.
+- **Two `set_value` calls in a row fire both handlers before either runs**, so
+  a handler that reads the widget's value sees only the last: to test a choice
+  overtaken by another, let the first reach the engine (a gate the fake engine
+  holds, `tests/support/window.py`), then make the second.
 - **A handler NiceGUI calls with an argument but written without one fails
   quietly** (the error goes to the app's exception handler, not to the
   test). A change of signature needs a test that reaches the handler.
