@@ -9,6 +9,8 @@ from typing import Any
 from urllib.parse import unquote
 
 import httpx
+from nicegui import background_tasks, ui
+from nicegui.client import Client
 from nicegui.testing.user import User
 from nicegui.testing.user_simulation import user_simulation
 
@@ -28,14 +30,19 @@ def scenario[Screen](
         shown: list[Screen] = []
         built = asyncio.Event()
 
-        async def root() -> None:
-            shown.append(await page(engine))
+        async def build(client: Client) -> None:
+            with client:
+                shown.append(await page(engine))
             built.set()
+
+        def root() -> None:
+            # A page's builder has a time limit (3 s unless the page sets one), and a slow
+            # machine or a loaded engine may need longer: return at once, build in a task.
+            background_tasks.create(build(ui.context.client))
 
         async with user_simulation(root) as user:
             await user.open("/")
-            # NiceGUI answers as soon as the browser has connected, while a page that
-            # asks the engine is still being built: wait for the builder, not for time.
+            # The screen is built after the page is answered: wait for it, not for time.
             await built.wait()
             await play(user, shown[0])
         await engine.close()
