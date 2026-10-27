@@ -253,6 +253,11 @@ All notable changes to Heliograph are recorded here. The format follows
 - The Strategy Tester (D41): a saved or typed configuration is submitted, its
   run followed to its end, and its report shown, with a link to chart it in
   the Workspace (`/?run=<id>`).
+- The Wizard (D42): a saved configuration drawn as a node graph (Vue Flow,
+  vendored with its licences), edited by dragging links, adding and removing
+  components and strategies, and each plug-in's settings form, then run as a
+  backtest. `GET /api/pipeline` says what a strategy takes, so the window
+  hard-codes no kind. Written TOML uses tomli-w.
 
 ### Fixed
 

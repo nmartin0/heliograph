@@ -4,7 +4,7 @@
 """A settings form drawn from a plug-in's parameter schema (D40)."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from nicegui import ui
@@ -32,9 +32,15 @@ class SettingsForm:
     worth sending (forms.changed). ``on_change`` is called after every change.
     """
 
-    def __init__(self, schema: Schema, on_change: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        schema: Schema,
+        on_change: Callable[[], None] | None = None,
+        initial: Mapping[str, Any] | None = None,
+    ) -> None:
         self.fields = forms.fields(schema)
-        self.values: dict[str, Any] = {f.name: f.default for f in self.fields}
+        given = initial or {}
+        self.values: dict[str, Any] = {f.name: given.get(f.name, f.default) for f in self.fields}
         self.errors: dict[str, str] = {}
         self.inputs: dict[str, ui.element] = {}
         self._messages: dict[str, ui.label] = {}
@@ -70,11 +76,12 @@ class SettingsForm:
     def _input(self, one: Field) -> ui.element:
         label = one.title + (" *" if one.required else "")
         hint = _default_hint(one)
+        start = self.values[one.name]
         match one.kind:
             case forms.INTEGER | forms.NUMBER:
                 widget: Any = ui.number(
                     label,
-                    value=one.default,
+                    value=start,
                     min=one.minimum,
                     max=one.maximum,
                     step=one.step or (1 if one.kind == forms.INTEGER else None),
@@ -85,34 +92,34 @@ class SettingsForm:
             case forms.BOOLEAN:
                 widget = ui.switch(
                     label,
-                    value=bool(one.default),
+                    value=bool(start),
                     on_change=lambda e, f=one: self._set(f, e.value),
                 )
             case forms.CHOICE:
                 widget = ui.select(
                     list(one.choices),
                     label=label,
-                    value=one.default,
+                    value=start,
                     on_change=lambda e, f=one: self._set(f, e.value),
                 )
             case forms.LIST:
                 widget = ui.input(
                     label + " (separated by commas)",
-                    value=", ".join(one.default or []),
+                    value=", ".join(start or []),
                     placeholder=hint,
                     on_change=lambda e, f=one: self._set(f, forms.read_list(e.value or "")),
                 )
             case forms.JSON:
                 widget = ui.textarea(
                     label + " (JSON)",
-                    value="" if one.default is None else json.dumps(one.default),
+                    value="" if start is None else json.dumps(start),
                     placeholder=hint,
                     on_change=lambda e, f=one: self._set_json(f, e.value or ""),
                 )
             case _:
                 widget = ui.input(
                     label,
-                    value="" if one.default is None else str(one.default),
+                    value="" if start is None else str(start),
                     placeholder=hint,
                     on_change=lambda e, f=one: self._set(f, e.value),
                 )

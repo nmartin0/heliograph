@@ -8,6 +8,7 @@ from nicegui import app, ui
 from heliograph.gui.catalogue import Catalogue
 from heliograph.gui.client import DEFAULT_ENGINE, Engine
 from heliograph.gui.tester import StrategyTester
+from heliograph.gui.wizard import WizardScreen
 from heliograph.gui.workspace import Workspace
 
 TITLE = "Heliograph"
@@ -16,7 +17,12 @@ PAGE_TIMEOUT = 30.0
 """Seconds a page may take to be built: it asks the engine, whose first answer about
 plug-ins imports every one of them (NiceGUI's own limit is 3)."""
 
-SCREENS = (("Workspace", "/"), ("Tester", "/tester"), ("Plug-ins", "/plugins"))
+SCREENS = (
+    ("Workspace", "/"),
+    ("Tester", "/tester"),
+    ("Wizard", "/wizard"),
+    ("Plug-ins", "/plugins"),
+)
 """The screens, in the order the header offers them."""
 
 
@@ -59,6 +65,15 @@ async def strategy_tester(engine: Engine, run: str | None = None) -> StrategyTes
     return screen
 
 
+async def wizard(engine: Engine) -> WizardScreen:
+    """The Wizard page, offering the engine's configurations to assemble from."""
+    dark = frame("/wizard")
+    screen = WizardScreen(engine)
+    screen.build(dark)
+    await screen.load()
+    return screen
+
+
 async def plugins(engine: Engine) -> Catalogue:
     """The Plug-ins page, filled from ``engine``."""
     frame("/plugins")
@@ -78,6 +93,10 @@ def create(engine: Engine) -> None:
     @ui.page("/tester", response_timeout=PAGE_TIMEOUT)
     async def tester_page(run: str | None = None) -> None:
         await strategy_tester(engine, run)
+
+    @ui.page("/wizard", response_timeout=PAGE_TIMEOUT)
+    async def wizard_page() -> None:
+        await wizard(engine)
 
     @ui.page("/plugins", response_timeout=PAGE_TIMEOUT)
     async def catalogue() -> None:

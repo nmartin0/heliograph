@@ -59,6 +59,7 @@ def test_an_edge_to_a_stream_is_labelled_with_the_bar_field_it_reads() -> None:
     labels = {e.id: e.label for e in wizard().edges()}
     assert labels["input:component:atr24:btc@1h.high"] == "high"
     assert labels["price:strategy:trend"] == "close"
+    assert labels["forecasters:strategy:trend:ewmac16"] == ""  # a stage's kind is on its node
 
 
 def test_the_layout_puts_readers_after_what_they_read() -> None:

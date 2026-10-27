@@ -155,7 +155,7 @@ class Wizard:
                 for name in names:
                     if name in shown:
                         source = component_id(name)
-                        edges.append(Edge(f"{role}:{target}:{name}", source, target, role, role))
+                        edges.append(Edge(f"{role}:{target}:{name}", source, target, role))
         return edges
 
     @staticmethod

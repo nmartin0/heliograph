@@ -3925,3 +3925,66 @@ path = "src/heliograph/gui/wizard_model.py"
 old = "            strategy[field] = name\n"
 new = "            strategy[field] = [name]\n"
 tests = ["tests/gui/test_wizard_model.py::test_a_list_stage_is_appended_and_a_single_stage_is_replaced"]
+
+[[control]]
+describes = "a link from a stream reads the bar field chosen"
+path = "src/heliograph/gui/wizard.py"
+old = "self.field.value or DEFAULT_FIELD"
+new = "DEFAULT_FIELD"
+tests = ["tests/gui/test_wizard.py::test_a_link_drawn_in_the_browser_changes_the_model_or_says_why_not"]
+
+[[control]]
+describes = "settings the form does not know are kept when one changes"
+path = "src/heliograph/gui/wizard.py"
+old = "        kept = {k: v for k, v in model.params(name).items() if k not in shown}\n"
+new = "        kept: dict[str, Any] = {}\n"
+tests = ["tests/gui/test_wizard.py::test_a_setting_changed_is_in_the_text_and_what_the_form_does_not_know_stays"]
+
+[[control]]
+describes = "a chosen link is removed as a link, not as a node"
+path = "src/heliograph/gui/wizard.py"
+old = "        if any(e.id == self.selected for e in model.edges()):\n            model.disconnect"
+new = "        if False:\n            model.disconnect"
+tests = ["tests/gui/test_wizard.py::test_a_link_chosen_is_removed_as_a_link"]
+
+[[control]]
+describes = "a run with no name is called the default"
+path = "src/heliograph/gui/wizard.py"
+old = "name=(self.name.value or \"\").strip() or DEFAULT_NAME\n            )\n        except EngineError as exc:\n            self._say(str(exc))\n            return\n        go_to"
+new = "name=self.name.value\n            )\n        except EngineError as exc:\n            self._say(str(exc))\n            return\n        go_to"
+tests = ["tests/gui/test_wizard.py::test_running_submits_the_text_and_goes_to_the_tester"]
+
+[[control]]
+describes = "a run queued is followed in the Tester"
+path = "src/heliograph/gui/wizard.py"
+old = "        go_to(follow_link(str(queued[\"id\"])))"
+new = "        go_to(\"/tester\")"
+tests = ["tests/gui/test_wizard.py::test_running_submits_the_text_and_goes_to_the_tester"]
+
+[[control]]
+describes = "only the plug-ins of the chosen kind are offered"
+path = "src/heliograph/gui/wizard.py"
+old = "if p[\"kind\"] == self.kind.value"
+new = "if True"
+tests = ["tests/gui/test_wizard.py::test_a_component_is_added_by_kind_and_plugin_and_chosen"]
+
+[[control]]
+describes = "a component's settings start from what it has"
+path = "src/heliograph/gui/wizard.py"
+old = "schema, on_change=lambda: self._params_changed(name), initial=model.params(name)"
+new = "schema, on_change=lambda: self._params_changed(name)"
+tests = ["tests/gui/test_wizard.py::test_a_component_chosen_shows_its_settings_as_they_are"]
+
+[[control]]
+describes = "a form starts from the values it is given"
+path = "src/heliograph/gui/form.py"
+old = "given.get(f.name, f.default)"
+new = "f.default"
+tests = ["tests/gui/test_wizard.py::test_a_component_chosen_shows_its_settings_as_they_are"]
+
+[[control]]
+describes = "a form box shows the value it is given"
+path = "src/heliograph/gui/form.py"
+old = "                    value=start,\n                    min=one.minimum,"
+new = "                    value=one.default,\n                    min=one.minimum,"
+tests = ["tests/gui/test_wizard.py::test_a_component_chosen_shows_its_settings_as_they_are"]

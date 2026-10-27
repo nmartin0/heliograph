@@ -209,7 +209,12 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       its run followed, its report shown, a link to chart it in the
       Workspace (which opens on `?run=`). Building a configuration from
       catalogue picks waits for the Wizard.
-- Wizard first cut on Vue Flow.
+- [x] The Wizard first cut (D42): a saved configuration drawn as a graph on Vue
+      Flow, edited by dragging links and by each plug-in's settings form, run
+      as a backtest. Still to do: saving the result to the engine (and so a
+      way to name and keep it), starting from nothing (a data-source form for
+      mounts and streams), renaming a component (a combiner's weights name
+      its forecasters), and an undo.
 - Open, from the review of the window: it has no sign-in and NiceGUI's socket
   checks no Origin, so a hostile web page could read it by DNS rebinding (the
   engine's port is the same); keep both on `127.0.0.1` until a sign-in

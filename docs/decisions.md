@@ -937,3 +937,49 @@ the Workspace's, not a second set.
 (the Plug-ins screen already shows each plug-in's table, ready to paste;
 assembling a whole configuration is the Wizard's work); streaming progress
 to the page (the engine has none until live sessions, Phase 4).
+
+## D42 · The Wizard assembles a configuration as a graph (2026-10-27)
+
+The Wizard (`gui/wizard.py`) starts from one of the engine's saved
+configurations and shows it as a node graph (Vue Flow 1.48.2, MIT, vendored
+unmodified in `gui/static/vue_flow` with every bundled package's licence and a
+reproducible build, `scripts/vendor/vue_flow/build.sh`). Streams, components and
+strategies are nodes; an input a component reads, a stage a strategy uses and the
+price a strategy decides at are edges. Dragging from one node's handle to another
+reads an input or makes a stage; clicking a node shows its settings, a form drawn
+from the plug-in's own schema (D40); the configuration's text follows every change;
+"Run as a backtest" submits it and goes to the Tester (D41) to follow the run.
+
+The configuration dictionary stays the truth (`gui/wizard_model.py`). The picture is
+derived from it and an edit changes it, so everything the picture does not show
+(mode, mounts, streams, a component's other keys, an input that names nothing) is
+carried through untouched. Connecting refuses what cannot be wired and says why: a
+bar field a bar does not have, an input read twice, a node that would read itself
+through others, a stage already in another strategy, an input to a component that
+reads none. Positions are laid out in layers (streams, then each node one layer
+past what it reads, then the stages, then the strategies) and are not saved; a node
+the person drags stays where it was put while the page is open. Components are
+written in an order in which each is read after what it reads.
+
+The window knows no kind of plug-in. What a strategy takes (its fields that name
+components, the kind each must be, one or many), which kinds are nodes others can
+read, and which read inputs come from `GET /api/pipeline`, said once in
+`STRATEGY_ROLES` and `GRAPH_KINDS` in `app/config.py` and kept equal to
+`StrategyConfig` by a test. The engine's own validation has the last word: the
+Wizard may assemble something that does not run, and the engine says what is wrong
+when it is run.
+
+TOML is written with tomli-w (MIT), so comments in the saved file are lost
+in the Wizard's text, which is a new text and not an edit of the saved one, and
+date-times are written with a space (valid TOML). Nothing is saved to the engine yet.
+
+**Why:** a whole configuration is hard to write by hand; the graph is what the
+configuration is, so it is the clearest way to build one, and the plug-in forms
+(D40) already ask for each part's settings.
+
+**Rejected:** a layout the person arranges and the Wizard saves (the
+configuration has nowhere to keep positions, and keeping them elsewhere is a second
+copy of a fact); starting from nothing (mounts and streams need a data-source
+form first); hard-coding the strategy's roles in the window (a second list to keep in
+step with the engine); Vue Flow's built-in delete key (a person selecting text in a
+form would remove a node).

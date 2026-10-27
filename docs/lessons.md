@@ -310,6 +310,14 @@ within each section.
   Walk each screen in a browser (`tests/` cannot see layout), with an empty
   engine, a failed run, a long form, a narrow window, the engine stopped.
   Put a message beside the control that caused it.
+- **A form below a picture hides the picture.** The Wizard's first layout put a
+  plug-in's settings under the graph; choosing a node scrolled the page to the
+  form and the graph, the thing being edited, went out of sight. Put what
+  follows a choice beside what was chosen. A view that fits its nodes once
+  also loses the new one: fit again when the count changes, not on every
+  change, which would undo the person's own zoom.
+- **Run `licence_report.py` with `uv run`.** With the system Python it finds
+  no package metadata and writes "UNKNOWN" over the whole table.
 - **Try a heuristic on the real data in the browser, not only on the test's.**
   "Share the price's scale if the line is within a quarter of the candles'
   range of them" passed its tests (range 4) and let an ATR of 174 through in
