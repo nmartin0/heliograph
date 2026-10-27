@@ -3813,3 +3813,17 @@ path = "src/heliograph/gui/series.py"
 old = "    margin = max(abs(low), abs(high)) * SHARED_MARGIN\n"
 new = "    margin = (high - low) * SHARED_MARGIN\n"
 tests = ["tests/gui/test_series.py::test_a_wide_price_range_does_not_let_a_line_of_another_size_share_its_scale"]
+
+[[control]]
+describes = "the pipeline route serves the roles the strategy declares"
+path = "src/heliograph/app/server.py"
+old = "        roles = [{\"role\": r, \"kind\": k, \"many\": many} for r, k, many in STRATEGY_ROLES]\n"
+new = "        roles = [{\"role\": r, \"kind\": k, \"many\": many} for r, k, many in STRATEGY_ROLES[:-1]]\n"
+tests = ["tests/process/test_engine_process.py::test_the_engine_says_what_a_strategy_takes"]
+
+[[control]]
+describes = "a role that takes a list is said to take many"
+path = "src/heliograph/app/config.py"
+old = "    (\"gates\", \"gates\", True),\n"
+new = "    (\"gates\", \"gates\", False),\n"
+tests = ["tests/app/test_strategy_roles.py::test_a_role_takes_many_exactly_when_its_field_is_a_tuple"]

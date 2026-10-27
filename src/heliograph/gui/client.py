@@ -69,6 +69,11 @@ class Engine:
     async def plugin(self, kind: str, name: str) -> dict[str, Any]:
         return await self._take(dict, f"/plugins/{_part(kind)}/{_part(name)}")
 
+    async def pipeline(self) -> list[dict[str, Any]]:
+        """What a strategy takes: its fields that name components (``role``), the plug-in
+        ``kind`` each must be, and whether it takes ``many``."""
+        return await self._take(list, "/pipeline", "roles")
+
     async def configs(self) -> list[str]:
         found = await self._take(list, "/configs", "configs")
         try:

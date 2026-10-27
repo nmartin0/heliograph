@@ -32,6 +32,7 @@ def test_it_reads_what_the_engine_offers(engine_at: Callable[[], Engine]) -> Non
             "health": await engine.health(),
             "plugins": await engine.plugins(),
             "ewmac": await engine.plugin("forecasters", "ewmac"),
+            "pipeline": await engine.pipeline(),
             "configs": await engine.configs(),
             "text": await engine.config("trend"),
             "runs": await engine.backtests(),
@@ -44,6 +45,9 @@ def test_it_reads_what_the_engine_offers(engine_at: Callable[[], Engine]) -> Non
     ewmac = next(p for p in got["plugins"] if (p["kind"], p["name"]) == ("forecasters", "ewmac"))
     assert ewmac["summary"]
     assert got["ewmac"]["params"]["properties"]["fast"]
+    assert ("sizer", "sizers", False) in [
+        (r["role"], r["kind"], r["many"]) for r in got["pipeline"]
+    ]
     assert "trend" in got["configs"]
     assert 'mode = "backtest"' in got["text"]
     assert [r["id"] for r in got["runs"]] == [RUN]

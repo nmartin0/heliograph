@@ -124,6 +124,19 @@ def test_a_plugin_says_whether_a_configuration_gives_it_inputs(engine: Engine) -
     }
 
 
+def test_the_engine_says_what_a_strategy_takes(engine: Engine) -> None:
+    roles = engine.get("/api/pipeline")["roles"]
+    assert [(r["role"], r["kind"], r["many"]) for r in roles] == [
+        ("forecasters", "forecasters", True),
+        ("gates", "gates", True),
+        ("combiner", "combiners", False),
+        ("sizer", "sizers", False),
+        ("exits", "exits", True),
+        ("risk_gates", "risk_gates", True),
+        ("fills", "fills", False),
+    ]
+
+
 def test_a_plugins_parameters_come_as_a_json_schema(engine: Engine) -> None:
     ewmac = engine.get("/api/plugins/forecasters/ewmac")
     assert ewmac["name"] == "ewmac"

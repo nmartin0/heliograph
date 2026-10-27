@@ -389,6 +389,19 @@ class StreamConfig(BaseModel):
         )
 
 
+STRATEGY_ROLES: tuple[tuple[str, str, bool], ...] = (
+    ("forecasters", "forecasters", True),
+    ("gates", "gates", True),
+    ("combiner", "combiners", False),
+    ("sizer", "sizers", False),
+    ("exits", "exits", True),
+    ("risk_gates", "risk_gates", True),
+    ("fills", "fills", False),
+)
+"""What a strategy takes, in the order a pipeline reads: for each field of ``StrategyConfig``
+that names components, the kind of plug-in it must be, and whether it takes a list of them."""
+
+
 class StrategyConfig(BaseModel):
     """One strategy: the stream whose closes it decides at, and its stages by name."""
 

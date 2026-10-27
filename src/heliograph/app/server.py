@@ -34,6 +34,8 @@ The API, every body JSON, every time an ISO 8601 UTC string (D19):
     GET  /api/health                          status, version, what is running
     GET  /api/plugins                         installed plug-ins, by kind and name
     GET  /api/plugins/{kind}/{name}           one plug-in, with its parameters' JSON Schema
+    GET  /api/pipeline                        what a strategy takes: its fields that name
+                                              components, the kind each must be, one or many
     GET  /api/configs                         the run configurations offered
     GET  /api/configs/{name}                  one, with its text
     POST /api/backtests                       {"config": TOML text} or {"config_name": name}
@@ -87,7 +89,13 @@ from starlette.routing import Route
 from heliograph import __version__
 from heliograph.app import charts
 from heliograph.app.charts import NotInRunError
-from heliograph.app.config import ConfigError, LoadedConfig, inputs_rule, parse_config
+from heliograph.app.config import (
+    STRATEGY_ROLES,
+    ConfigError,
+    LoadedConfig,
+    inputs_rule,
+    parse_config,
+)
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import figures, report
 from heliograph.app.run import StopFlag, run_backtest
@@ -548,6 +556,10 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
             {"id": id_, "status": status, "strategies": strategies, "text": report(journal)}
         )
 
+    async def pipeline(request: Request) -> Response:
+        roles = [{"role": r, "kind": k, "many": many} for r, k, many in STRATEGY_ROLES]
+        return JSONResponse({"roles": roles})
+
     async def plugins(request: Request) -> Response:
         return await run_in_threadpool(plugins_)
 
@@ -637,6 +649,7 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
 
     routes = [
         Route("/api/health", health),
+        Route("/api/pipeline", pipeline),
         Route("/api/plugins", plugins),
         Route("/api/plugins/{kind}/{name}", plugin),
         Route("/api/configs", configs),
