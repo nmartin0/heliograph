@@ -1,0 +1,9 @@
+{
+  "name": "heliograph-vue-flow-bundle",
+  "private": true,
+  "description": "Builds the Vue Flow bundle vendored in src/heliograph/gui/static/vue_flow. Run build.sh.",
+  "dependencies": {
+    "@vue-flow/core": "1.48.2",
+    "esbuild": "0.25.12"
+  }
+}

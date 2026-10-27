@@ -56,6 +56,16 @@ def test_the_vendored_library_keeps_its_licence_and_notice() -> None:
     assert "Licensed under Apache License 2.0" in (STATIC / "index.js").read_text()[:400]
 
 
+def test_the_vue_flow_bundle_keeps_the_licence_of_every_package_in_it() -> None:
+    folder = STATIC.parent / "vue_flow"
+    text = (folder / "LICENSE").read_text()
+    for package in ("@vue-flow/core", "@vueuse/core", "@vueuse/shared", "d3-zoom", "d3-ease"):
+        assert f"==== {package} " in text
+    assert "Permission is hereby granted" in text
+    assert (folder / "style.css").is_file()
+    assert (folder / "theme-default.css").is_file()
+
+
 def test_serve_runs_the_window_for_the_engine_it_is_told_of(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

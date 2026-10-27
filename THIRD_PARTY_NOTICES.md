@@ -89,3 +89,12 @@ licence (Apache License 2.0).
 
 Each chart shows the library's attribution logo, and the Workspace screen
 credits it with a link to https://www.tradingview.com/.
+
+The Wizard draws its graph with Vue Flow 1.48.2 (MIT, webkid GmbH and Burak
+Cakmakoglu), bundled with the packages it needs (`@vueuse/core` and
+`@vueuse/shared`, MIT; `d3-color`, `d3-dispatch`, `d3-drag`, `d3-interpolate`,
+`d3-selection`, `d3-timer`, `d3-transition` and `d3-zoom`, ISC; `d3-ease`,
+BSD-3-Clause) into `src/heliograph/gui/static/vue_flow`. Vue is not bundled;
+the window's own copy provides it. The bundle is built, unmodified, from the
+locked packages by `scripts/vendor/vue_flow/build.sh`, and every licence
+text is kept in `static/vue_flow/LICENSE`.
