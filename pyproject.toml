@@ -25,6 +25,7 @@ dependencies = [
     "starlette>=1.7,<2",
     "ta-lib>=0.8.2,<0.9",
     "talipp>=2.7,<3",
+    "tomli-w>=1.2.0",
     "uvicorn>=0.54,<1",
 ]
 

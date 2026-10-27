@@ -46,8 +46,9 @@ def test_it_reads_what_the_engine_offers(engine_at: Callable[[], Engine]) -> Non
     assert ewmac["summary"]
     assert got["ewmac"]["params"]["properties"]["fast"]
     assert ("sizer", "sizers", False) in [
-        (r["role"], r["kind"], r["many"]) for r in got["pipeline"]
+        (r["role"], r["kind"], r["many"]) for r in got["pipeline"]["roles"]
     ]
+    assert got["pipeline"]["graph"] == ["forecasters", "gates", "indicators"]
     assert "trend" in got["configs"]
     assert 'mode = "backtest"' in got["text"]
     assert [r["id"] for r in got["runs"]] == [RUN]

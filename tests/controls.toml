@@ -3817,8 +3817,8 @@ tests = ["tests/gui/test_series.py::test_a_wide_price_range_does_not_let_a_line_
 [[control]]
 describes = "the pipeline route serves the roles the strategy declares"
 path = "src/heliograph/app/server.py"
-old = "        roles = [{\"role\": r, \"kind\": k, \"many\": many} for r, k, many in STRATEGY_ROLES]\n"
-new = "        roles = [{\"role\": r, \"kind\": k, \"many\": many} for r, k, many in STRATEGY_ROLES[:-1]]\n"
+old = "            for r, k, many in STRATEGY_ROLES\n"
+new = "            for r, k, many in STRATEGY_ROLES[:-1]\n"
 tests = ["tests/process/test_engine_process.py::test_the_engine_says_what_a_strategy_takes"]
 
 [[control]]
@@ -3827,3 +3827,101 @@ path = "src/heliograph/app/config.py"
 old = "    (\"gates\", \"gates\", True),\n"
 new = "    (\"gates\", \"gates\", False),\n"
 tests = ["tests/app/test_strategy_roles.py::test_a_role_takes_many_exactly_when_its_field_is_a_tuple"]
+
+[[control]]
+describes = "the graph kinds are read as required inputs"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            | dict.fromkeys(pipeline[\"graph\"], \"required\"),\n"
+new = "            | {},\n"
+tests = ["tests/gui/test_wizard_model.py::test_the_rules_come_from_what_the_engine_says"]
+
+[[control]]
+describes = "a wizard works on its own copy of the configuration"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        self.config: dict[str, Any] = copy.deepcopy(dict(config))\n"
+new = "        self.config: dict[str, Any] = dict(config)\n"
+tests = ["tests/gui/test_wizard_model.py::test_what_the_picture_does_not_show_is_carried_through"]
+
+[[control]]
+describes = "an input that names no stream is not drawn"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            return found if found in streams else None\n"
+new = "            return found\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_reference_to_nothing_is_kept_though_not_drawn"]
+
+[[control]]
+describes = "a stage sits in the column after the graph"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            column = depth[component[\"name\"]] if component[\"kind\"] in self.rules.graph else stage\n"
+new = "            column = depth[component[\"name\"]] if component[\"kind\"] in self.rules.graph else 1\n"
+tests = ["tests/gui/test_wizard_model.py::test_the_layout_puts_readers_after_what_they_read"]
+
+[[control]]
+describes = "components are written in the order they are read"
+path = "src/heliograph/gui/wizard_model.py"
+old = "                waits = [r for r in component.get(\"inputs\", ()) if r in names and r not in done]\n"
+new = "                waits = []\n"
+tests = ["tests/gui/test_wizard_model.py::test_components_are_written_so_that_what_is_read_comes_first"]
+
+[[control]]
+describes = "a new component's name is not taken by a strategy"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        taken |= {s[\"name\"] for s in self.config[\"strategies\"]}\n"
+new = "        taken |= set()\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_name_is_not_taken_by_a_strategy_either"]
+
+[[control]]
+describes = "a new component's name is never taken twice"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        while name in taken:\n"
+new = "        while False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_new_component_is_named_after_its_plugin_and_never_twice"]
+
+[[control]]
+describes = "parameters are read back as a copy"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        return copy.deepcopy(dict(component.get(\"params\", {}))) if component else {}\n"
+new = "        return component.get(\"params\", {}) if component else {}\n"
+tests = ["tests/gui/test_wizard_model.py::test_parameters_are_set_and_read_back_as_copies"]
+
+[[control]]
+describes = "removing a component removes it from what reads it"
+path = "src/heliograph/gui/wizard_model.py"
+old = "                other[\"inputs\"] = [r for r in other[\"inputs\"] if r != name]\n"
+new = "                other[\"inputs\"] = other[\"inputs\"]\n"
+tests = ["tests/gui/test_wizard_model.py::test_removing_a_component_removes_every_edge_to_or_from_it"]
+
+[[control]]
+describes = "a bar field must be one a bar has"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            if field not in BAR_FIELDS:\n"
+new = "            if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_bar_field_must_be_one_a_bar_has"]
+
+[[control]]
+describes = "the same input is not read twice"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if ref in component.get(\"inputs\", ()):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_the_same_thing_is_not_read_twice"]
+
+[[control]]
+describes = "a node cannot read what reads it"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if s_type == COMPONENT and self._depends(s_name, target):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_node_cannot_read_what_reads_it_or_itself", "tests/gui/test_wizard_model.py::test_a_chain_that_loops_back_is_a_cycle_too"]
+
+[[control]]
+describes = "a stage serves one strategy"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            if other is not strategy and name in _names(other.get(field)):\n"
+new = "            if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_stage_serves_one_strategy"]
+
+[[control]]
+describes = "a single stage replaces the one before it"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            strategy[field] = name\n"
+new = "            strategy[field] = [name]\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_list_stage_is_appended_and_a_single_stage_is_replaced"]

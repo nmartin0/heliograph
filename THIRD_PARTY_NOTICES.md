@@ -60,6 +60,7 @@ test runner) are not distributed and are not listed here.
 | ta-lib | 0.8.2 | BSD-2-Clause AND BSD-3-Clause | permissive | https://github.com/TA-Lib/ta-lib-python |
 | talipp | 2.7.0 | MIT | permissive | https://github.com/nardew/talipp |
 | tinycss2 | 1.5.1 | BSD-3-Clause | permissive | https://www.courtbouillon.org/tinycss2 |
+| tomli-w | 1.2.0 | MIT | permissive | https://github.com/hukkin/tomli-w |
 | typing-extensions | 4.16.0 | PSF-2.0 | permissive | https://github.com/python/typing_extensions |
 | typing-inspection | 0.4.4 | MIT | permissive | https://github.com/pydantic/typing-inspection |
 | urllib3 | 2.8.0 | MIT | permissive |  |

@@ -125,7 +125,18 @@ def test_a_plugin_says_whether_a_configuration_gives_it_inputs(engine: Engine) -
 
 
 def test_the_engine_says_what_a_strategy_takes(engine: Engine) -> None:
-    roles = engine.get("/api/pipeline")["roles"]
+    pipeline = engine.get("/api/pipeline")
+    roles = pipeline["roles"]
+    assert pipeline["graph"] == ["forecasters", "gates", "indicators"]
+    assert {r["role"]: r["inputs"] for r in roles} == {
+        "forecasters": "required",
+        "gates": "required",
+        "combiner": "none",
+        "sizer": "none",
+        "exits": "optional",
+        "risk_gates": "none",
+        "fills": "none",
+    }
     assert [(r["role"], r["kind"], r["many"]) for r in roles] == [
         ("forecasters", "forecasters", True),
         ("gates", "gates", True),

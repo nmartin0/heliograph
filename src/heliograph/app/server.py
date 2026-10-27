@@ -35,7 +35,8 @@ The API, every body JSON, every time an ISO 8601 UTC string (D19):
     GET  /api/plugins                         installed plug-ins, by kind and name
     GET  /api/plugins/{kind}/{name}           one plug-in, with its parameters' JSON Schema
     GET  /api/pipeline                        what a strategy takes: its fields that name
-                                              components, the kind each must be, one or many
+                                              components, the kind each must be, one or many;
+                                              and the kinds that are nodes others read
     GET  /api/configs                         the run configurations offered
     GET  /api/configs/{name}                  one, with its text
     POST /api/backtests                       {"config": TOML text} or {"config_name": name}
@@ -90,6 +91,7 @@ from heliograph import __version__
 from heliograph.app import charts
 from heliograph.app.charts import NotInRunError
 from heliograph.app.config import (
+    GRAPH_KINDS,
     STRATEGY_ROLES,
     ConfigError,
     LoadedConfig,
@@ -557,8 +559,11 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
         )
 
     async def pipeline(request: Request) -> Response:
-        roles = [{"role": r, "kind": k, "many": many} for r, k, many in STRATEGY_ROLES]
-        return JSONResponse({"roles": roles})
+        roles = [
+            {"role": r, "kind": k, "many": many, "inputs": inputs_rule(k)}
+            for r, k, many in STRATEGY_ROLES
+        ]
+        return JSONResponse({"roles": roles, "graph": sorted(GRAPH_KINDS)})
 
     async def plugins(request: Request) -> Response:
         return await run_in_threadpool(plugins_)
