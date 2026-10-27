@@ -211,8 +211,8 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       catalogue picks waits for the Wizard.
 - [x] The Wizard first cut (D42): a saved configuration drawn as a graph on Vue
       Flow, edited by dragging links and by each plug-in's settings form, run
-      as a backtest. Still to do: saving the result to the engine (and so a
-      way to name and keep it), starting from nothing (a data-source form for
+      as a backtest, or kept among the engine's configurations (`PUT
+      /api/configs/{name}`). Still to do: starting from nothing (a data-source form for
       mounts and streams), renaming a component (a combiner's weights name
       its forecasters), and an undo.
 - Open, from the review of the window: it has no sign-in and NiceGUI's socket

@@ -39,6 +39,9 @@ The API, every body JSON, every time an ISO 8601 UTC string (D19):
                                               and the kinds that are nodes others read
     GET  /api/configs                         the run configurations offered
     GET  /api/configs/{name}                  one, with its text
+    PUT  /api/configs/{name}                  {"config": TOML text, "replace": false}: keep a
+                                              configuration (checked first) in --configs;
+                                              201 new, 200 replaced, 409 if it exists
     POST /api/backtests                       {"config": TOML text} or {"config_name": name}
     GET  /api/backtests                       every backtest, the latest submitted first
     GET  /api/backtests/{id}                  one backtest's status and span; while it runs,
@@ -484,6 +487,41 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
             return text
         return JSONResponse({"name": name, "text": text})
 
+    def save_(name: str, body: object) -> Response:
+        """Keep a configuration's text in the configurations folder, once it has passed the
+        checks a run would make; never half written, never over another unless told."""
+        if settings.configs is None:
+            return _error(409, "the engine was started without --configs, so it keeps none")
+        if not _ID.match(name):
+            return _error(400, '"name" must be up to 128 letters, digits, ".", "_" or "-"')
+        text = body.get("config") if isinstance(body, dict) else None
+        replace = body.get("replace", False) if isinstance(body, dict) else None
+        if not isinstance(text, str) or not isinstance(replace, bool):
+            return _error(400, 'give "config" (a configuration\'s text) and, if wanted, "replace"')
+        try:
+            parse_config(text)
+        except ConfigError as exc:
+            return _error(400, str(exc))
+        path = settings.configs / f"{name}.toml"
+        part = settings.configs / f".{name}.toml.part"  # not *.toml, so never offered
+        existed = path.exists()
+        try:
+            part.write_text(text, encoding="utf-8")
+            if replace:
+                os.replace(part, path)
+            else:
+                os.link(part, path)  # fails if another has appeared since
+                part.unlink()
+        except FileExistsError:
+            part.unlink(missing_ok=True)
+            return _error(409, f"a configuration named {name!r} exists; say replace to replace it")
+        except OSError as exc:
+            part.unlink(missing_ok=True)
+            return _error(500, f"cannot keep configuration {name!r}: {exc.strerror or exc}")
+        return JSONResponse(
+            {"name": name, "created": not existed}, status_code=200 if existed else 201
+        )
+
     def submit_(body: object) -> Response:
         if not isinstance(body, dict) or len({"config", "config_name"} & set(body)) != 1:
             return _error(400, 'give either "config" (a configuration\'s text) or "config_name"')
@@ -636,6 +674,13 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
     async def config(request: Request) -> Response:
         return await run_in_threadpool(config_, request.path_params["name"])
 
+    async def save(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except ValueError:
+            return _error(400, "the body is not JSON")
+        return await run_in_threadpool(save_, request.path_params["name"], body)
+
     async def submit(request: Request) -> Response:
         try:
             body = await request.json()
@@ -659,6 +704,7 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
         Route("/api/plugins/{kind}/{name}", plugin),
         Route("/api/configs", configs),
         Route("/api/configs/{name}", config),
+        Route("/api/configs/{name}", save, methods=["PUT"]),
         Route("/api/backtests", submit, methods=["POST"]),
         Route("/api/backtests", listed),
         Route("/api/backtests/{id}", one),

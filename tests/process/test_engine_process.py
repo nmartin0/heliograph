@@ -189,6 +189,88 @@ def test_the_configurations_folder_is_offered_by_name_with_its_text(engine: Engi
     assert trend["text"] == (ROOT / "examples" / "trend.toml").read_text()
 
 
+@pytest.fixture
+def keeping(tmp_path: Path) -> Iterator[tuple[Engine, Path]]:
+    """An engine whose configurations folder is its own, empty, so it can be written to."""
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    started = Engine(
+        "--data", str(tmp_path / "data"), "--configs", str(configs), "--port", "0", cwd=ROOT
+    ).started()  # fmt: skip
+    yield started, configs
+    started.close()
+
+
+GOOD = (ROOT / "examples" / "trend.toml").read_text()
+
+
+def test_a_configuration_is_kept_checked_and_then_offered(keeping: tuple[Engine, Path]) -> None:
+    engine, configs = keeping
+    status, body = engine.request("PUT", "/api/configs/mine", {"config": GOOD})
+    assert (status, body) == (201, {"name": "mine", "created": True})
+    assert (configs / "mine.toml").read_text() == GOOD
+    assert engine.get("/api/configs") == {"configs": [{"name": "mine"}]}
+    assert engine.get("/api/configs/mine")["text"] == GOOD
+    assert [p.name for p in configs.iterdir()] == ["mine.toml"]  # nothing half written is left
+
+
+def test_a_configuration_kept_is_not_replaced_unless_told(keeping: tuple[Engine, Path]) -> None:
+    engine, configs = keeping
+    engine.request("PUT", "/api/configs/mine", {"config": GOOD})
+    other = GOOD + "\n# changed\n"
+    status, body = engine.request("PUT", "/api/configs/mine", {"config": other})
+    assert status == 409
+    assert "exists; say replace" in body["error"]
+    assert (configs / "mine.toml").read_text() == GOOD
+    assert [p.name for p in configs.iterdir()] == ["mine.toml"]  # the refused text is not left
+    status, body = engine.request("PUT", "/api/configs/mine", {"config": other, "replace": True})
+    assert (status, body) == (200, {"name": "mine", "created": False})
+    assert (configs / "mine.toml").read_text() == other
+    assert [p.name for p in configs.iterdir()] == ["mine.toml"]
+
+
+def test_a_configuration_that_would_not_run_is_not_kept(keeping: tuple[Engine, Path]) -> None:
+    engine, configs = keeping
+    status, body = engine.request("PUT", "/api/configs/mine", {"config": 'mode = "nonsense"\n'})
+    assert status == 400
+    assert "mode" in body["error"]
+    status, body = engine.request("PUT", "/api/configs/mine", {"config": "= ="})
+    assert status == 400
+    assert "not valid TOML" in body["error"]
+    assert list(configs.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/configs/-bad", {"config": GOOD}),
+        ("/api/configs/mine", {"config": 1}),
+        ("/api/configs/mine", {"config": GOOD, "replace": "yes"}),
+        ("/api/configs/mine", {"text": GOOD}),
+        ("/api/configs/mine", [GOOD]),
+        ("/api/configs/mine", b"not json"),
+    ],
+)
+def test_a_configuration_asked_to_be_kept_wrongly_is_refused(
+    keeping: tuple[Engine, Path], path: str, body: Any
+) -> None:
+    engine, configs = keeping
+    status, refused = engine.request("PUT", path, body)
+    assert status == 400
+    assert refused["error"]
+    assert list(configs.iterdir()) == []
+
+
+def test_an_engine_with_no_configurations_folder_keeps_none(tmp_path: Path) -> None:
+    engine = Engine("--data", str(tmp_path / "data"), "--port", "0", cwd=ROOT).started()
+    try:
+        status, body = engine.request("PUT", "/api/configs/mine", {"config": GOOD})
+        assert status == 409
+        assert "--configs" in body["error"]
+    finally:
+        engine.close()
+
+
 # -- backtests ---------------------------------------------------------------------
 
 

@@ -116,6 +116,29 @@ def test_an_engine_that_cannot_be_reached_is_said_to_be_so() -> None:
     assert caught.value.status == 0
 
 
+def test_it_keeps_a_configuration_and_says_whether_it_is_new() -> None:
+    sent: list[tuple[str, str, bytes]] = []
+
+    def keep(request: httpx.Request) -> httpx.Response:
+        sent.append((request.method, request.url.path, request.content))
+        new = request.url.path.endswith("/fresh")
+        return httpx.Response(201 if new else 200, json={"name": "n", "created": new})
+
+    async def ask() -> list[bool]:
+        http = httpx.AsyncClient(transport=httpx.MockTransport(keep), base_url="http://e")
+        engine = Engine("http://e", http)
+        return [
+            await engine.save_config("fresh", "mode = 1"),
+            await engine.save_config("old", "mode = 2", replace=True),
+        ]
+
+    assert asyncio.run(ask()) == [True, False]
+    assert [(m, p, json.loads(b)) for m, p, b in sent] == [
+        ("PUT", "/api/configs/fresh", {"config": "mode = 1", "replace": False}),
+        ("PUT", "/api/configs/old", {"config": "mode = 2", "replace": True}),
+    ]
+
+
 def test_an_answer_that_is_not_json_is_still_an_error_with_its_status() -> None:
     def broken(request: httpx.Request) -> httpx.Response:
         return httpx.Response(502, text="bad gateway")
@@ -142,6 +165,8 @@ def test_an_answer_that_is_not_json_is_still_an_error_with_its_status() -> None:
         (lambda e: e.configs(), {"configs": [{"nope": 1}]}),
         (lambda e: e.configs(), {"configs": [3]}),
         (lambda e: e.submit("c"), ["queued"]),
+        (lambda e: e.save_config("c", "t"), {"name": "c"}),
+        (lambda e: e.save_config("c", "t"), ["kept"]),
     ],
 )
 def test_an_answer_in_a_shape_the_engine_never_gives_is_an_engine_error(

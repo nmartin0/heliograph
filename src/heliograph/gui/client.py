@@ -87,6 +87,16 @@ class Engine:
     async def config(self, name: str) -> str:
         return await self._take(str, f"/configs/{_part(name)}", "text")
 
+    async def save_config(self, name: str, text: str, *, replace: bool = False) -> bool:
+        """Keep ``text`` as the engine's configuration ``name`` (refused if it is not a good
+        configuration, or if ``name`` exists and ``replace`` is not given); whether it is new."""
+        body = {"config": text, "replace": replace}
+        answer = await self._call("PUT", f"/configs/{_part(name)}", json=body)
+        created = answer.get("created") if isinstance(answer, dict) else None
+        if not isinstance(created, bool):
+            raise EngineError(f"the engine at {self.url} did not say whether it kept {name!r}")
+        return created
+
     async def submit(
         self, config_name: str | None = None, *, text: str | None = None, name: str = "backtest"
     ) -> dict[str, Any]:

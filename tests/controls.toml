@@ -3988,3 +3988,73 @@ path = "src/heliograph/gui/form.py"
 old = "                    value=start,\n                    min=one.minimum,"
 new = "                    value=one.default,\n                    min=one.minimum,"
 tests = ["tests/gui/test_wizard.py::test_a_component_chosen_shows_its_settings_as_they_are"]
+
+[[control]]
+describes = "a configuration is kept only if it would run"
+path = "src/heliograph/app/server.py"
+old = "        try:\n            parse_config(text)\n        except ConfigError as exc:\n            return _error(400, str(exc))\n        path = settings.configs"
+new = "        path = settings.configs"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_that_would_not_run_is_not_kept"]
+
+[[control]]
+describes = "a configuration is not replaced unless told"
+path = "src/heliograph/app/server.py"
+old = "                os.link(part, path)  # fails if another has appeared since\n                part.unlink()\n"
+new = "                os.replace(part, path)\n"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_kept_is_not_replaced_unless_told"]
+
+[[control]]
+describes = "a refused text is not left behind"
+path = "src/heliograph/app/server.py"
+old = "        except FileExistsError:\n            part.unlink(missing_ok=True)\n"
+new = "        except FileExistsError:\n"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_kept_is_not_replaced_unless_told"]
+
+[[control]]
+describes = "a new configuration is said to be created"
+path = "src/heliograph/app/server.py"
+old = "\"created\": not existed}"
+new = "\"created\": True}"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_kept_is_not_replaced_unless_told"]
+
+[[control]]
+describes = "a configuration kept is 201 when new and 200 when replaced"
+path = "src/heliograph/app/server.py"
+old = "status_code=200 if existed else 201"
+new = "status_code=201"
+tests = ["tests/process/test_engine_process.py::test_a_configuration_kept_is_not_replaced_unless_told"]
+
+[[control]]
+describes = "an engine with no folder keeps none"
+path = "src/heliograph/app/server.py"
+old = "        if settings.configs is None:\n            return _error(409, \"the engine was started without --configs"
+new = "        if settings.configs is not None:\n            return _error(409, \"the engine was started without --configs"
+tests = ["tests/process/test_engine_process.py::test_an_engine_with_no_configurations_folder_keeps_none"]
+
+[[control]]
+describes = "the replace switch is sent to the engine"
+path = "src/heliograph/gui/wizard.py"
+old = "replace=bool(self.replace.value)"
+new = "replace=False"
+tests = ["tests/gui/test_wizard.py::test_a_configuration_is_kept_among_the_engines_and_then_offered"]
+
+[[control]]
+describes = "the name to keep as is trimmed"
+path = "src/heliograph/gui/wizard.py"
+old = "name = (self.keep_as.value or \"\").strip()"
+new = "name = self.keep_as.value or \"\""
+tests = ["tests/gui/test_wizard.py::test_a_configuration_is_kept_among_the_engines_and_then_offered"]
+
+[[control]]
+describes = "the configurations offered follow a keep"
+path = "src/heliograph/gui/wizard.py"
+old = "        self.saved.set_options(names)\n        self.kept.text"
+new = "        self.kept.text"
+tests = ["tests/gui/test_wizard.py::test_a_configuration_is_kept_among_the_engines_and_then_offered"]
+
+[[control]]
+describes = "a configuration replaced is said to be replaced"
+path = "src/heliograph/gui/wizard.py"
+old = "f\"Kept as {name}\" if created else f\"Replaced {name}\""
+new = "f\"Kept as {name}\""
+tests = ["tests/gui/test_wizard.py::test_a_configuration_replaced_is_said_to_be"]

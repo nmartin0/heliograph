@@ -143,6 +143,7 @@ def test_nothing_can_be_done_before_a_configuration_is_chosen() -> None:
             screen._add,
             screen._add_strategy,
             screen.run,
+            screen.keep,
             screen._remove,
             lambda: screen._link(event(screen, source="a", target="b")),
         ):
@@ -346,6 +347,56 @@ def test_a_configuration_the_engine_refuses_is_said_and_the_screen_stays(
         assert went == []
 
     scenario(engine_saying(overrides={"/backtests": 400}), play)
+
+
+def test_a_configuration_is_kept_among_the_engines_and_then_offered() -> None:
+    seen: list[tuple[str, str, Any]] = []
+    both = {"configs": [{"name": "trend"}, {"name": "mine"}]}
+
+    async def play(user: User, screen: WizardScreen) -> None:
+        await started(screen)
+        await screen.keep()
+        assert screen.message.text == "name the configuration to keep it"
+        screen.saved.set_options(["trend"])
+        screen.keep_as.set_value(" mine ")
+        await screen.keep()
+        method, path, body = next(s for s in seen if s[0] == "PUT")
+        assert (method, path) == ("PUT", "/configs/mine")
+        assert body["replace"] is False
+        assert tomllib.loads(body["config"]) == tomllib.loads(TEXT)
+        assert screen.message.text == ""
+        assert screen.kept.text == "Kept as mine"
+        assert screen.saved.options == ["trend", "mine"]
+        screen.replace.set_value(True)
+        await screen.keep()
+        assert [s[2]["replace"] for s in seen if s[0] == "PUT"] == [False, True]
+
+    scenario(
+        engine_saying(seen, {"/configs": both, "/configs/mine": {"name": "mine", "created": True}}),
+        play,
+    )
+
+
+def test_a_configuration_replaced_is_said_to_be() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await started(screen)
+        screen.keep_as.set_value("mine")
+        await screen.keep()
+        assert screen.kept.text == "Replaced mine"
+
+    scenario(engine_saying(overrides={"/configs/mine": {"name": "mine", "created": False}}), play)
+
+
+def test_a_configuration_the_engine_will_not_keep_is_said_and_not_claimed_kept() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await started(screen)
+        screen.keep_as.set_value("mine")
+        screen.kept.text = "Kept as an earlier one"
+        await screen.keep()
+        assert "engine says 409" in screen.message.text
+        assert screen.kept.text == ""
+
+    scenario(engine_saying(overrides={"/configs/mine": 409}), play)
 
 
 def test_the_picture_follows_the_dark_switch() -> None:

@@ -971,7 +971,16 @@ when it is run.
 
 TOML is written with tomli-w (MIT), so comments in the saved file are lost
 in the Wizard's text, which is a new text and not an edit of the saved one, and
-date-times are written with a space (valid TOML). Nothing is saved to the engine yet.
+date-times are written with a space (valid TOML).
+
+A configuration is kept with `PUT /api/configs/{name}` (`{"config": text,
+"replace": false}`): the engine runs the checks a run would make, writes the text
+exactly as given to a part file and moves it into `--configs` (a new name is linked,
+so a name that has appeared since is not overwritten; `replace` renames over it),
+and answers 201 for a new name, 200 for a replaced one, 409 if the name exists
+without `replace` or the engine has no folder, 400 for a text that would not run.
+The folder only ever holds whole files. The Wizard's "Keep as" box uses it and then
+offers the new name among the saved ones.
 
 **Why:** a whole configuration is hard to write by hand; the graph is what the
 configuration is, so it is the clearest way to build one, and the plug-in forms

@@ -84,6 +84,11 @@ class WizardScreen:
             with ui.row().classes("items-center gap-4"):
                 self.name = ui.input("Name of the run", value=DEFAULT_NAME)
                 self.run_button = ui.button("Run as a backtest", on_click=self.run)
+            with ui.row().classes("items-center gap-4"):
+                self.keep_as = ui.input("Keep as")
+                self.replace = ui.switch("Replace one of that name")
+                self.keep_button = ui.button("Keep", on_click=self.keep).props("no-caps")
+                self.kept = ui.label("")
             with ui.expansion("Configuration text").classes("w-full"):
                 self.text = ui.label("").classes("w-full font-mono")
                 self.text.style("white-space: pre-wrap")
@@ -238,6 +243,29 @@ class WizardScreen:
                 f"{kind}: {name}" if kind in (COMPONENT, STRATEGY, "stream") else "Nothing chosen"
             )
         self.remove.set_enabled(bool(self.selected))
+
+    async def keep(self) -> None:
+        """Keep the configuration as it stands among the engine's own, under the name given;
+        the engine checks it first and says what is wrong if it would not run."""
+        model = self._need_model()
+        if model is None:
+            return
+        name = (self.keep_as.value or "").strip()
+        if not name:
+            self._say("name the configuration to keep it")
+            return
+        self._say("")
+        self.kept.text = ""
+        try:
+            created = await self.engine.save_config(
+                name, model.text(), replace=bool(self.replace.value)
+            )
+            names = await self.engine.configs()
+        except EngineError as exc:
+            self._say(str(exc))
+            return
+        self.saved.set_options(names)
+        self.kept.text = f"Kept as {name}" if created else f"Replaced {name}"
 
     async def run(self) -> None:
         """Submit the configuration as it stands and go to the Tester to follow the run."""
