@@ -205,7 +205,10 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       settings form generated from its parameter schema (numbers with bounds,
       choices, switches, text, lists, JSON for the rest; required values
       asked for) and the configuration table that sets it up, ready to copy.
-- Single-run Strategy Tester with report and equity view.
+- [x] The Strategy Tester (D41): a saved or typed configuration submitted,
+      its run followed, its report shown, a link to chart it in the
+      Workspace (which opens on `?run=`). Building a configuration from
+      catalogue picks waits for the Wizard.
 - Wizard first cut on Vue Flow.
 - Open, from the review of the window: it has no sign-in and NiceGUI's socket
   checks no Origin, so a hostile web page could read it by DNS rebinding (the
@@ -220,8 +223,8 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
 
 **Gate:** a new indicator plug-in appears in the GUI, configurable, with no GUI
 code written for it. (Met by the Plug-ins screen, D40: a test gives the window
-a plug-in of a kind it has never heard of. The phase goes on with the Tester
-and the Wizard.)
+a plug-in of a kind it has never heard of. The phase goes on with the
+Wizard.)
 
 ## Phase 4 · Signals and paper trading
 

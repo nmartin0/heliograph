@@ -250,6 +250,9 @@ All notable changes to Heliograph are recorded here. The format follows
 - The Plug-ins screen (D40): every installed plug-in by kind with a settings
   form generated from its parameter schema, checked as it changes, and the
   configuration table that sets it up.
+- The Strategy Tester (D41): a saved or typed configuration is submitted, its
+  run followed to its end, and its report shown, with a link to chart it in
+  the Workspace (`/?run=<id>`).
 
 ### Fixed
 

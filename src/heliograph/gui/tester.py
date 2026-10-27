@@ -1,0 +1,139 @@
+# SPDX-FileCopyrightText: 2026 Nicholas Martin
+# SPDX-License-Identifier: LicenseRef-Proprietary
+
+"""The Strategy Tester: one backtest, from a configuration to its report (D41).
+
+A configuration is picked from the engine's own, or written, and submitted; the
+engine runs it and the screen follows the run until it ends, then shows the
+engine's text report, whatever way the run ended, with a link to chart it in the
+Workspace. Nothing here knows what a configuration holds: the engine reads it and
+says what is wrong.
+"""
+
+from urllib.parse import quote
+
+from nicegui import ui
+
+from heliograph.gui.client import Engine, EngineError
+from heliograph.gui.work import Work
+
+UNFINISHED = ("queued", "running")
+"""Statuses of a run that is still to go on; any other is its end."""
+
+POLL_SECONDS = 1.0
+"""How often a run is asked after while it goes on."""
+
+
+def chart_link(run: str) -> str:
+    """Where the Workspace shows ``run``."""
+    return f"/?run={quote(run, safe='')}"
+
+
+class StrategyTester:
+    """The screen: the configuration on the left of the page's work, the run's report below."""
+
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
+        self.run_id: str | None = None
+        self.status = ""
+        self._work = Work(self._say)
+
+    def build(self) -> None:
+        with ui.left_drawer(fixed=True).props("width=300 bordered").classes("gap-2"):
+            ui.label("Saved configurations").classes("text-subtitle2")
+            self.saved = ui.select(
+                {}, label="Configuration", on_change=lambda e: self._work.start(self._chose())
+            ).classes("w-full")
+        with ui.column().classes("w-full max-w-4xl gap-2"):
+            self.message = ui.label("").classes("text-negative")
+            self.name = ui.input("Name of the run", value="backtest").classes("w-full")
+            self.text = (
+                ui.textarea("Configuration (TOML)")
+                .props("outlined autogrow input-class=font-mono")
+                .classes("w-full")
+            )
+            with ui.row().classes("items-center gap-4"):
+                self.go = ui.button("Run", on_click=self.run)
+                self.progress = ui.label("")
+                self.link = ui.link("Chart it in the Workspace", "/")
+                self.link.set_visibility(False)
+            self.report = ui.label("").classes("w-full font-mono")
+            self.report.style("white-space: pre-wrap")
+        self.timer = ui.timer(POLL_SECONDS, self.poll, active=False)
+
+    async def settled(self) -> None:
+        """Wait until nothing a choice set going is still going."""
+        await self._work.settled()
+
+    def _say(self, text: str) -> None:
+        self.message.text = text
+
+    async def load(self) -> None:
+        """Offer the configurations the engine keeps."""
+        try:
+            names = await self.engine.configs()
+        except EngineError as exc:
+            self.message.text = str(exc)
+            return
+        self.saved.set_options(names)
+
+    async def _chose(self) -> None:
+        name = self.saved.value
+        if name is None:
+            return
+        try:
+            self.text.value = await self.engine.config(name)
+        except EngineError as exc:
+            self.message.text = str(exc)
+            return
+        self.message.text = ""
+        self.name.value = name
+
+    async def run(self) -> None:
+        """Submit what the editor holds and follow the run."""
+        if not (self.text.value or "").strip():
+            self.message.text = "write or choose a configuration first"
+            return
+        self.message.text = ""
+        self.report.text = ""
+        self.link.set_visibility(False)
+        try:
+            queued = await self.engine.submit(text=self.text.value, name=self.name.value or "")
+        except EngineError as exc:
+            self.message.text = str(exc)
+            return
+        self.run_id = str(queued["id"])
+        self._shown(str(queued.get("status", "queued")))
+        self.go.disable()
+        self.timer.activate()
+
+    async def poll(self) -> None:
+        """Ask after the run; when it has ended show its report."""
+        if self.run_id is None:
+            return
+        try:
+            described = await self.engine.backtest(self.run_id)
+        except EngineError as exc:
+            self._ended()
+            self.message.text = str(exc)
+            return
+        status = str(described["status"])
+        self._shown(status)
+        if status.split(" ")[0].split(":")[0] in UNFINISHED:
+            return
+        self._ended()
+        try:
+            self.report.text = str((await self.engine.report(self.run_id))["text"])
+        except EngineError as exc:  # e.g. a run dropped at a stop has none
+            self.message.text = str(exc)
+            return
+        self.link.props(f'href="{chart_link(self.run_id)}"')
+        self.link.set_visibility(True)
+
+    def _shown(self, status: str) -> None:
+        self.status = status
+        self.progress.text = f"{self.run_id}: {status}"
+
+    def _ended(self) -> None:
+        self.timer.deactivate()
+        self.go.enable()

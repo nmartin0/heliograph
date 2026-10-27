@@ -904,3 +904,25 @@ a plug-in already says what it takes (D3, D9), bounds included.
 hundred lines of Python draw from the same schema); a form per plug-in
 (the code the gate forbids); sending every setting (a configuration that
 no longer follows a changed default).
+
+## D41 · The Strategy Tester submits a configuration and follows its run (2026-10-26)
+
+The Tester screen (`gui/tester.py`) takes a configuration from the engine's
+own (`/api/configs`) or as text typed in, submits it as a backtest, follows
+the run while it is queued or running (a timer asks every second; one run
+at a time from this screen), and when it has ended shows the engine's text
+report, whatever way it ended (a failed run's report goes as far as the run
+did), with a link that opens the run in the Workspace (`/?run=<id>`), where
+the charts are. The window does not read the configuration: the engine
+checks it and says everything that is wrong at once, and that is shown as
+it is said. Background work a choice sets going is counted in `gui/work.py`
+for both screens, so a test waits for it and not for a time.
+
+**Why:** the Tester is the shortest way from a configuration to a result,
+and it uses only what the API already offers (D18, D37); the charts are
+the Workspace's, not a second set.
+
+**Rejected:** building the configuration from catalogue picks in this step
+(the Plug-ins screen already shows each plug-in's table, ready to paste;
+assembling a whole configuration is the Wizard's work); streaming progress
+to the page (the engine has none until live sessions, Phase 4).

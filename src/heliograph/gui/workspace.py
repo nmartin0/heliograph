@@ -9,16 +9,16 @@ indicators here. The view is a function of the choices made (the run, the stream
 the strategy, the nodes shown and where): a change of choice redraws it.
 """
 
-import asyncio
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any
 
-from nicegui import background_tasks, ui
+from nicegui import ui
 
 from heliograph.gui import series
 from heliograph.gui.chart import Chart
 from heliograph.gui.client import Engine, EngineError
+from heliograph.gui.work import Work
 
 CHARTED = ("complete", "running", "interrupted", "stopped")
 """Statuses of a run whose journal can be charted (a running run's, as far as it has gone)."""
@@ -88,9 +88,7 @@ class Workspace:
         self.runs: dict[str, dict[str, str]] = {}
         self.contents: dict[str, Any] = {}
         self._on_price: dict[str, bool] = {}
-        self._working = 0
-        self._idle = asyncio.Event()
-        self._idle.set()
+        self._work = Work(self._say)
         self.dark_mode: ui.dark_mode | None = None
         self._generation = 0
         """Counts the choices made: an answer that arrives after a later choice is dropped."""
@@ -137,28 +135,18 @@ class Workspace:
 
     def _start(self, work: Awaitable[None]) -> None:
         """Run what a person's choice calls for, in the background, counted as work."""
-        self._working += 1
-        self._idle.clear()
-        background_tasks.create(self._count(work))
-
-    async def _count(self, work: Awaitable[None]) -> None:
-        try:
-            await work
-        except Exception as exc:  # a bug: say so on the screen, and let NiceGUI log it
-            self.message.text = f"something went wrong in the window: {exc!r}"
-            raise
-        finally:
-            self._working -= 1
-            if not self._working:
-                self._idle.set()
+        self._work.start(work)
 
     async def settled(self) -> None:
         """Wait until nothing a choice set going is still going."""
-        await self._idle.wait()
+        await self._work.settled()
 
-    async def load_runs(self) -> None:
+    def _say(self, text: str) -> None:
+        self.message.text = text
+
+    async def load_runs(self, prefer: str | None = None) -> None:
         """Ask the engine for its runs, newest first, and offer the ones that can be charted;
-        open the newest unless a run is open already."""
+        open ``prefer`` if it is one of them, else the newest, unless a run is open already."""
         try:
             found = await self.engine.backtests()
         except EngineError as exc:
@@ -166,7 +154,9 @@ class Workspace:
             return
         self.runs = {r["id"]: r for r in found if chartable(r)}
         self.run_select.set_options({i: f"{i} · {r['status']}" for i, r in self.runs.items()})
-        if self.choices.run not in self.runs:
+        if prefer in self.runs:
+            await self.open_run(prefer)
+        elif self.choices.run not in self.runs:
             await self.open_run(next(iter(self.runs), None))
 
     async def open_run(self, run: str | None) -> None:

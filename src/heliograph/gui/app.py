@@ -7,6 +7,7 @@ from nicegui import app, ui
 
 from heliograph.gui.catalogue import Catalogue
 from heliograph.gui.client import DEFAULT_ENGINE, Engine
+from heliograph.gui.tester import StrategyTester
 from heliograph.gui.workspace import Workspace
 
 TITLE = "Heliograph"
@@ -15,7 +16,7 @@ PAGE_TIMEOUT = 30.0
 """Seconds a page may take to be built: it asks the engine, whose first answer about
 plug-ins imports every one of them (NiceGUI's own limit is 3)."""
 
-SCREENS = (("Workspace", "/"), ("Plug-ins", "/plugins"))
+SCREENS = (("Workspace", "/"), ("Tester", "/tester"), ("Plug-ins", "/plugins"))
 """The screens, in the order the header offers them."""
 
 
@@ -36,12 +37,22 @@ def frame(current: str) -> ui.dark_mode:
     return dark
 
 
-async def workspace(engine: Engine) -> Workspace:
-    """The Workspace page, built for the person who opened it, and filled from ``engine``."""
+async def workspace(engine: Engine, run: str | None = None) -> Workspace:
+    """The Workspace page, built for the person who opened it, and filled from ``engine``;
+    it opens on ``run`` if the engine has that to chart, otherwise on the newest."""
     dark = frame("/")
     screen = Workspace(engine)
     screen.build(dark)
-    await screen.load_runs()
+    await screen.load_runs(run)
+    return screen
+
+
+async def tester(engine: Engine) -> StrategyTester:
+    """The Strategy Tester page, offering the engine's configurations."""
+    frame("/tester")
+    screen = StrategyTester(engine)
+    screen.build()
+    await screen.load()
     return screen
 
 
@@ -58,8 +69,12 @@ def create(engine: Engine) -> None:
     """Register the pages, which speak to ``engine``."""
 
     @ui.page("/", response_timeout=PAGE_TIMEOUT)
-    async def home() -> None:
-        await workspace(engine)
+    async def home(run: str | None = None) -> None:
+        await workspace(engine, run)
+
+    @ui.page("/tester", response_timeout=PAGE_TIMEOUT)
+    async def strategy_tester() -> None:
+        await tester(engine)
 
     @ui.page("/plugins", response_timeout=PAGE_TIMEOUT)
     async def catalogue() -> None:

@@ -3487,8 +3487,8 @@ tests = ["tests/gui/test_workspace.py::test_a_node_of_the_run_before_is_not_adde
 
 [[control]]
 describes = "a bug in the window is said on the screen"
-path = "src/heliograph/gui/workspace.py"
-old = "            self.message.text = f\"something went wrong in the window: {exc!r}\"\n"
+path = "src/heliograph/gui/work.py"
+old = "            self._on_bug(f\"something went wrong in the window: {exc!r}\")\n"
 new = "            pass\n"
 tests = ["tests/gui/test_workspace.py::test_a_bug_in_the_window_is_said_on_the_screen"]
 
@@ -3519,3 +3519,94 @@ path = "src/heliograph/app/cli.py"
 old = "    if host not in (\"127.0.0.1\", \"::1\", \"localhost\"):\n"
 new = "    if False:\n"
 tests = ["tests/gui/test_app.py::test_a_window_open_beyond_this_computer_says_it_has_no_sign_in"]
+
+[[control]]
+describes = "a run is followed only while it goes on"
+path = "src/heliograph/gui/tester.py"
+old = "        if status.split(\" \")[0].split(\":\")[0] in UNFINISHED:\n            return\n"
+new = "        if False:\n            return\n"
+tests = ["tests/gui/test_tester.py::test_a_run_that_goes_on_is_asked_after_again"]
+
+[[control]]
+describes = "one run is followed at a time"
+path = "src/heliograph/gui/tester.py"
+old = "        self.go.disable()\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
+
+[[control]]
+describes = "the following stops when the run has ended"
+path = "src/heliograph/gui/tester.py"
+old = "        self.timer.deactivate()\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
+
+[[control]]
+describes = "the Run button returns when the run has ended"
+path = "src/heliograph/gui/tester.py"
+old = "        self.go.enable()\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
+
+[[control]]
+describes = "nothing is submitted without a configuration"
+path = "src/heliograph/gui/tester.py"
+old = "        if not (self.text.value or \"\").strip():\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_tester.py::test_nothing_is_submitted_without_a_configuration"]
+
+[[control]]
+describes = "a new run clears the last report"
+path = "src/heliograph/gui/tester.py"
+old = "        self.report.text = \"\"\n        self.link.set_visibility(False)\n"
+new = "        self.link.set_visibility(False)\n"
+tests = ["tests/gui/test_tester.py::test_a_new_run_clears_the_last_ones_report_until_it_has_its_own"]
+
+[[control]]
+describes = "a new run hides the last chart link"
+path = "src/heliograph/gui/tester.py"
+old = "        self.link.set_visibility(False)\n        try:\n"
+new = "        try:\n"
+tests = ["tests/gui/test_tester.py::test_a_new_run_clears_the_last_ones_report_until_it_has_its_own"]
+
+[[control]]
+describes = "the chart link appears once the report is shown"
+path = "src/heliograph/gui/tester.py"
+old = "        self.link.set_visibility(True)\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
+
+[[control]]
+describes = "the chart link names the run"
+path = "src/heliograph/gui/tester.py"
+old = "        self.link.props(f'href=\"{chart_link(self.run_id)}\"')\n"
+new = "        self.link.props('href=\"/\"')\n"
+tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
+
+[[control]]
+describes = "a run's name is quoted in the link"
+path = "src/heliograph/gui/tester.py"
+old = "quote(run, safe='')"
+new = "quote(run)"
+tests = ["tests/gui/test_tester.py::test_the_link_names_a_run_so_the_workspace_can_be_told_it"]
+
+[[control]]
+describes = "the saved configurations are offered"
+path = "src/heliograph/gui/tester.py"
+old = "        self.saved.set_options(names)\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_saved_configuration_fills_the_editor"]
+
+[[control]]
+describes = "a chosen configuration names the run"
+path = "src/heliograph/gui/tester.py"
+old = "        self.name.value = name\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_saved_configuration_fills_the_editor"]
+
+[[control]]
+describes = "the Workspace opens on the run it is told"
+path = "src/heliograph/gui/workspace.py"
+old = "        if prefer in self.runs:\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_tester.py::test_the_workspace_opens_on_the_run_it_is_told_though_not_the_newest"]

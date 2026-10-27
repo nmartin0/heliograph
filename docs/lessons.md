@@ -28,6 +28,12 @@ within each section.
   his instruction wins. Commits made locally are rewritten by the apply script
   anyway.
 
+- **A test must not time what the process already promises.** The engine
+  exits 0 only if it stopped within its own deadline, so a second clock in the
+  test, started before the signal and stopped after the exit, also counted a
+  loaded machine's delays and failed at 10.2 s of 10 in a thirty-minute run.
+  Assert the exit status; give any outer bound slack.
+
 ## Python and libraries
 
 - **Python trusts a cached `.pyc` by its source's modification second and
@@ -271,7 +277,15 @@ within each section.
 - **NiceGUI answers a page as soon as the browser has connected**, while a
   page function that asks the engine is still being built (and gives up on
   one that takes 3 s: pages here allow 30). A test that opens a page must wait
-  for the builder, not for time, or it plays on a half-built screen.
+  for the builder, not for time, or it plays on a half-built screen. The
+  simulation's `root` cannot set that limit, so `window.scenario` returns from
+  the builder at once and builds the screen in a task: on a slow machine
+  (a suite of thirty minutes) a builder that asked the engine overran the 3 s
+  and six tests got a 500.
+- **pytest collects a class whose name starts with `Test`** (`Tester` too),
+  and warns that it cannot: name a screen class `StrategyTester`. A function
+  imported into a test module by a name pytest takes for a test is collected
+  as well: import the module and call it by its path.
 - **Two `set_value` calls in a row fire both handlers before either runs**, so
   a handler that reads the widget's value sees only the last: to test a choice
   overtaken by another, let the first reach the engine (a gate the fake engine
