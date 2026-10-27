@@ -47,12 +47,15 @@ async def workspace(engine: Engine, run: str | None = None) -> Workspace:
     return screen
 
 
-async def tester(engine: Engine) -> StrategyTester:
-    """The Strategy Tester page, offering the engine's configurations."""
+async def strategy_tester(engine: Engine, run: str | None = None) -> StrategyTester:
+    """The Strategy Tester page, offering the engine's configurations; with ``run``, it goes
+    on following that run."""
     frame("/tester")
     screen = StrategyTester(engine)
     screen.build()
     await screen.load()
+    if run:
+        await screen.follow(run)
     return screen
 
 
@@ -73,8 +76,8 @@ def create(engine: Engine) -> None:
         await workspace(engine, run)
 
     @ui.page("/tester", response_timeout=PAGE_TIMEOUT)
-    async def strategy_tester() -> None:
-        await tester(engine)
+    async def tester_page(run: str | None = None) -> None:
+        await strategy_tester(engine, run)
 
     @ui.page("/plugins", response_timeout=PAGE_TIMEOUT)
     async def catalogue() -> None:

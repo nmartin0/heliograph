@@ -3530,8 +3530,8 @@ tests = ["tests/gui/test_tester.py::test_a_run_that_goes_on_is_asked_after_again
 [[control]]
 describes = "one run is followed at a time"
 path = "src/heliograph/gui/tester.py"
-old = "        self.go.disable()\n"
-new = "        pass\n"
+old = "        self.go.disable()\n        self.timer.activate()\n        ui.navigate"
+new = "        self.timer.activate()\n        ui.navigate"
 tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_report_shown"]
 
 [[control]]
@@ -3586,8 +3586,8 @@ tests = ["tests/gui/test_tester.py::test_a_run_is_followed_to_its_end_and_its_re
 [[control]]
 describes = "a run's name is quoted in the link"
 path = "src/heliograph/gui/tester.py"
-old = "quote(run, safe='')"
-new = "quote(run)"
+old = "    return f\"/?run={quote(run, safe='')}\"\n"
+new = "    return f\"/?run={quote(run)}\"\n"
 tests = ["tests/gui/test_tester.py::test_the_link_names_a_run_so_the_workspace_can_be_told_it"]
 
 [[control]]
@@ -3694,3 +3694,122 @@ path = "src/heliograph/gui/forms.py"
 old = "        if kind == JSON and node.get(\"type\") in (\"object\", \"array\")\n"
 new = "        if False\n"
 tests = ["tests/gui/test_forms.py::test_a_json_box_holds_the_shape_the_schema_says"]
+
+[[control]]
+describes = "a graph node's inputs are said to be required"
+path = "src/heliograph/app/config.py"
+old = "    if kind in GRAPH_KINDS:\n        return \"required\"\n"
+new = "    if kind in GRAPH_KINDS:\n        return \"none\"\n"
+tests = ["tests/process/test_engine_process.py::test_a_plugin_says_whether_a_configuration_gives_it_inputs"]
+
+[[control]]
+describes = "an exit's inputs are said to be optional"
+path = "src/heliograph/app/config.py"
+old = "    return \"optional\" if kind == \"exits\" else \"none\""
+new = "    return \"none\""
+tests = ["tests/process/test_engine_process.py::test_a_plugin_says_whether_a_configuration_gives_it_inputs"]
+
+[[control]]
+describes = "the snippet reminds of the inputs"
+path = "src/heliograph/gui/catalogue.py"
+old = "{INPUT_HINTS.get(inputs, '')}"
+new = "{''}"
+tests = ["tests/gui/test_catalogue.py::test_a_snippet_is_the_table_a_configuration_takes_for_that_kind"]
+
+[[control]]
+describes = "the chosen plug-in's inputs are the engine's word"
+path = "src/heliograph/gui/catalogue.py"
+old = "        self.inputs = str(found.get(\"inputs\", \"none\"))\n"
+new = "        self.inputs = \"none\"\n"
+tests = ["tests/gui/test_catalogue.py::test_the_snippet_reminds_of_the_inputs_the_engine_says_a_plugin_takes"]
+
+[[control]]
+describes = "an empty box's hint keeps its label up"
+path = "src/heliograph/gui/form.py"
+old = "        if hint:\n            widget.props(\"stack-label\")"
+new = "        if False:\n            widget.props(\"stack-label\")"
+tests = ["tests/gui/test_catalogue.py::test_a_box_that_can_be_left_empty_shows_what_that_stands_for"]
+
+[[control]]
+describes = "a number or text box shows its default as a hint"
+path = "src/heliograph/gui/form.py"
+old = "    return f\"{one.default} (default)\""
+new = "    return \"\""
+tests = ["tests/gui/test_catalogue.py::test_a_box_that_can_be_left_empty_shows_what_that_stands_for"]
+
+[[control]]
+describes = "a list box shows its default as a hint"
+path = "src/heliograph/gui/form.py"
+old = "        return \", \".join(one.default) + \" (default)\" if one.default else \"\""
+new = "        return \"\""
+tests = ["tests/gui/test_catalogue.py::test_a_box_that_can_be_left_empty_shows_what_that_stands_for"]
+
+[[control]]
+describes = "a JSON box shows its default as a hint"
+path = "src/heliograph/gui/form.py"
+old = "        return f\"{json.dumps(one.default)} (default)\""
+new = "        return \"\""
+tests = ["tests/gui/test_catalogue.py::test_a_box_that_can_be_left_empty_shows_what_that_stands_for"]
+
+[[control]]
+describes = "a choice or a switch has no hint"
+path = "src/heliograph/gui/form.py"
+old = "    if one.default is None or one.kind in (forms.BOOLEAN, forms.CHOICE):"
+new = "    if one.default is None:"
+tests = ["tests/gui/test_catalogue.py::test_a_box_that_can_be_left_empty_shows_what_that_stands_for"]
+
+[[control]]
+describes = "a line may go a tenth of the level past the candles on their scale"
+path = "src/heliograph/gui/series.py"
+old = "    margin = max(abs(low), abs(high)) * SHARED_MARGIN\n"
+new = "    margin = 0\n"
+tests = ["tests/gui/test_series.py::test_a_line_in_the_prices_units_shares_its_scale_and_any_other_has_its_own"]
+
+[[control]]
+describes = "a line not in the price's units gets a scale of its own"
+path = "src/heliograph/gui/series.py"
+old = "    if not _shares_the_price_scale(pane, line):\n"
+new = "    if False:\n"
+tests = ["tests/gui/test_series.py::test_a_line_in_the_prices_units_shares_its_scale_and_any_other_has_its_own"]
+
+[[control]]
+describes = "a line with nothing to compare stays on the price"
+path = "src/heliograph/gui/series.py"
+old = "    if not highs or not known:\n        return True\n"
+new = "    if not highs or not known:\n        return False\n"
+tests = ["tests/gui/test_series.py::test_a_line_with_no_known_value_or_candles_to_compare_with_stays_on_the_price"]
+
+[[control]]
+describes = "a submitted run is kept in the address"
+path = "src/heliograph/gui/tester.py"
+old = "        ui.navigate.history.replace(follow_link(self.run_id))\n"
+new = "        pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_submitted_is_kept_in_the_address_so_a_reload_goes_on_with_it"]
+
+[[control]]
+describes = "a page opened on a run asks after it at once"
+path = "src/heliograph/gui/tester.py"
+old = "        await self.poll()\n\n    async def poll"
+new = "        pass\n\n    async def poll"
+tests = ["tests/gui/test_tester.py::test_a_page_opened_on_a_run_goes_on_following_it_to_its_report"]
+
+[[control]]
+describes = "a page opened on a run holds back another"
+path = "src/heliograph/gui/tester.py"
+old = "        self._shown(\"asking\")\n        self.go.disable()\n"
+new = "        self._shown(\"asking\")\n"
+tests = ["tests/gui/test_tester.py::test_a_page_opened_on_a_run_still_going_goes_on_asking_after_it"]
+
+[[control]]
+describes = "a run's name is quoted in the address that follows it"
+path = "src/heliograph/gui/tester.py"
+old = "    return f\"/tester?run={quote(run, safe='')}\"\n"
+new = "    return f\"/tester?run={quote(run)}\"\n"
+tests = ["tests/gui/test_tester.py::test_a_run_submitted_is_kept_in_the_address_so_a_reload_goes_on_with_it"]
+
+[[control]]
+describes = "the margin is of the price level, not of the candles' range"
+path = "src/heliograph/gui/series.py"
+old = "    margin = max(abs(low), abs(high)) * SHARED_MARGIN\n"
+new = "    margin = (high - low) * SHARED_MARGIN\n"
+tests = ["tests/gui/test_series.py::test_a_wide_price_range_does_not_let_a_line_of_another_size_share_its_scale"]

@@ -33,6 +33,12 @@ def chart_link(run: str) -> str:
     return f"/?run={quote(run, safe='')}"
 
 
+def follow_link(run: str) -> str:
+    """Where this screen follows ``run``: the address kept in the browser, so that a reload
+    of the page goes on with the same run."""
+    return f"/tester?run={quote(run, safe='')}"
+
+
 class StrategyTester:
     """The screen: the configuration on the left of the page's work, the run's report below."""
 
@@ -122,6 +128,16 @@ class StrategyTester:
         self._shown(str(queued.get("status", "queued")))
         self.go.disable()
         self.timer.activate()
+        ui.navigate.history.replace(follow_link(self.run_id))
+
+    async def follow(self, run: str) -> None:
+        """Go on with ``run`` (one submitted before the page was opened, perhaps from it):
+        show where it is, and its report if it has ended."""
+        self.run_id = run
+        self._shown("asking")
+        self.go.disable()
+        self.timer.activate()
+        await self.poll()
 
     async def poll(self) -> None:
         """Ask after the run; when it has ended show its report."""

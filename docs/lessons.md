@@ -310,6 +310,11 @@ within each section.
   Walk each screen in a browser (`tests/` cannot see layout), with an empty
   engine, a failed run, a long form, a narrow window, the engine stopped.
   Put a message beside the control that caused it.
+- **Try a heuristic on the real data in the browser, not only on the test's.**
+  "Share the price's scale if the line is within a quarter of the candles'
+  range of them" passed its tests (range 4) and let an ATR of 174 through in
+  the first real run, where the range was 70,000 and the margin reached below
+  zero. A margin is of the level, not of the spread.
 
 ## Trading platforms
 

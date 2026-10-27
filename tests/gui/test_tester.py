@@ -6,12 +6,14 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import pytest
+from nicegui import ui
 from nicegui.testing.user import User
 
 from heliograph.gui import app
 from heliograph.gui.app import workspace
 from heliograph.gui.client import Engine
-from heliograph.gui.tester import StrategyTester, chart_link
+from heliograph.gui.tester import StrategyTester, chart_link, follow_link
 from tests.support import window
 from tests.support.window import fake, run_answers
 
@@ -22,7 +24,7 @@ REPORT = "Heliograph backtest report\n  trend: +3.2%\n"
 def scenario(
     engine_at: Callable[[], Engine], play: Callable[[User, StrategyTester], Awaitable[None]]
 ) -> None:
-    window.scenario(engine_at, app.tester, play)
+    window.scenario(engine_at, app.strategy_tester, play)
 
 
 def engine_saying(
@@ -243,3 +245,55 @@ def test_the_saved_text_can_be_loaded_again_over_edits() -> None:
         assert screen.text.value == "typed afresh"
 
     scenario(engine_saying("complete"), play)
+
+
+def test_a_run_submitted_is_kept_in_the_address_so_a_reload_goes_on_with_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept: list[str] = []
+
+    async def play(user: User, screen: StrategyTester) -> None:
+        monkeypatch.setattr(ui.navigate.history, "replace", kept.append)  # the simulation's own
+        screen.text.value = CONFIG
+        await screen.run()
+        assert kept == ["/tester?run=r-1"]
+        assert follow_link("a b/c") == "/tester?run=a%20b%2Fc"
+
+    scenario(engine_saying("complete"), play)
+
+
+def test_a_page_opened_on_a_run_goes_on_following_it_to_its_report() -> None:
+    async def play(user: User, screen: StrategyTester) -> None:
+        assert screen.run_id == "r-1"
+        assert screen.progress.text == "r-1: complete"
+        assert screen.report.text == REPORT
+        assert screen.go.enabled  # it had ended: another may be run
+        assert screen.link.visible
+
+    window.scenario(
+        engine_saying("complete"), lambda engine: app.strategy_tester(engine, "r-1"), play
+    )
+
+
+def test_a_page_opened_on_a_run_still_going_goes_on_asking_after_it() -> None:
+    async def play(user: User, screen: StrategyTester) -> None:
+        assert screen.progress.text == "r-1: running"
+        assert screen.timer.active
+        assert not screen.go.enabled
+
+    window.scenario(
+        engine_saying("running"), lambda engine: app.strategy_tester(engine, "r-1"), play
+    )
+
+
+def test_a_page_opened_on_a_run_the_engine_does_not_know_says_so() -> None:
+    async def play(user: User, screen: StrategyTester) -> None:
+        assert "engine says 404" in screen.message.text
+        assert screen.go.enabled
+        assert not screen.timer.active
+
+    window.scenario(
+        engine_saying("running", overrides={"/backtests/r-1": 404}),
+        lambda engine: app.strategy_tester(engine, "r-1"),
+        play,
+    )

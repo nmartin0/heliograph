@@ -105,10 +105,33 @@ def test_a_price_pane_holds_candles_markers_and_volume_and_takes_overlays() -> N
     ]
     assert pane["series"][0]["title"] == "btc@1h"
     assert pane["series"][0]["markers"] == [{"time": 1}]
-    series.overlay(pane, "fast", [{"t": 1000, "value": 2.0}])
+    series.overlay(pane, "fast", [{"t": 1000, "value": 10.0}])
     assert pane["series"][-1] == {
-        "id": "fast", "type": "line", "title": "fast", "data": [{"time": 1, "value": 2.0}],
+        "id": "fast", "type": "line", "title": "fast", "data": [{"time": 1, "value": 10.0}],
     }  # fmt: skip
+
+
+def scale_of(rows: list[dict[str, Any]], bars: list[dict[str, Any]] = BARS) -> str | None:
+    pane = series.price_pane("btc@1h", bars)
+    series.overlay(pane, "line", rows)
+    scale: str | None = pane["series"][-1].get("scale")
+    return scale
+
+
+def test_a_line_in_the_prices_units_shares_its_scale_and_any_other_has_its_own() -> None:
+    """The candles span 8 to 12; a line may go a tenth of the level (1.2) past them."""
+    assert scale_of([{"t": 1000, "value": 10.0}]) is None  # a moving average
+    assert scale_of([{"t": 1000, "value": 13.2}, {"t": 2000, "value": 6.8}]) is None  # the edge
+    assert scale_of([{"t": 1000, "value": 13.3}]) == "left"
+    assert scale_of([{"t": 1000, "value": 6.7}]) == "left"
+    assert scale_of([{"t": 1000, "value": 10.0}, {"t": 2000, "value": 174.0}]) == "left"
+    assert scale_of([{"t": 1000, "value": 0.3}]) == "left"  # an ATR, a forecast
+
+
+def test_a_line_with_no_known_value_or_candles_to_compare_with_stays_on_the_price() -> None:
+    assert scale_of([{"t": 1000, "value": None}, {"t": 2000, "value": None}]) is None
+    assert scale_of([]) is None
+    assert scale_of([{"t": 1000, "value": 900.0}], bars=[]) is None  # nothing to disagree with
 
 
 def test_a_line_pane_is_labelled_and_can_hold_each_value_until_the_next() -> None:
@@ -116,3 +139,18 @@ def test_a_line_pane_is_labelled_and_can_hold_each_value_until_the_next() -> Non
     assert series.line_pane("fast", rows)["series"][0]["type"] == "line"
     assert series.line_pane("equity", rows, steps=True)["series"][0]["type"] == "steps"
     assert series.line_pane("fast", rows)["series"][0]["title"] == "fast"
+
+
+def test_a_wide_price_range_does_not_let_a_line_of_another_size_share_its_scale() -> None:
+    """A market that fell from 80,000 to 10,000: an ATR of 174 is nearer zero than the
+    candles, though a quarter of their range (17,500) below the lowest would reach it."""
+    bars = [
+        {**BARS[0], "high": 80_000.0, "low": 70_000.0, "open": 75_000.0, "close": 72_000.0},
+        {**BARS[1], "high": 12_000.0, "low": 10_000.0, "open": 11_000.0, "close": 10_500.0},
+    ]
+    assert scale_of([{"t": 1000, "value": 174.0}], bars) == "left"
+    assert scale_of([{"t": 1000, "value": 20_000.0}], bars) is None  # a moving average
+    assert scale_of([{"t": 1000, "value": 9_500.0}], bars) is None  # a band just below
+    # The margin is a tenth of the level, 8,000: down to 2,000 below the lowest, 10,000.
+    assert scale_of([{"t": 1000, "value": 2_100.0}], bars) is None
+    assert scale_of([{"t": 1000, "value": 1_900.0}], bars) == "left"

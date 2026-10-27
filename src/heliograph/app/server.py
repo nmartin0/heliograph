@@ -87,7 +87,7 @@ from starlette.routing import Route
 from heliograph import __version__
 from heliograph.app import charts
 from heliograph.app.charts import NotInRunError
-from heliograph.app.config import ConfigError, LoadedConfig, parse_config
+from heliograph.app.config import ConfigError, LoadedConfig, inputs_rule, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import figures, report
 from heliograph.app.run import StopFlag, run_backtest
@@ -440,6 +440,7 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
         return JSONResponse(
             {
                 "kind": kind,
+                "inputs": inputs_rule(kind),
                 "name": manifest.name,
                 "version": manifest.version,
                 "summary": manifest.summary,

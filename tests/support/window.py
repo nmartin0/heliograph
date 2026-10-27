@@ -29,9 +29,11 @@ def scenario[Screen](
     async def go() -> None:
         engine = engine_at()
         shown: list[Screen] = []
+        clients: list[Client] = []
         built = asyncio.Event()
 
         async def build(client: Client) -> None:
+            clients.append(client)
             with client:
                 shown.append(await page(engine))
             built.set()
@@ -45,7 +47,8 @@ def scenario[Screen](
             await user.open("/")
             # The screen is built after the page is answered: wait for it, not for time.
             await built.wait()
-            await play(user, shown[0])
+            with clients[0]:  # as a click on the page would run it
+                await play(user, shown[0])
         await engine.close()
 
     asyncio.run(go())

@@ -91,10 +91,16 @@ export default {
         chart.priceScale("volume", pane).applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
         return series;
       }
-      return chart.addSeries(LineSeries, {
+      const options = {
         title, color: next(), lineWidth: 2, lineType: spec.type === "steps" ? LineType.WithSteps : LineType.Simple,
         priceLineVisible: false,
-      }, pane);
+      };
+      // A line not in the price's units has a scale of its own, at the left, so it does
+      // not stretch the price's.
+      if (spec.scale) options.priceScaleId = spec.scale;
+      const line = chart.addSeries(LineSeries, options, pane);
+      if (spec.scale === "left") chart.priceScale("left", pane).applyOptions({ visible: true });
+      return line;
     },
   },
 };

@@ -51,12 +51,21 @@ COMPONENT_KINDS = frozenset(
 """Kinds a configuration lists under ``[[components]]``."""
 
 
-def snippet(kind: str, name: str, params: str) -> str:
+INPUT_HINTS = {
+    "required": '# inputs = ["btc@1h.close"]  # required: a stream\'s field or a node it reads\n',
+    "optional": '# inputs = ["atr24"]  # optional: the nodes it reads\n',
+}
+"""What the engine says a component's ``inputs`` are (``inputs`` of a plug-in's answer), as a
+comment in the snippet: the form cannot know what a configuration reads."""
+
+
+def snippet(kind: str, name: str, params: str, inputs: str = "none") -> str:
     """What to put in a configuration to use ``name`` as the form says: its table for a
-    component or a data source, otherwise just its ``params`` line."""
+    component or a data source, otherwise just its ``params`` line; ``inputs`` is what the
+    engine says of the component's inputs, reminded of in a comment."""
     if kind in COMPONENT_KINDS:
         head = f'[[components]]\nkind = "{kind}"\nplugin = "{name}"\nname = "{name}"\n'
-        return f"{head}params = {params}\n"
+        return f"{head}{INPUT_HINTS.get(inputs, '')}params = {params}\n"
     if kind == "data_sources":
         return f'[mounts.{name}]\nsource = "{name}"\nparams = {params}\n'
     return f"params = {params}\n"
@@ -69,6 +78,8 @@ class Catalogue:
         self.engine = engine
         self.plugins: dict[str, list[dict[str, Any]]] = {}
         self.chosen: tuple[str, str] | None = None
+        self.inputs = "none"
+        """What the engine says of the chosen plug-in's inputs."""
         self.form: SettingsForm | None = None
 
     def build(self) -> None:
@@ -123,6 +134,7 @@ class Catalogue:
             self.message.text = str(exc)
             return
         self.chosen = (kind, name)
+        self.inputs = str(found.get("inputs", "none"))
         self.heading.text = f"{name} · {kind_title(kind)} · {found['version']}"
         self.summary.text = found["summary"]
         self.settings.clear()
@@ -138,6 +150,6 @@ class Catalogue:
         kind, name = self.chosen
         self.preview.set_visibility(True)
         if self.form.valid:
-            self.preview.set_content(snippet(kind, name, self.form.toml()))
+            self.preview.set_content(snippet(kind, name, self.form.toml(), self.inputs))
         else:
             self.preview.set_content("# fix the settings marked above first")

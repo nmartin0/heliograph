@@ -256,6 +256,13 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- The window, from what was left open after using it: a line drawn over the
+  price that is not in the price's units (an ATR) has a scale of its own at the
+  left and no longer flattens the candles; the snippet for a component reminds
+  of the `inputs` the engine says it takes (the plug-in's detail now says so);
+  a box that can be left empty shows its default as a hint; a Tester page
+  reloaded goes on with its run (`/tester?run=<id>`).
+
 - Found by using the window in a browser: the Workspace says where runs come
   from when it has none, and says when the run asked for with `?run=` is not
   there; the Tester shows its messages beside the Run button (and in view),

@@ -210,16 +210,6 @@ hand-checked scenario (D4c), and the kit's broken sample plug-ins (D2).
       Workspace (which opens on `?run=`). Building a configuration from
       catalogue picks waits for the Wizard.
 - Wizard first cut on Vue Flow.
-- Open, from using the window in a browser (2026-10-27): an indicator drawn
-  "on price" whose scale is not the price's (ATR, a forecast) stretches the
-  price axis to include it and flattens the candles; the window cannot tell
-  which nodes share the price's scale, so it needs a scale of its own for
-  them. The snippet the Plug-ins screen makes for an indicator has no
-  `inputs`, which the engine requires (the screen knows no kind; the snippet
-  could carry a comment saying what is missing). A box cleared falls back to
-  its default without showing it. A reload of the Tester forgets the run it
-  was following (the run goes on; it is in the Workspace's list when it has
-  ended).
 - Open, from the review of the window: it has no sign-in and NiceGUI's socket
   checks no Origin, so a hostile web page could read it by DNS rebinding (the
   engine's port is the same); keep both on `127.0.0.1` until a sign-in

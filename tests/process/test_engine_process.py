@@ -104,6 +104,26 @@ def test_the_installed_plugins_are_listed_by_kind_and_name(engine: Engine) -> No
     assert all(p["version"] and p["summary"] for p in plugins)
 
 
+def test_a_plugin_says_whether_a_configuration_gives_it_inputs(engine: Engine) -> None:
+    said = {
+        path: engine.get(f"/api/plugins/{path}")["inputs"]
+        for path in (
+            "forecasters/ewmac",
+            "indicators/sma",
+            "exits/trailing_stop",
+            "sizers/vol_target",
+            "data_sources/file",
+        )
+    }
+    assert said == {
+        "forecasters/ewmac": "required",
+        "indicators/sma": "required",
+        "exits/trailing_stop": "optional",
+        "sizers/vol_target": "none",
+        "data_sources/file": "none",
+    }
+
+
 def test_a_plugins_parameters_come_as_a_json_schema(engine: Engine) -> None:
     ewmac = engine.get("/api/plugins/forecasters/ewmac")
     assert ewmac["name"] == "ewmac"

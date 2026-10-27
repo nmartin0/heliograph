@@ -93,7 +93,9 @@ def test_what_is_changed_is_shown_as_the_configuration_would_take_it(
     async def play(user: User, screen: Catalogue) -> None:
         await screen.choose("indicators", "sma")
         assert screen.preview.content == (
-            '[[components]]\nkind = "indicators"\nplugin = "sma"\nname = "sma"\nparams = {}\n'
+            '[[components]]\nkind = "indicators"\nplugin = "sma"\nname = "sma"\n'
+            '# inputs = ["btc@1h.close"]  # required: a stream\'s field or a node it reads\n'
+            "params = {}\n"
         )
         period = inputs(screen)["period"]
         assert isinstance(period, ui.number)
@@ -220,6 +222,17 @@ def test_a_snippet_is_the_table_a_configuration_takes_for_that_kind() -> None:
         '[[components]]\nkind = "forecasters"\nplugin = "ewmac"\nname = "ewmac"\n'
         "params = { fast = 4 }\n"
     )
+    assert catalogue_module.snippet("forecasters", "ewmac", "{}", "required") == (
+        '[[components]]\nkind = "forecasters"\nplugin = "ewmac"\nname = "ewmac"\n'
+        '# inputs = ["btc@1h.close"]  # required: a stream\'s field or a node it reads\n'
+        "params = {}\n"
+    )
+    assert catalogue_module.snippet("exits", "stop", "{}", "optional") == (
+        '[[components]]\nkind = "exits"\nplugin = "stop"\nname = "stop"\n'
+        '# inputs = ["atr24"]  # optional: the nodes it reads\n'
+        "params = {}\n"
+    )
+    assert catalogue_module.snippet("sizers", "vol", "{}", "none").count("inputs") == 0
     assert catalogue_module.snippet("data_sources", "file", "{}") == (
         '[mounts.file]\nsource = "file"\nparams = {}\n'
     )
@@ -260,3 +273,73 @@ def test_a_filter_nothing_matches_says_so(engine_at: Callable[[], Engine]) -> No
         await user.should_see("zorbo")
 
     scenario(fake({"/plugins": LISTED}), play)
+
+
+def test_the_snippet_reminds_of_the_inputs_the_engine_says_a_plugin_takes(
+    engine_at: Callable[[], Engine],
+) -> None:
+    async def play(user: User, screen: Catalogue) -> None:
+        await screen.choose("indicators", "sma")
+        assert screen.inputs == "required"
+        assert "# inputs = " in screen.preview.content
+        await screen.choose("indicators", "alpha")  # an engine that says nothing of inputs
+        assert screen.inputs == "none"
+        assert "inputs" not in screen.preview.content
+
+    sma = {
+        "kind": "indicators",
+        "name": "sma",
+        "version": "1",
+        "summary": "s",
+        "inputs": "required",
+    }
+    alpha = {"kind": "indicators", "name": "alpha", "version": "1", "summary": "a"}
+    scenario(
+        fake(
+            {
+                "/plugins": LISTED,
+                "/plugins/indicators/sma": {**sma, "params": ZORBO["params"]},
+                "/plugins/indicators/alpha": {**alpha, "params": ZORBO["params"]},
+            }
+        ),
+        play,
+    )
+
+
+def test_a_box_that_can_be_left_empty_shows_what_that_stands_for(
+    engine_at: Callable[[], Engine],
+) -> None:
+    base: Any = ZORBO
+    schema = {
+        **base,
+        "params": {
+            "properties": {
+                **base["params"]["properties"],
+                "cols": {"default": ["a", "b"], "items": {"type": "string"}, "type": "array"},
+                "none": {"default": [], "items": {"type": "string"}, "type": "array"},
+                "extra": {"default": {"x": 1}, "type": "object"},
+                "bare": {"type": "string"},
+            },
+            "type": "object",
+        },
+    }
+
+    async def play(user: User, screen: Catalogue) -> None:
+        await screen.choose("oscillators", "zorbo")
+        boxes = inputs(screen)
+        hints = {name: box._props.get("placeholder") for name, box in boxes.items()}
+        assert hints == {
+            "length": "9 (default)",
+            "mode": None,  # a choice has its default selected
+            "smooth": None,  # so has a switch
+            "label": "z (default)",
+            "cols": "a, b (default)",
+            "none": "",  # an empty default: nothing to show
+            "extra": '{"x": 1} (default)',
+            "bare": "",  # no default at all
+        }
+        assert boxes["length"]._props["stack-label"] is True  # the label up, the hint in view
+        assert "stack-label" not in boxes["bare"]._props
+        assert "stack-label" not in boxes["mode"]._props  # a choice has no empty state
+
+    scenario(fake({"/plugins": LISTED, "/plugins/oscillators/zorbo": schema}), play)

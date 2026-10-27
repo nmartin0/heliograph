@@ -109,6 +109,15 @@ def test_the_chart_element_imports_the_library_under_the_name_its_python_half_ma
     assert mapped.group(1) == imported.group(1)
 
 
+def test_the_chart_element_reads_the_scale_key_the_series_set() -> None:
+    """A line on a scale of its own: the Python half writes ``scale``, the browser half reads it."""
+    folder = Path(window.__file__).parent
+    assert 'spec["scale"] = "left"' in (folder / "series.py").read_text()
+    script = (folder / "chart.js").read_text()
+    assert "spec.scale" in script
+    assert 'priceScale("left", pane)' in script
+
+
 def test_a_window_open_beyond_this_computer_says_it_has_no_sign_in(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

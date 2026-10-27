@@ -140,6 +140,17 @@ def _hash_key(value: Any) -> Any:
 GRAPH_KINDS = frozenset({"indicators", "forecasters", "gates"})
 """Kinds whose plug-ins are nodes of the indicator graph."""
 STAGE_KINDS = frozenset({"combiners", "sizers", "exits", "risk_gates", "fills"})
+
+
+def inputs_rule(kind: str) -> str:
+    """What a component of ``kind`` says of its ``inputs`` in a configuration: ``required``
+    (a graph node reads something), ``optional`` (an exit may read nodes) or ``none``
+    (a stage, a source and the rest read none)."""
+    if kind in GRAPH_KINDS:
+        return "required"
+    return "optional" if kind == "exits" else "none"
+
+
 """Kinds whose plug-ins are a strategy's stages."""
 
 

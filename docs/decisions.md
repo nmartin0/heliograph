@@ -915,8 +915,19 @@ report, whatever way it ended (a failed run's report goes as far as the run
 did), with a link that opens the run in the Workspace (`/?run=<id>`), where
 the charts are. The window does not read the configuration: the engine
 checks it and says everything that is wrong at once, and that is shown as
-it is said. Background work a choice sets going is counted in `gui/work.py`
-for both screens, so a test waits for it and not for a time.
+it is said. The run being followed is kept in the page's address
+(`/tester?run=<id>`), so a reload goes on with it. Background work a choice
+sets going is counted in `gui/work.py` for both screens, so a test waits for
+it and not for a time.
+
+Two things the window shows follow from what the engine says, not from what
+the window knows. A plug-in's detail says what a configuration gives its
+`inputs` (`required`, `optional`, `none`; `inputs_rule` in `app/config.py`),
+and the snippet the Plug-ins screen makes reminds of it in a comment. A line
+drawn over the price goes on the price's scale only if its values lie within
+the candles' range, a tenth of the price level beyond it either way; any other
+(an ATR, a forecast) gets a scale of its own at the left, so that it does not
+flatten the candles.
 
 **Why:** the Tester is the shortest way from a configuration to a result,
 and it uses only what the API already offers (D18, D37); the charts are

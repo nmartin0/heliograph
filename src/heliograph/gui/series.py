@@ -142,6 +142,31 @@ def line_pane(title: str, rows: Rows, *, steps: bool = False) -> Spec:
     }
 
 
+SHARED_MARGIN = 0.1
+"""How far past the candles' range, as a fraction of the price level, a line may go and still
+share their scale (a band a little outside the candles does; a range of prices that is wide
+must not let something near zero in)."""
+
+
+def _shares_the_price_scale(pane: Spec, line: list[dict[str, Any]]) -> bool:
+    """Whether ``line`` is in the price's own units: every value within the candles' range
+    (a moving average is; an ATR or a forecast is not, and would flatten the candles)."""
+    highs = [p["high"] for s in pane["series"] if s["id"] == PRICE for p in s["data"]]
+    lows = [p["low"] for s in pane["series"] if s["id"] == PRICE for p in s["data"]]
+    known = [p["value"] for p in line if "value" in p]
+    if not highs or not known:
+        return True
+    low, high = min(lows), max(highs)
+    margin = max(abs(low), abs(high)) * SHARED_MARGIN
+    return bool(low - margin <= min(known) and max(known) <= high + margin)
+
+
 def overlay(pane: Spec, title: str, rows: Rows) -> None:
-    """Draw a line over ``pane``'s price, on its scale."""
-    pane["series"].append({"id": title, "type": "line", "title": title, "data": values(rows)})
+    """Draw a line over ``pane``'s price: on the price's scale if its values are in the
+    price's units, otherwise on a scale of its own at the left (``"scale": "left"``), so
+    that it does not stretch the price's."""
+    line = values(rows)
+    spec: dict[str, Any] = {"id": title, "type": "line", "title": title, "data": line}
+    if not _shares_the_price_scale(pane, line):
+        spec["scale"] = "left"
+    pane["series"].append(spec)

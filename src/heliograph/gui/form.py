@@ -13,6 +13,17 @@ from heliograph.gui import forms
 from heliograph.gui.forms import Field, Schema
 
 
+def _default_hint(one: Field) -> str:
+    """What a box left empty stands for: the default, as the person would type it."""
+    if one.default is None or one.kind in (forms.BOOLEAN, forms.CHOICE):
+        return ""
+    if one.kind == forms.LIST:
+        return ", ".join(one.default) + " (default)" if one.default else ""
+    if one.kind == forms.JSON:
+        return f"{json.dumps(one.default)} (default)"
+    return f"{one.default} (default)"
+
+
 class SettingsForm:
     """The form of ``schema``: one input per parameter, each checked as it changes.
 
@@ -58,6 +69,7 @@ class SettingsForm:
 
     def _input(self, one: Field) -> ui.element:
         label = one.title + (" *" if one.required else "")
+        hint = _default_hint(one)
         match one.kind:
             case forms.INTEGER | forms.NUMBER:
                 widget: Any = ui.number(
@@ -67,6 +79,7 @@ class SettingsForm:
                     max=one.maximum,
                     step=one.step or (1 if one.kind == forms.INTEGER else None),
                     precision=0 if one.kind == forms.INTEGER else None,
+                    placeholder=hint,
                     on_change=lambda e, f=one: self._set(f, e.value),
                 )
             case forms.BOOLEAN:
@@ -86,21 +99,26 @@ class SettingsForm:
                 widget = ui.input(
                     label + " (separated by commas)",
                     value=", ".join(one.default or []),
+                    placeholder=hint,
                     on_change=lambda e, f=one: self._set(f, forms.read_list(e.value or "")),
                 )
             case forms.JSON:
                 widget = ui.textarea(
                     label + " (JSON)",
                     value="" if one.default is None else json.dumps(one.default),
+                    placeholder=hint,
                     on_change=lambda e, f=one: self._set_json(f, e.value or ""),
                 )
             case _:
                 widget = ui.input(
                     label,
                     value="" if one.default is None else str(one.default),
+                    placeholder=hint,
                     on_change=lambda e, f=one: self._set(f, e.value),
                 )
         widget.classes("w-full")
+        if hint:
+            widget.props("stack-label")  # the label stays up, so the hint shows in a cleared box
         if one.nullable and one.kind in (forms.INTEGER, forms.NUMBER, forms.TEXT):
             widget.props("clearable")
         return widget  # type: ignore[no-any-return]
