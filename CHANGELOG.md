@@ -256,6 +256,17 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- Found by using the window in a browser: the Workspace says where runs come
+  from when it has none, and says when the run asked for with `?run=` is not
+  there; the Tester shows its messages beside the Run button (and in view),
+  names a run `backtest` when the name is left empty, offers the chart link
+  only for a run that can be charted, and can load a configuration's saved
+  text again over edits; the header's dark switch can be seen in dark mode;
+  the controls stay on a window narrower than 1,024 px; a plug-in's JSON box
+  refuses a list where an object is wanted, and the filter says when nothing
+  matches. The engine's configuration errors name each problem's place and
+  reason, without the validation library's dump of the input and its link.
+
 - The CCXT source offers trade history only from exchanges known to page it
   by time (Kraken; `trust_since` for others): many answer with their newest
   trades, which returned partial history silently. Candles off their grid

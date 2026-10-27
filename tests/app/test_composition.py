@@ -174,3 +174,25 @@ def test_a_config_file_is_loaded_and_named_in_errors(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigError, match=r"cannot read .*missing\.toml"):
         load_config(tmp_path / "missing.toml")
+
+
+def test_a_configuration_error_lists_where_and_why_without_the_librarys_dump() -> None:
+    with pytest.raises(ConfigError) as caught:
+        parse_config('mode = "paper"\nextra = 1\n')
+    message = str(caught.value)
+    lines = message.split("\n")
+    assert lines[0] == "invalid run configuration:"
+    assert any(line.startswith("  mode: ") for line in lines)
+    assert any(line.startswith("  extra: ") for line in lines)
+    for noise in ("pydantic", "input_value", "[type="):
+        assert noise not in message
+
+
+def test_a_check_of_ours_is_told_without_the_librarys_label_for_it() -> None:
+    text = 'mode = "backtest"\n[[components]]\nkind = "indicators"\nplugin = "sma"\nname = "s"\n'
+    with pytest.raises(ConfigError) as caught:
+        parse_config(text)
+    assert str(caught.value) == (
+        "invalid run configuration:\n  (the configuration): components[0] (sma): "
+        "an indicator needs inputs"
+    )

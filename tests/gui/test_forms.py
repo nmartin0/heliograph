@@ -130,6 +130,18 @@ def test_a_value_is_checked_against_what_the_schema_allows(
     assert forms.problem(by_name(SCHEMA)[name], value) == expected
 
 
+def test_a_json_box_holds_the_shape_the_schema_says() -> None:
+    fields = by_name(SCHEMA)
+    assert (fields["nested"].shape, fields["mixed"].shape) == ("object", "array")
+    assert fields["period"].shape is None  # only a JSON box has one
+    nested, mixed = fields["nested"], fields["mixed"]
+    assert forms.problem(nested, {"a": 1}) is None
+    assert forms.problem(nested, [1]) == "must be a JSON object, like {...}"
+    assert forms.problem(nested, 3) == "must be a JSON object, like {...}"
+    assert forms.problem(mixed, [1]) is None
+    assert forms.problem(mixed, {"a": 1}) == "must be a JSON list, like [...]"
+
+
 def test_a_value_is_refused_below_an_exclusive_ceiling() -> None:
     one = Field("x", "X", forms.NUMBER, exclusive_maximum=1.0)
     assert forms.problem(one, 1.0) == "must be less than 1"

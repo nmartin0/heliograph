@@ -336,3 +336,21 @@ def test_a_bug_in_the_window_is_said_on_the_screen(
         assert "something went wrong in the window: RuntimeError('a bug')" in screen.message.text
 
     scenario(engine_at, play)
+
+
+def test_with_no_run_to_chart_the_screen_says_where_runs_come_from(
+    engine_at: Callable[[], Engine],
+) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        assert screen.hint.visible  # the one run there is failed: nothing of it to chart
+        assert screen.choices.run is None
+        await user.should_see("Run a configuration in the Tester.")
+
+    scenario(fake({"/backtests": {"backtests": [{"id": "f-1", "status": "failed: X"}]}}), play)
+
+
+def test_the_hint_is_not_shown_when_there_is_a_run(engine_at: Callable[[], Engine]) -> None:
+    async def play(user: User, screen: Workspace) -> None:
+        assert not screen.hint.visible
+
+    scenario(engine_at, play)

@@ -718,6 +718,16 @@ class LoadedConfig:
     text: str
 
 
+def _problems(exc: ValidationError) -> str:
+    """Each problem ``exc`` found, one to a line, as ``where: what`` (the library's own
+    text also dumps the input and links to its documentation, which hides the point)."""
+    lines = []
+    for found in exc.errors(include_url=False, include_input=False, include_context=False):
+        where = ".".join(str(part) for part in found["loc"]) or "(the configuration)"
+        lines.append(f"  {where}: {str(found['msg']).removeprefix('Value error, ')}")
+    return "\n".join(lines)
+
+
 def parse_config(text: str) -> LoadedConfig:
     """Parse and validate TOML configuration text.
 
@@ -731,7 +741,7 @@ def parse_config(text: str) -> LoadedConfig:
     try:
         config = RunConfig.model_validate(raw)
     except ValidationError as exc:
-        raise ConfigError(f"invalid run configuration:\n{exc}") from exc
+        raise ConfigError(f"invalid run configuration:\n{_problems(exc)}") from exc
     return LoadedConfig(config, hashlib.sha256(text.encode("utf-8")).hexdigest(), text)
 
 

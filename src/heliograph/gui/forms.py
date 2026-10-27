@@ -51,6 +51,8 @@ class Field:
     exclusive_maximum: float | None = None
     step: float | None = None
     choices: tuple[Any, ...] = field(default_factory=tuple)
+    shape: str | None = None
+    """For a JSON text box: the schema's type (``object`` or ``array``) the value must be."""
 
 
 def _resolve(node: Schema, defs: Schema) -> Schema:
@@ -101,6 +103,9 @@ def _field(name: str, node: Schema, required: bool, defs: Schema) -> Field:
         exclusive_maximum=node.get("exclusiveMaximum"),
         step=node.get("step"),
         choices=tuple(node.get("enum", ())),
+        shape=str(node["type"])
+        if kind == JSON and node.get("type") in ("object", "array")
+        else None,
     )
 
 
@@ -138,6 +143,10 @@ def problem(one: Field, value: Any) -> str | None:
             return f"must be more than {one.exclusive_minimum:g}"
         if one.exclusive_maximum is not None and value >= one.exclusive_maximum:
             return f"must be less than {one.exclusive_maximum:g}"
+    if one.kind == JSON and one.shape == "object" and not isinstance(value, dict):
+        return "must be a JSON object, like {...}"
+    if one.kind == JSON and one.shape == "array" and not isinstance(value, list):
+        return "must be a JSON list, like [...]"
     if one.kind == CHOICE and value not in one.choices:
         return "must be one of " + ", ".join(str(c) for c in one.choices)
     return None

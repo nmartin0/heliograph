@@ -96,7 +96,11 @@ class Workspace:
     def build(self, dark_mode: ui.dark_mode | None = None) -> None:
         """Lay the screen out in the page being served. The chart follows ``dark_mode``."""
         self.dark_mode = dark_mode
-        with ui.left_drawer(fixed=True).props("width=300 bordered").classes("gap-2") as drawer:
+        with (
+            ui.left_drawer(fixed=True)
+            .props("width=300 bordered breakpoint=500")
+            .classes("gap-2") as drawer
+        ):
             self.drawer = drawer
             self.run_select = ui.select(
                 {}, label="Run", on_change=lambda e: self._start(self._picked_run())
@@ -123,6 +127,11 @@ class Workspace:
             self.nodes_box = ui.column().classes("w-full gap-0")
         with ui.column().classes("w-full h-full gap-1"):
             self.message = ui.label("").classes("text-negative")
+            with ui.row().classes("items-center gap-1") as hint:
+                ui.label("No run to chart yet.")
+                ui.link("Run a configuration in the Tester.", "/tester")
+            self.hint = hint
+            self.hint.set_visibility(False)
             dark = True if dark_mode is None else bool(dark_mode.value)
             self.chart = Chart(dark=dark).classes("w-full").style("height: calc(100vh - 150px)")
             if dark_mode is not None:
@@ -153,11 +162,14 @@ class Workspace:
             self.message.text = str(exc)
             return
         self.runs = {r["id"]: r for r in found if chartable(r)}
+        self.hint.set_visibility(not self.runs)
         self.run_select.set_options({i: f"{i} · {r['status']}" for i, r in self.runs.items()})
         if prefer in self.runs:
             await self.open_run(prefer)
         elif self.choices.run not in self.runs:
             await self.open_run(next(iter(self.runs), None))
+            if prefer is not None:
+                self.message.text = f"there is no run {prefer!r} to chart"
 
     async def open_run(self, run: str | None) -> None:
         """Show ``run``: what it holds is offered, its first stream and strategy are drawn.

@@ -16,9 +16,13 @@ from nicegui import ui
 
 from heliograph.gui.client import Engine, EngineError
 from heliograph.gui.work import Work
+from heliograph.gui.workspace import chartable
 
 UNFINISHED = ("queued", "running")
 """Statuses of a run that is still to go on; any other is its end."""
+
+DEFAULT_NAME = "backtest"
+"""The name of a run when the box for it is left empty."""
 
 POLL_SECONDS = 1.0
 """How often a run is asked after while it goes on."""
@@ -39,14 +43,16 @@ class StrategyTester:
         self._work = Work(self._say)
 
     def build(self) -> None:
-        with ui.left_drawer(fixed=True).props("width=300 bordered").classes("gap-2"):
+        with ui.left_drawer(fixed=True).props("width=300 bordered breakpoint=500").classes("gap-2"):
             ui.label("Saved configurations").classes("text-subtitle2")
             self.saved = ui.select(
                 {}, label="Configuration", on_change=lambda e: self._work.start(self._chose())
             ).classes("w-full")
+            ui.button("Load the saved text again", on_click=self._chose).props(
+                "flat dense no-caps color=white"
+            )
         with ui.column().classes("w-full max-w-4xl gap-2"):
-            self.message = ui.label("").classes("text-negative")
-            self.name = ui.input("Name of the run", value="backtest").classes("w-full")
+            self.name = ui.input("Name of the run", value=DEFAULT_NAME).classes("w-full")
             self.text = (
                 ui.textarea("Configuration (TOML)")
                 .props("outlined autogrow input-class=font-mono")
@@ -57,6 +63,10 @@ class StrategyTester:
                 self.progress = ui.label("")
                 self.link = ui.link("Chart it in the Workspace", "/")
                 self.link.set_visibility(False)
+            # Beside the Run button, not above a form that may be pages long: a message
+            # at the top of the page is out of sight when Run is pressed at the bottom.
+            self.message = ui.label("").classes("text-negative w-full")
+            self.message.style("white-space: pre-wrap")
             self.report = ui.label("").classes("w-full font-mono")
             self.report.style("white-space: pre-wrap")
         self.timer = ui.timer(POLL_SECONDS, self.poll, active=False)
@@ -66,14 +76,18 @@ class StrategyTester:
         await self._work.settled()
 
     def _say(self, text: str) -> None:
+        """Show ``text`` beside the Run button, and bring it into view: the editor above
+        it may be long, and the person is at the bottom of it."""
         self.message.text = text
+        if text:
+            self.message.run_method("scrollIntoView", {"block": "nearest"})
 
     async def load(self) -> None:
         """Offer the configurations the engine keeps."""
         try:
             names = await self.engine.configs()
         except EngineError as exc:
-            self.message.text = str(exc)
+            self._say(str(exc))
             return
         self.saved.set_options(names)
 
@@ -84,23 +98,25 @@ class StrategyTester:
         try:
             self.text.value = await self.engine.config(name)
         except EngineError as exc:
-            self.message.text = str(exc)
+            self._say(str(exc))
             return
-        self.message.text = ""
+        self._say("")
         self.name.value = name
 
     async def run(self) -> None:
         """Submit what the editor holds and follow the run."""
         if not (self.text.value or "").strip():
-            self.message.text = "write or choose a configuration first"
+            self._say("write or choose a configuration first")
             return
-        self.message.text = ""
+        self._say("")
         self.report.text = ""
         self.link.set_visibility(False)
         try:
-            queued = await self.engine.submit(text=self.text.value, name=self.name.value or "")
+            queued = await self.engine.submit(
+                text=self.text.value, name=(self.name.value or "").strip() or DEFAULT_NAME
+            )
         except EngineError as exc:
-            self.message.text = str(exc)
+            self._say(str(exc))
             return
         self.run_id = str(queued["id"])
         self._shown(str(queued.get("status", "queued")))
@@ -115,7 +131,7 @@ class StrategyTester:
             described = await self.engine.backtest(self.run_id)
         except EngineError as exc:
             self._ended()
-            self.message.text = str(exc)
+            self._say(str(exc))
             return
         status = str(described["status"])
         self._shown(status)
@@ -125,10 +141,11 @@ class StrategyTester:
         try:
             self.report.text = str((await self.engine.report(self.run_id))["text"])
         except EngineError as exc:  # e.g. a run dropped at a stop has none
-            self.message.text = str(exc)
+            self._say(str(exc))
             return
-        self.link.props(f'href="{chart_link(self.run_id)}"')
-        self.link.set_visibility(True)
+        if chartable({"status": status}):  # a run that failed has nothing for the Workspace
+            self.link.props(f'href="{chart_link(self.run_id)}"')
+            self.link.set_visibility(True)
 
     def _shown(self, status: str) -> None:
         self.status = status

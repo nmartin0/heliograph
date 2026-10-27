@@ -25,8 +25,13 @@ def scenario(
     window.scenario(engine_at, app.tester, play)
 
 
-def engine_saying(status: str, **more: Any) -> Callable[[], Engine]:
-    """An engine that takes a submission as run ``r-1`` and says ``status`` of it."""
+def engine_saying(
+    status: str,
+    seen: list[tuple[str, str, Any]] | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> Callable[[], Engine]:
+    """An engine that takes a submission as run ``r-1`` and says ``status`` of it; what
+    ``overrides`` has for a path is said instead of the usual, and requests go to ``seen``."""
     answers: dict[str, Any] = {
         "/configs": {"configs": [{"name": "trend"}, {"name": "other"}]},
         "/configs/trend": {"name": "trend", "text": CONFIG},
@@ -34,7 +39,7 @@ def engine_saying(status: str, **more: Any) -> Callable[[], Engine]:
         "/backtests/r-1": {"id": "r-1", "status": status},
         "/backtests/r-1/report": {"id": "r-1", "status": status, "strategies": [], "text": REPORT},
     }
-    return fake({**answers, **more})
+    return fake({**answers, **(overrides or {})}, seen)
 
 
 def test_a_saved_configuration_fills_the_editor() -> None:
@@ -89,6 +94,7 @@ def test_a_run_that_failed_still_shows_its_report() -> None:
         await screen.poll()
         assert screen.progress.text == "r-1: failed: DataError: no data"
         assert screen.report.text == REPORT  # as far as it went
+        assert not screen.link.visible  # a failed run has nothing to chart
         assert screen.go.enabled
 
     scenario(engine_saying("failed: DataError: no data"), play)
@@ -115,7 +121,7 @@ def test_a_configuration_the_engine_refuses_is_told_and_nothing_runs() -> None:
         assert screen.go.enabled
         assert not screen.timer.active
 
-    scenario(engine_saying("complete", **{"/backtests": 400}), play)
+    scenario(engine_saying("complete", overrides={"/backtests": 400}), play)
 
 
 def test_a_run_with_no_report_says_so_and_offers_no_chart() -> None:
@@ -129,7 +135,7 @@ def test_a_run_with_no_report_says_so_and_offers_no_chart() -> None:
         assert not screen.link.visible
         assert screen.go.enabled
 
-    scenario(engine_saying("dropped", **{"/backtests/r-1/report": 409}), play)
+    scenario(engine_saying("dropped", overrides={"/backtests/r-1/report": 409}), play)
 
 
 def test_a_run_the_engine_forgot_ends_the_following() -> None:
@@ -141,7 +147,7 @@ def test_a_run_the_engine_forgot_ends_the_following() -> None:
         assert not screen.timer.active
         assert screen.go.enabled
 
-    scenario(engine_saying("running", **{"/backtests/r-1": 404}), play)
+    scenario(engine_saying("running", overrides={"/backtests/r-1": 404}), play)
 
 
 def test_the_engine_not_answering_is_told_on_the_page() -> None:
@@ -182,6 +188,19 @@ def test_the_workspace_opens_on_the_run_it_is_told_though_not_the_newest() -> No
     window.scenario(fake(answers), lambda engine: workspace(engine, "gone-0"), newest)
 
 
+def test_a_run_that_is_not_there_is_said_not_silently_swapped() -> None:
+    answers = {
+        "/backtests": {"backtests": [{"id": "r-1", "status": "complete"}]},
+        **run_answers("r-1"),
+    }
+
+    async def play(user: User, screen: Any) -> None:
+        assert screen.choices.run == "r-1"
+        assert screen.message.text == "there is no run 'gone-0' to chart"
+
+    window.scenario(fake(answers), lambda engine: workspace(engine, "gone-0"), play)
+
+
 def test_a_new_run_clears_the_last_ones_report_until_it_has_its_own() -> None:
     async def play(user: User, screen: StrategyTester) -> None:
         screen.text.value = CONFIG
@@ -192,5 +211,35 @@ def test_a_new_run_clears_the_last_ones_report_until_it_has_its_own() -> None:
         assert screen.report.text == ""
         assert not screen.link.visible
         assert screen.timer.active
+
+    scenario(engine_saying("complete"), play)
+
+
+def test_a_run_left_without_a_name_is_named_by_default() -> None:
+    sent: list[tuple[str, str, Any]] = []
+
+    async def play(user: User, screen: StrategyTester) -> None:
+        screen.text.value = CONFIG
+        screen.name.value = "  "
+        await screen.run()
+        assert [b for m, p, b in sent if (m, p) == ("POST", "/backtests")] == [
+            {"config": CONFIG, "name": "backtest"}
+        ]
+
+    scenario(engine_saying("complete", seen=sent), play)
+
+
+def test_the_saved_text_can_be_loaded_again_over_edits() -> None:
+    async def play(user: User, screen: StrategyTester) -> None:
+        screen.saved.set_value("trend")
+        await screen.settled()
+        screen.text.value = "edited"
+        await screen._chose()  # what the button beside the choice calls
+        assert screen.text.value == CONFIG
+        screen.saved.set_value(None)
+        await screen.settled()
+        screen.text.value = "typed afresh"
+        await screen._chose()  # nothing chosen: nothing to load, nothing lost
+        assert screen.text.value == "typed afresh"
 
     scenario(engine_saying("complete"), play)

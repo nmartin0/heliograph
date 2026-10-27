@@ -3610,3 +3610,87 @@ path = "src/heliograph/gui/workspace.py"
 old = "        if prefer in self.runs:\n"
 new = "        if False:\n"
 tests = ["tests/gui/test_tester.py::test_the_workspace_opens_on_the_run_it_is_told_though_not_the_newest"]
+
+[[control]]
+describes = "a configuration error says where each problem is"
+path = "src/heliograph/app/config.py"
+old = "        where = \".\".join(str(part) for part in found[\"loc\"]) or \"(the configuration)\"\n"
+new = "        where = \"?\"\n"
+tests = ["tests/app/test_composition.py::test_a_configuration_error_lists_where_and_why_without_the_librarys_dump"]
+
+[[control]]
+describes = "a check of ours is told without the library's label"
+path = "src/heliograph/app/config.py"
+old = "str(found['msg']).removeprefix('Value error, ')"
+new = "str(found['msg'])"
+tests = ["tests/app/test_composition.py::test_a_check_of_ours_is_told_without_the_librarys_label_for_it"]
+
+[[control]]
+describes = "a run that failed offers no chart link"
+path = "src/heliograph/gui/tester.py"
+old = "        if chartable({\"status\": status}):"
+new = "        if True:"
+tests = ["tests/gui/test_tester.py::test_a_run_that_failed_still_shows_its_report"]
+
+[[control]]
+describes = "a run left without a name is named by default"
+path = "src/heliograph/gui/tester.py"
+old = "(self.name.value or \"\").strip() or DEFAULT_NAME"
+new = "self.name.value or \"\""
+tests = ["tests/gui/test_tester.py::test_a_run_left_without_a_name_is_named_by_default"]
+
+[[control]]
+describes = "with nothing chosen there is nothing to load again"
+path = "src/heliograph/gui/tester.py"
+old = "        if name is None:\n            return\n"
+new = "        if name is None:\n            self.text.value = \"\"\n            return\n"
+tests = ["tests/gui/test_tester.py::test_the_saved_text_can_be_loaded_again_over_edits"]
+
+[[control]]
+describes = "the Workspace says where runs come from when it has none"
+path = "src/heliograph/gui/workspace.py"
+old = "        self.hint.set_visibility(not self.runs)\n"
+new = "        pass\n"
+tests = ["tests/gui/test_workspace.py::test_with_no_run_to_chart_the_screen_says_where_runs_come_from"]
+
+[[control]]
+describes = "the Workspace's hint goes away when there is a run"
+path = "src/heliograph/gui/workspace.py"
+old = "        self.hint.set_visibility(not self.runs)\n"
+new = "        self.hint.set_visibility(True)\n"
+tests = ["tests/gui/test_workspace.py::test_the_hint_is_not_shown_when_there_is_a_run"]
+
+[[control]]
+describes = "a run asked for that is not there is said"
+path = "src/heliograph/gui/workspace.py"
+old = "            if prefer is not None:\n                self.message.text = f\"there is no run {prefer!r} to chart\"\n"
+new = "            pass\n"
+tests = ["tests/gui/test_tester.py::test_a_run_that_is_not_there_is_said_not_silently_swapped"]
+
+[[control]]
+describes = "a filter nothing matches says so"
+path = "src/heliograph/gui/catalogue.py"
+old = "ui.label(\"No plug-in matches.\").classes(\"text-caption q-pa-sm\")"
+new = "pass"
+tests = ["tests/gui/test_catalogue.py::test_a_filter_nothing_matches_says_so"]
+
+[[control]]
+describes = "a JSON box refuses an object where a list is wanted"
+path = "src/heliograph/gui/forms.py"
+old = "    if one.kind == JSON and one.shape == \"array\" and not isinstance(value, list):\n"
+new = "    if False:\n"
+tests = ["tests/gui/test_forms.py::test_a_json_box_holds_the_shape_the_schema_says"]
+
+[[control]]
+describes = "a JSON box refuses a list where an object is wanted"
+path = "src/heliograph/gui/forms.py"
+old = "    if one.kind == JSON and one.shape == \"object\" and not isinstance(value, dict):\n"
+new = "    if False:\n"
+tests = ["tests/gui/test_forms.py::test_a_json_box_holds_the_shape_the_schema_says"]
+
+[[control]]
+describes = "a JSON box knows its shape from the schema"
+path = "src/heliograph/gui/forms.py"
+old = "        if kind == JSON and node.get(\"type\") in (\"object\", \"array\")\n"
+new = "        if False\n"
+tests = ["tests/gui/test_forms.py::test_a_json_box_holds_the_shape_the_schema_says"]

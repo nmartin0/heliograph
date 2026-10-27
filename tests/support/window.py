@@ -4,6 +4,7 @@
 """The window's pages driven in NiceGUI's simulated browser, on a real or a made-up engine."""
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import unquote
@@ -66,12 +67,18 @@ class Gate:
         await self._open.wait()
 
 
-def fake(answers: dict[str, Any]) -> Callable[[], Engine]:
+def fake(
+    answers: dict[str, Any], seen: list[tuple[str, str, Any]] | None = None
+) -> Callable[[], Engine]:
     """An engine that answers each path (and no other, with 500) with the JSON given for it;
     an integer answers with that status and an error; a ``(gate, json)`` pair answers with
-    the JSON once the ``Gate`` is opened (a slow engine, held up by a test)."""
+    the JSON once the ``Gate`` is opened (a slow engine, held up by a test). Each request
+    is added to ``seen`` as (method, path, the JSON it carried or None)."""
 
     async def answer(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            body = json.loads(request.content) if request.content else None
+            seen.append((request.method, request.url.path.removeprefix("/api"), body))
         path = request.url.path.removeprefix("/api")
         query = unquote(request.url.query.decode())
         path = f"{path}?{query}" if f"{path}?{query}" in answers else path

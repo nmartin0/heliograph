@@ -249,3 +249,14 @@ def test_a_required_value_not_yet_given_is_asked_for_from_the_start(
         assert screen.preview.content == 'params = { venue = "kraken" }\n'
 
     scenario(fake({"/plugins": LISTED, "/plugins/oscillators/zorbo": required}), play)
+
+
+def test_a_filter_nothing_matches_says_so(engine_at: Callable[[], Engine]) -> None:
+    async def play(user: User, screen: Catalogue) -> None:
+        screen.search.set_value("zzzz")
+        await user.should_see("No plug-in matches.")
+        screen.search.set_value("")
+        await user.should_not_see("No plug-in matches.")
+        await user.should_see("zorbo")
+
+    scenario(fake({"/plugins": LISTED}), play)

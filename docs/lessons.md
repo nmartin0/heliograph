@@ -299,6 +299,18 @@ within each section.
 - **Headless Chromium here reports `Invalid language tag: en-US@posix`**
   (the workspace's locale) unless the page is opened with `locale="en-US"`.
 
+- **Use the window before trusting its tests.** The simulated browser said
+  all was well while a real one showed: an empty Workspace that was just
+  blank; a "chart it" link for a run that had nothing to chart; an error
+  shown at the top of a page that is pages long, out of sight when the Run
+  button at its bottom was pressed; a dark switch the colour of its header
+  (invisible); controls that vanish below 1,024 px (Quasar folds a drawer
+  there, and no button opens it); an empty name sent to the engine instead of
+  its default; a JSON box that took a list where the schema says object.
+  Walk each screen in a browser (`tests/` cannot see layout), with an empty
+  engine, a failed run, a long form, a narrow window, the engine stopped.
+  Put a message beside the control that caused it.
+
 ## Trading platforms
 
 - MQL5's signal average counts silent modules, so adding a filter quietly

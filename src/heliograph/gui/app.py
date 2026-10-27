@@ -33,7 +33,7 @@ def frame(current: str) -> ui.dark_mode:
             if path == current:
                 link.classes("text-bold underline")
         ui.space()
-        ui.switch("dark", value=True).bind_value_to(dark)
+        ui.switch("dark", value=True).props("color=white").bind_value_to(dark)
     return dark
 
 

@@ -72,7 +72,7 @@ class Catalogue:
         self.form: SettingsForm | None = None
 
     def build(self) -> None:
-        with ui.left_drawer(fixed=True).props("width=300 bordered"):
+        with ui.left_drawer(fixed=True).props("width=300 bordered breakpoint=500"):
             self.search = ui.input("Filter", on_change=lambda e: self._listed()).classes("w-full")
             self.listing = ui.column().classes("w-full gap-0")
         with ui.column().classes("w-full max-w-3xl gap-2"):
@@ -97,6 +97,12 @@ class Catalogue:
         needle = (self.search.value or "").strip().lower()
         self.listing.clear()
         with self.listing:
+            if needle and not any(
+                needle in f"{p['name']} {p['summary']} {k}".lower()
+                for k, g in self.plugins.items()
+                for p in g
+            ):
+                ui.label("No plug-in matches.").classes("text-caption q-pa-sm")
             for kind, group in self.plugins.items():
                 shown = [p for p in group if needle in f"{p['name']} {p['summary']} {kind}".lower()]
                 if not shown:
