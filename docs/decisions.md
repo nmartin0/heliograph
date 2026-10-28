@@ -1072,3 +1072,23 @@ at the first drop is no use for a day's run.
 **Rejected:** dropping the first batch whole (a busy market's first batch holds news);
 reading the time from the exchange's own clock (the run's clock is the only one).
 
+## D46 · Signals leave through sinks, each retried on its own (2026-10-28)
+
+**Decision:** `SignalSink` (`core/sinks.py`) is the port: async `emit(signal)` returning
+a `Delivery`, `health_check()` and `close()`. How a sink fails says what to do:
+`SinkUnavailableError` is asked again, `InvalidValueError` never, `Delivery(ok=False)` is
+a sink declining. `Dispatcher` (`app/dispatch.py`) gives each signal to all sinks at
+once; an unavailable sink is retried with a doubling wait (capped at a minute) up to
+`retries` more times, independently of the others, and a sink's bug is its outcome's
+detail rather than an exception in the run. A signal a sink accepted is not given to
+it again (ids are stable), so a replayed day does not notify twice. The result is an
+`Outcome` per sink.
+
+**Why:** a person is told on whatever they carry; one phone service being down must
+neither lose the signal on the others nor stop the session, and a retry after a lost
+reply must not send twice.
+
+**Not yet:** the sinks themselves (ntfy, webhook, desktop, Apprise), the `[[sinks]]`
+configuration, recording outcomes in the journal, and the signal-rate and staleness
+alerts.
+

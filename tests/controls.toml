@@ -4453,3 +4453,80 @@ path = "src/heliograph/plugins/ccxt_source.py"
 old = "            except ccxt.DDoSProtection as exc:\n                raise SourceUnavailableError(f\"{self.params.exchange}: {exc}\") from exc\n            except ccxt.NetworkError as exc:\n                # The connection dropped"
 new = "            except ccxt.NetworkError as exc:\n                # The connection dropped"
 tests = ["tests/plugins/test_ccxt_source.py::test_an_exchange_that_thinks_it_is_attacked_is_not_asked_again_live"]
+
+[[control]]
+describes = "a dispatcher gives a signal to every sink and reports in name order"
+path = "src/heliograph/app/dispatch.py"
+old = "names = sorted(self._sinks)\n        return tuple("
+new = "names = list(self._sinks)\n        return tuple("
+tests = ["tests/app/test_dispatch.py::test_a_signal_goes_to_every_sink_and_each_outcome_is_reported_in_name_order"]
+
+[[control]]
+describes = "an unavailable sink is retried with a doubling wait"
+path = "src/heliograph/app/dispatch.py"
+old = "self._backoff * 2 ** (attempts - 1)"
+new = "self._backoff"
+tests = ["tests/app/test_dispatch.py::test_an_unavailable_sink_is_tried_again_with_a_doubling_wait_until_it_delivers"]
+
+[[control]]
+describes = "a sink that stays unavailable is given up on after the retries"
+path = "src/heliograph/app/dispatch.py"
+old = "                if attempts > self._retries:\n"
+new = "                if attempts > self._retries + 5:\n"
+tests = ["tests/app/test_dispatch.py::test_a_sink_that_stays_unavailable_is_given_up_on_after_the_retries"]
+
+[[control]]
+describes = "the wait between tries of a sink is capped"
+path = "src/heliograph/app/dispatch.py"
+old = "min(self._backoff * 2 ** (attempts - 1), LONGEST_WAIT)"
+new = "self._backoff * 2 ** (attempts - 1)"
+tests = ["tests/app/test_dispatch.py::test_the_wait_between_tries_is_capped"]
+
+[[control]]
+describes = "a refusal for good is not retried"
+path = "src/heliograph/app/dispatch.py"
+old = "            except InvalidValueError as exc:\n                return Outcome(name, signal.id, False, attempts, f\"refused: {exc}\")\n"
+new = "            except InvalidValueError as exc:\n                raise SinkUnavailableError(str(exc)) from exc\n"
+tests = ["tests/app/test_dispatch.py::test_a_refusal_for_good_is_not_retried"]
+
+[[control]]
+describes = "one sink's bug does not stop the others"
+path = "src/heliograph/app/dispatch.py"
+old = "            except Exception as exc:  # one sink's bug must not stop the others\n                return Outcome(name, signal.id, False, attempts, f\"{type(exc).__name__}: {exc}\")\n"
+new = "            except ZeroDivisionError as exc:\n                return Outcome(name, signal.id, False, attempts, str(exc))\n"
+tests = ["tests/app/test_dispatch.py::test_one_sinks_failure_does_not_stop_the_others"]
+
+[[control]]
+describes = "a signal a sink accepted is not given to it again"
+path = "src/heliograph/app/dispatch.py"
+old = "                self._delivered.add((name, signal.id))\n"
+new = "                pass\n"
+tests = ["tests/app/test_dispatch.py::test_a_signal_a_sink_accepted_is_not_given_to_it_again"]
+
+[[control]]
+describes = "a sink that declines is not marked delivered"
+path = "src/heliograph/app/dispatch.py"
+old = "            if delivery.ok:\n                self._delivered"
+new = "            if True:\n                self._delivered"
+tests = ["tests/app/test_dispatch.py::test_a_signal_a_sink_accepted_is_not_given_to_it_again"]
+
+[[control]]
+describes = "dispatcher settings cannot be negative"
+path = "src/heliograph/app/dispatch.py"
+old = "        if retries < 0 or backoff < 0:\n"
+new = "        if False:\n"
+tests = ["tests/app/test_dispatch.py::test_negative_retries_or_backoff_are_refused"]
+
+[[control]]
+describes = "a sink that cannot answer its health check is not ok"
+path = "src/heliograph/app/dispatch.py"
+old = "            except Exception as exc:  # a broken sink is an unhealthy one, not a crash\n"
+new = "            except ZeroDivisionError as exc:\n"
+tests = ["tests/app/test_dispatch.py::test_health_is_each_sinks_own_report_and_a_sink_that_cannot_answer_is_not_ok"]
+
+[[control]]
+describes = "closing the dispatcher closes every sink"
+path = "src/heliograph/app/dispatch.py"
+old = "            except Exception as exc:\n                failures.append(exc)\n        if failures:\n            raise failures[0]\n"
+new = "            except Exception as exc:\n                raise\n"
+tests = ["tests/app/test_dispatch.py::test_closing_closes_every_sink_and_raises_the_first_failure_after"]

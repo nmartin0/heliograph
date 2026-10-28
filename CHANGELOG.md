@@ -407,3 +407,5 @@ All notable changes to Heliograph are recorded here. The format follows
   on the wall clock, journalled as it goes, stopped cleanly by SIGTERM or Ctrl-C.
 - D45 records the CCXT live feed fixes: replayed and repeated trades dropped,
   trades without a time skipped, dropped connections retried.
+- D46 records the signal sink port and the dispatcher: every signal to every
+  sink, each retried on its own, none notified twice.

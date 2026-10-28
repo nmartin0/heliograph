@@ -233,7 +233,9 @@ Wizard.)
 
 ## Phase 4 · Signals and paper trading
 
-- Sinks: journal, ntfy, desktop, webhook, Apprise; dispatcher with retries.
+- Sinks: journal, ntfy, desktop, webhook, Apprise.
+  - [x] The port and the dispatcher with retries (D46).
+  - [ ] The sinks themselves, the `[[sinks]]` configuration, outcomes in the journal.
 - Optional: a published-records sink writing signals, simulated fills and
   daily equity to a separate SQLite file that Elysium reads as a silo (D20).
 - The second live source: Alpaca, for US stocks (D21).
