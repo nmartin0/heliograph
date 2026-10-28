@@ -50,7 +50,7 @@ exchange does not list, a request it does not support, a refused key) is
 
 import asyncio
 import math
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import AsyncIterator, Mapping, Sequence
 from functools import cache
 from typing import Any
@@ -60,6 +60,7 @@ import ccxt.async_support
 import ccxt.pro
 from pydantic import field_validator
 
+from heliograph.core.clock import Clock, WallClock
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Instrument, Message, Point
 from heliograph.core.sources import (
@@ -78,6 +79,8 @@ from heliograph.plugins.conformance import Conformance
 from heliograph.plugins.manifest import Manifest, Params, Plugin, param
 
 MS = NANOS_PER_MILLISECOND
+SEEN = 2000
+"""How many recent live trades are remembered, to drop one the exchange sends again."""
 
 
 class CcxtParams(Params):
@@ -105,6 +108,15 @@ class CcxtParams(Params):
         description="Seconds before the first retry, doubling for each after",
         ge=0.0,
         le=600.0,
+    )
+    live_stale: float = param(
+        5.0,
+        description=(
+            "Seconds before a live subscription began that a trade may be stamped and still "
+            "be passed on; older ones are the exchange replaying history (Kraken sends its last 50)"
+        ),
+        ge=0.0,
+        le=3600.0,
     )
 
     @field_validator("exchange")
@@ -190,6 +202,9 @@ class CcxtSource(Plugin[CcxtParams]):
         self._throttle: Throttle | None = None
         self._client: Any = None
         self._markets_loaded = False
+        self._clock: Clock = WallClock()
+        self.dropped = {"stale": 0, "undated": 0, "repeated": 0}
+        """Live trades not passed on, by reason (counted for the whole life of the source)."""
 
     # -- what it declares ------------------------------------------------------------
 
@@ -425,6 +440,11 @@ class CcxtSource(Plugin[CcxtParams]):
             wanted[self._symbol(subscription.instrument)] = subscription.instrument
         await self._markets()
         symbols = sorted(wanted)
+        # Trades stamped before the subscription began are the exchange replaying
+        # its recent history (Kraken's snapshot), not news.
+        floor = self._clock.now() - round(self.params.live_stale * 1_000_000_000)
+        seen: OrderedDict[tuple[Any, ...], None] = OrderedDict()
+        failures = 0
         while True:
             try:
                 if len(symbols) == 1:
@@ -433,9 +453,35 @@ class CcxtSource(Plugin[CcxtParams]):
                     trades = await self._exchange.watch_trades_for_symbols(symbols)
             except _PERMANENT as exc:
                 raise InvalidValueError(f"{self.params.exchange}: {exc}") from exc
+            except ccxt.DDoSProtection as exc:
+                raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
+            except ccxt.NetworkError as exc:
+                # The connection dropped: ask again, as a request is, and give up
+                # only after as many failures in a row.
+                if failures >= self.params.retries:
+                    raise SourceUnavailableError(
+                        f"{self.params.exchange}: {exc} (tried {failures + 1} times)"
+                    ) from exc
+                await asyncio.sleep(min(self.params.backoff * 2**failures, LONGEST_WAIT))
+                failures += 1
+                continue
             except ccxt.BaseError as exc:
                 raise SourceUnavailableError(f"{self.params.exchange}: {exc}") from exc
+            failures = 0
             for trade in trades:
+                if trade.get("timestamp") is None:
+                    self.dropped["undated"] += 1
+                    continue
+                if trade["timestamp"] * MS < floor:
+                    self.dropped["stale"] += 1
+                    continue
+                key = (trade["symbol"], trade["id"]) if trade.get("id") else _trade_key(trade)
+                if key in seen:
+                    self.dropped["repeated"] += 1
+                    continue
+                seen[key] = None
+                if len(seen) > SEEN:
+                    seen.popitem(last=False)
                 yield _point(wanted[trade["symbol"]], trade)
 
     # -- the rest ----------------------------------------------------------------------

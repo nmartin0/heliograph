@@ -249,9 +249,12 @@ Wizard.)
   - [x] SIGTERM must flush and close the journal (`heliograph live`: the
     signal cancels the session, which ends marked complete, D44; the engine's
     process does not run live sessions yet).
-  - [ ] Kraken's websocket replays its last 50 trades on each subscribe,
-    trade ids are dropped, nothing reconnects, and a live trade without a
-    time is a TypeError.
+  - [x] Kraken's websocket: the replayed last 50 trades are dropped (older
+    than the subscription less `live_stale`, 5 s), a trade sent again is
+    dropped by its id or by what it is, a dropped connection is reconnected
+    (as many failures in a row as `retries`), and a trade without a time is
+    skipped and counted (D45). Not carried: the id itself (a `Point` holds
+    numbers only); owner to run `uv run pytest -m live` against Kraken.
   - [ ] a person's took-it or skipped answer must reach the strategy's
     position held.
   - [ ] stage objects keep state, so optimisation must build them afresh per

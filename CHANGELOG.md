@@ -405,3 +405,5 @@ All notable changes to Heliograph are recorded here. The format follows
   settling and an end mark; the roadmap ticks the first pre-live fixes.
 - D44 records the live session and `heliograph live`: the backtest's assembly
   on the wall clock, journalled as it goes, stopped cleanly by SIGTERM or Ctrl-C.
+- D45 records the CCXT live feed fixes: replayed and repeated trades dropped,
+  trades without a time skipped, dropped connections retried.

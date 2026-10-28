@@ -20,6 +20,7 @@ import ccxt
 import pytest
 from pydantic import ValidationError
 
+from heliograph.core.clock import SimulatedClock
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Message, Point
 from heliograph.core.sources import (
@@ -142,6 +143,10 @@ class Faked(CcxtSource):
 
     manifest = CcxtSource.manifest
     exchange: FakeExchange = FakeExchange()
+
+    def __init__(self, params: CcxtParams) -> None:
+        super().__init__(params)
+        self._clock = SimulatedClock(Timestamp(T0 * MS))  # live trades are timed from here
 
     def _connect(self) -> Any:
         return Faked.exchange
@@ -396,14 +401,83 @@ def test_live_trades_are_delivered_as_the_exchange_sends_them() -> None:
     assert ("watch_trades_for_symbols", ("BTC/USD", "ETH/USD")) in Faked.exchange.calls
 
 
-def test_one_live_symbol_is_watched_alone_and_its_failure_is_the_ports_error() -> None:
-    built, _ = source(FakeExchange(live=[[unified_trade(T0, 1)], ccxt.NetworkError("dropped")]))
+def live_points(built: CcxtSource, count: int) -> list[Point]:
+    async def scenario() -> list[Message]:
+        stream = built.subscribe([Subscription(instrument=BTC, kind="trades")])
+        try:
+            return await first(stream, count)
+        finally:
+            await stream.aclose()  # type: ignore[attr-defined]
+            await built.close()
+
+    return [m for m in asyncio.run(scenario()) if isinstance(m, Point)]
+
+
+def test_a_live_connection_that_keeps_failing_ends_as_the_ports_error_after_the_retries() -> None:
+    drops = [ccxt.NetworkError("dropped")] * 4
+    built, _ = source(FakeExchange(live=[[unified_trade(T0, 1)], *drops]), retries=3)
 
     async def scenario() -> list[Message]:
         return [m async for m in built.subscribe([Subscription(instrument=BTC, kind="trades")])]
 
-    with pytest.raises(SourceUnavailableError, match="kraken: dropped"):
+    with pytest.raises(SourceUnavailableError, match=r"kraken: dropped \(tried 4 times\)"):
         asyncio.run(scenario())
+
+
+def test_a_dropped_live_connection_is_reconnected_and_the_count_starts_again_after_data() -> None:
+    drop = ccxt.NetworkError("dropped")
+    batches = [drop, [unified_trade(T0, 1)], drop, drop, drop, [unified_trade(T0 + 1, 2)]]
+    built, _ = source(FakeExchange(live=batches), retries=3)
+    assert [p.values["price"] for p in live_points(built, 2)] == [1, 2]
+
+
+def test_an_exchange_that_thinks_it_is_attacked_is_not_asked_again_live() -> None:
+    built, _ = source(FakeExchange(live=[ccxt.DDoSProtection("banned"), [unified_trade(T0, 1)]]))
+    with pytest.raises(SourceUnavailableError, match="banned"):
+        live_points(built, 1)
+
+
+def test_trades_the_exchange_replays_from_before_the_subscription_are_not_news() -> None:
+    """Kraken sends its last 50 trades on subscribing; only those since (less 5 s) pass."""
+    old = [unified_trade(T0 - 60_000 + i, 9) for i in range(3)]
+    edge = unified_trade(T0 - 5_000, 5)  # exactly the stale limit: kept
+    fresh = unified_trade(T0 + 1, 2)
+    built, _ = source(FakeExchange(live=[[*old, edge, fresh]]))
+    assert [p.values["price"] for p in live_points(built, 2)] == [5, 2]
+    assert built.dropped == {"stale": 3, "undated": 0, "repeated": 0}
+
+
+def test_the_stale_limit_is_a_setting() -> None:
+    older = unified_trade(T0 - 20_000, 3)
+    built, _ = source(FakeExchange(live=[[older]]), live_stale=30)
+    assert [p.values["price"] for p in live_points(built, 1)] == [3]
+
+
+def test_a_live_trade_sent_again_is_dropped_by_its_id_or_by_what_it_is() -> None:
+    a = unified_trade(T0 + 1, 1) | {"id": "a"}
+    again = unified_trade(T0 + 2, 99) | {"id": "a"}  # same id, whatever it says
+    plain = unified_trade(T0 + 3, 3)
+    plain_again = unified_trade(T0 + 3, 3)  # no id: the same time, price, size and side
+    other = unified_trade(T0 + 3, 4)
+    built, _ = source(FakeExchange(live=[[a, again, plain], [plain_again, other]]))
+    assert [p.values["price"] for p in live_points(built, 3)] == [1, 3, 4]
+    assert built.dropped["repeated"] == 2
+
+
+def test_the_trades_remembered_to_spot_a_repeat_are_bounded() -> None:
+    from heliograph.plugins import ccxt_source
+
+    count = ccxt_source.SEEN + 5
+    batch = [unified_trade(T0 + i, 1 + i) for i in range(count)]
+    built, _ = source(FakeExchange(live=[batch, [batch[0]]]))
+    assert len(live_points(built, count + 1)) == count + 1  # the first was forgotten, so passes
+
+
+def test_a_live_trade_without_a_time_is_skipped_and_counted_not_a_crash() -> None:
+    undated = unified_trade(T0, 1) | {"timestamp": None}
+    built, _ = source(FakeExchange(live=[[undated, unified_trade(T0 + 1, 2)]]))
+    assert [p.values["price"] for p in live_points(built, 1)] == [2]
+    assert built.dropped["undated"] == 1
 
 
 def test_live_bars_are_refused_the_exchange_sends_trades() -> None:

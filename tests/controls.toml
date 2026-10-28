@@ -4378,3 +4378,78 @@ path = "src/heliograph/app/run.py"
 old = "    _runnable(config, \"live\")\n    if journal.exists():\n"
 new = "    _runnable(config, \"live\")\n    if journal.exists() and False:\n"
 tests = ["tests/app/test_live_session.py::test_a_session_does_not_overwrite_a_journal"]
+
+[[control]]
+describes = "a live source drops what the exchange replays from before the subscription"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if trade[\"timestamp\"] * MS < floor:\n"
+new = "                if False:\n"
+tests = [
+    "tests/plugins/test_ccxt_source.py::test_trades_the_exchange_replays_from_before_the_subscription_are_not_news",
+]
+
+[[control]]
+describes = "the live stale limit is measured from the subscription's start less the setting"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "        floor = self._clock.now() - round(self.params.live_stale * 1_000_000_000)\n"
+new = "        floor = self._clock.now()\n"
+tests = [
+    "tests/plugins/test_ccxt_source.py::test_trades_the_exchange_replays_from_before_the_subscription_are_not_news",
+    "tests/plugins/test_ccxt_source.py::test_the_stale_limit_is_a_setting",
+]
+
+[[control]]
+describes = "a live trade sent again is dropped"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if key in seen:\n"
+new = "                if False:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_live_trade_sent_again_is_dropped_by_its_id_or_by_what_it_is"]
+
+[[control]]
+describes = "a live trade is told apart by its id when it has one"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                key = (trade[\"symbol\"], trade[\"id\"]) if trade.get(\"id\") else _trade_key(trade)\n"
+new = "                key = _trade_key(trade)\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_live_trade_sent_again_is_dropped_by_its_id_or_by_what_it_is"]
+
+[[control]]
+describes = "the trades remembered to spot a repeat are bounded"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if len(seen) > SEEN:\n"
+new = "                if False:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_the_trades_remembered_to_spot_a_repeat_are_bounded"]
+
+[[control]]
+describes = "a live trade without a time is skipped and counted"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if trade.get(\"timestamp\") is None:\n"
+new = "                if False:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_live_trade_without_a_time_is_skipped_and_counted_not_a_crash"]
+
+[[control]]
+describes = "a dropped live connection is reconnected"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                await asyncio.sleep(min(self.params.backoff * 2**failures, LONGEST_WAIT))\n                failures += 1\n                continue\n"
+new = "                raise SourceUnavailableError(f\"{self.params.exchange}: {exc}\") from exc\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_dropped_live_connection_is_reconnected_and_the_count_starts_again_after_data"]
+
+[[control]]
+describes = "the count of live failures starts again after data arrives"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            failures = 0\n            for trade in trades:\n"
+new = "            for trade in trades:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_dropped_live_connection_is_reconnected_and_the_count_starts_again_after_data"]
+
+[[control]]
+describes = "a live connection that keeps failing gives up after the retries"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "                if failures >= self.params.retries:\n"
+new = "                if False:\n"
+tests = ["tests/plugins/test_ccxt_source.py::test_a_live_connection_that_keeps_failing_ends_as_the_ports_error_after_the_retries"]
+
+[[control]]
+describes = "an exchange that thinks it is attacked is not asked again live"
+path = "src/heliograph/plugins/ccxt_source.py"
+old = "            except ccxt.DDoSProtection as exc:\n                raise SourceUnavailableError(f\"{self.params.exchange}: {exc}\") from exc\n            except ccxt.NetworkError as exc:\n                # The connection dropped"
+new = "            except ccxt.NetworkError as exc:\n                # The connection dropped"
+tests = ["tests/plugins/test_ccxt_source.py::test_an_exchange_that_thinks_it_is_attacked_is_not_asked_again_live"]

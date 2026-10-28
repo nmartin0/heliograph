@@ -1054,3 +1054,21 @@ drift.
 running a live session from the engine's process and window; the paper broker and
 sinks (next in Phase 4).
 
+## D45 · The CCXT live feed passes on only news, once (2026-10-27)
+
+**Decision:** `CcxtSource.subscribe` drops, and counts in `dropped` by reason, a
+trade stamped earlier than the subscription's start less `live_stale` seconds (the
+exchange replaying its recent history: Kraken sends its last 50 on subscribing), a
+trade it has already passed on (by its id, or by time, price, size and side when it
+has none; the last 2000 are remembered), and a trade with no time. A dropped
+connection (`NetworkError`) is retried with the request backoff, giving up with
+`SourceUnavailableError` after `retries` failures in a row; an exchange that thinks it
+is attacked is never asked again.
+
+**Why:** a replayed snapshot would be journalled as trades that happened at the
+moment of subscribing and move the first bars; a connection that ended the session
+at the first drop is no use for a day's run.
+
+**Rejected:** dropping the first batch whole (a busy market's first batch holds news);
+reading the time from the exchange's own clock (the run's clock is the only one).
+
