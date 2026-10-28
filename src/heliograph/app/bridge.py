@@ -18,7 +18,8 @@ delay after it happened (decision D24).
 **Live.** ``run_live`` runs every subscription as a task feeding one queue.
 A single consumer takes each message off the queue, checks it is something
 that source was subscribed to, stamps it with the clock at that moment, and
-publishes it, so stamps follow publication order and never go back. A bar
+gives it to a ``LiveEngine``, so stamps follow publication order and never go
+back; a timekeeper task wakes the engine for alarms and for settling. A bar
 can never be known before it closes; when one arrives up to ``skew`` before
 its end by our clock (the venue's clock runs ahead of ours) it is held until
 our clock reaches its end, and one arriving earlier than that is a partial
@@ -32,6 +33,7 @@ from types import TracebackType
 from typing import Any, Self
 
 from heliograph.core.clock import Clock
+from heliograph.core.engine import LiveEngine
 from heliograph.core.errors import InvalidValueError, OutOfOrderError
 from heliograph.core.messages import Bar, Message, Point
 from heliograph.core.sources import (
@@ -189,24 +191,31 @@ class HistoryFeed(Iterator[Message]):
 
 async def run_live(
     feeds: Sequence[tuple[DataSource, Sequence[Subscription]]],
+    engine: LiveEngine,
     clock: Clock,
-    publish: Callable[[Message], None],
     *,
     sleep: Sleep = asyncio.sleep,
     skew: int = SKEW,
 ) -> None:
-    """Publish live data from every source, stamped on arrival, until all end.
+    """Publish live data from every source through ``engine``, stamped on arrival, until all end.
 
-    ``clock`` and ``sleep`` must agree: the real time and ``asyncio.sleep``
-    in use, or a simulated clock and a sleep that advances it in tests.
+    ``clock`` must be the engine's, and ``sleep`` must agree with it: the real
+    time and ``asyncio.sleep`` in use, or a simulated clock and a sleep that
+    advances it in tests. Alongside the sources, a timekeeper wakes the engine
+    when an alarm falls due or an instant has passed, so alarms fire and
+    instants settle while nothing arrives. The run ends with the engine's
+    ``finish`` (the end mark), also when it is cancelled, so a stopped session
+    leaves a complete journal; it does not when a source or a handler fails.
 
     Raises:
         InvalidValueError: for data a source was not subscribed to, or a bar
             arriving more than ``skew`` before it closed (a partial bar).
-        Whatever the first failing source raised; the others are cancelled.
+        Whatever the first failing source or handler raised; the others are
+        cancelled.
     """
     type Wanted = frozenset[tuple[str, str, int | None]]
     queue: asyncio.Queue[tuple[Wanted, Message] | None] = asyncio.Queue()
+    changed = asyncio.Event()
 
     async def produce(source: DataSource, subscriptions: Sequence[Subscription]) -> None:
         wanted = frozenset((s.instrument.key, s.kind, s.bar_size) for s in subscriptions)
@@ -231,17 +240,47 @@ async def run_live(
                 raise InvalidValueError(f"a source sent {_describe(_what(data))} unasked")
             if isinstance(data, Bar):
                 await _until_closed(data, clock, sleep, skew)
-            publish(known_now(data, clock.now()))
+            engine.receive(known_now(data, clock.now()))
+            changed.set()
+        keeper.cancel()
+
+    async def keep_time() -> None:
+        while True:
+            wake = engine.next_wake()
+            if wake is None:
+                await changed.wait()
+            elif wake > clock.now():
+                await _first(sleep((wake - clock.now()) / NANOS_PER_SECOND), changed.wait())
+            else:
+                await asyncio.sleep(0)  # let the sources run between busy rounds
+            changed.clear()
+            engine.tick()
 
     try:
-        async with asyncio.TaskGroup() as group:
-            for source, subscriptions in feeds:
-                group.create_task(produce(source, subscriptions))
-            group.create_task(consume())
-    except* Exception as failures:
-        # The task group gathers every failure; the first is the cause, and
-        # the rest are usually its consequences.
-        raise failures.exceptions[0] from failures
+        try:
+            async with asyncio.TaskGroup() as group:
+                for source, subscriptions in feeds:
+                    group.create_task(produce(source, subscriptions))
+                keeper = group.create_task(keep_time())
+                group.create_task(consume())
+        except* Exception as failures:
+            # The task group gathers every failure; the first is the cause, and
+            # the rest are usually its consequences.
+            raise failures.exceptions[0] from failures
+    except asyncio.CancelledError:
+        engine.finish()
+        raise
+    engine.finish()
+
+
+async def _first(*waits: Awaitable[object]) -> None:
+    """Wait until the first of ``waits`` is done, and cancel the rest."""
+    tasks = [asyncio.ensure_future(w) for w in waits]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in tasks:
+            task.cancel()
 
 
 async def _until_closed(bar: Bar, clock: Clock, sleep: Sleep, skew: int) -> None:

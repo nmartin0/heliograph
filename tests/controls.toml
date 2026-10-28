@@ -55,8 +55,8 @@ tests = ["tests/core/test_engine.py::test_a_feed_that_goes_back_in_time_is_refus
 [[control]]
 describes = "a feed cannot carry messages only the engine makes"
 path = "src/heliograph/core/engine.py"
-old = "        if isinstance(message, ENGINE_MESSAGES):\n"
-new = "        if False:\n"
+old = "        if isinstance(message, ENGINE_MESSAGES):\n            raise InvalidTypeError(\n"
+new = "        if False:\n            raise InvalidTypeError(\n"
 tests = ["tests/core/test_settled.py::test_a_feed_cannot_carry_messages_only_the_engine_makes"]
 
 [[control]]
@@ -257,8 +257,8 @@ tests = [
 [[control]]
 describes = "live data is stamped with the run's clock on arrival"
 path = "src/heliograph/app/bridge.py"
-old = "publish(known_now(data, clock.now()))"
-new = "publish(data)"
+old = "engine.receive(known_now(data, clock.now()))"
+new = "engine.receive(data)"
 tests = ["tests/app/test_bridge.py::test_live_data_is_stamped_by_the_runs_clock_not_the_venues"]
 
 [[control]]
@@ -494,8 +494,8 @@ tests = [
 [[control]]
 describes = "a run cannot start from any handler, inside a run or not"
 path = "src/heliograph/core/engine.py"
-old = "        if self._running or self._bus.dispatching:\n"
-new = "        if self._running and self._bus.dispatching:\n"
+old = "        if self._running or self._bus.dispatching:\n            raise ReentrancyError(\"a run cannot"
+new = "        if self._running and self._bus.dispatching:\n            raise ReentrancyError(\"a run cannot"
 tests = [
     "tests/core/test_engine.py::test_a_run_cannot_start_from_a_handler_even_outside_a_run",
     "tests/core/test_engine.py::test_a_run_cannot_start_while_a_feed_is_being_read",
@@ -4240,3 +4240,85 @@ path = "src/heliograph/app/server.py"
 old = "            deadline=stopping.deadline,\n        )\n        status = 1"
 new = "            deadline=STOP_DEADLINE,\n        )\n        status = 1"
 tests = ["tests/process/test_engine_process.py::test_a_backtest_that_will_not_stop_is_left_and_the_engine_exits_1_in_time"]
+
+[[control]]
+describes = "a live clock reading that repeats joins its instant, which settles only once the clock has passed it"
+path = "src/heliograph/core/engine.py"
+old = "            self._advance(self._clock.now(), final=False)\n"
+new = "            self._advance(self._clock.now(), final=True)\n"
+tests = [
+    "tests/core/test_live_engine.py::test_a_clock_reading_that_repeats_joins_one_instant_instead_of_ending_the_run",
+]
+
+[[control]]
+describes = "a live input fires the alarms due by its stamp before it is published"
+path = "src/heliograph/core/engine.py"
+old = "            self._advance(message.ts, final=False)\n            self._deliver(message, \"input\")\n"
+new = "            self._deliver(message, \"input\")\n"
+tests = [
+    "tests/core/test_live_engine.py::test_alarms_due_by_an_inputs_stamp_fire_before_it_and_after_the_earlier_instant_settles",
+    "tests/core/test_live_engine.py::test_a_live_day_replays_to_the_same_journal",
+]
+
+[[control]]
+describes = "the live engine's next wake is the earlier of the next alarm and the end of the open instant"
+path = "src/heliograph/core/engine.py"
+old = "            return over if due is None else min(due, over)\n"
+new = "            return over if due is None else due\n"
+tests = ["tests/core/test_live_engine.py::test_the_next_wake_is_the_next_alarm_or_the_end_of_the_open_instant"]
+
+[[control]]
+describes = "finishing a live run settles the open instant and marks the end"
+path = "src/heliograph/core/engine.py"
+old = "            self._advance(end, final=True)\n            self._bus.publish(RunEnded(end), origin=\"engine\")\n            return end\n"
+new = "            self._bus.publish(RunEnded(end), origin=\"engine\")\n            return end\n"
+tests = ["tests/core/test_live_engine.py::test_finish_settles_the_open_instant_and_marks_the_end"]
+
+[[control]]
+describes = "a live input cannot be an engine message"
+path = "src/heliograph/core/engine.py"
+old = "        if isinstance(message, ENGINE_MESSAGES):\n            raise InvalidTypeError(f\"a live input"
+new = "        if False:\n            raise InvalidTypeError(f\"a live input"
+tests = ["tests/core/test_live_engine.py::test_an_engine_message_is_not_a_live_input"]
+
+[[control]]
+describes = "a live input stamped before the latest instant is refused"
+path = "src/heliograph/core/engine.py"
+old = "        if self._instant is not None and message.ts < self._instant:\n"
+new = "        if False:\n"
+tests = ["tests/core/test_live_engine.py::test_an_input_stamped_before_the_latest_instant_is_refused"]
+
+[[control]]
+describes = "the live engine cannot be re-entered from a handler"
+path = "src/heliograph/core/engine.py"
+old = "        if self._running or self._bus.dispatching:\n            raise ReentrancyError(\"live input"
+new = "        if False:\n            raise ReentrancyError(\"live input"
+tests = ["tests/core/test_live_engine.py::test_a_handler_cannot_feed_the_engine"]
+
+[[control]]
+describes = "the live timekeeper wakes the engine for alarms and settling while nothing arrives"
+path = "src/heliograph/app/bridge.py"
+old = "                keeper = group.create_task(keep_time())\n"
+new = "                keeper = group.create_task(asyncio.sleep(0))\n"
+tests = ["tests/app/test_bridge.py::test_alarms_fire_and_instants_settle_while_nothing_arrives"]
+
+[[control]]
+describes = "a live run that ends normally settles its open instant and marks the end"
+path = "src/heliograph/app/bridge.py"
+old = "        raise\n    engine.finish()\n"
+new = "        raise\n"
+tests = ["tests/app/test_bridge.py::test_the_run_ends_with_the_open_instant_settled_and_the_end_marked"]
+
+[[control]]
+describes = "a cancelled live session still marks its end"
+path = "src/heliograph/app/bridge.py"
+old = "    except asyncio.CancelledError:\n        engine.finish()\n        raise\n"
+new = "    except asyncio.CancelledError:\n        raise\n"
+tests = ["tests/app/test_bridge.py::test_a_cancelled_session_still_marks_its_end"]
+
+[[control]]
+describes = "a live session that failed does not mark an end"
+path = "src/heliograph/app/bridge.py"
+old = "            raise failures.exceptions[0] from failures\n    except asyncio.CancelledError:"
+new = "            engine.finish()\n            raise failures.exceptions[0] from failures\n    except asyncio.CancelledError:"
+tests = ["tests/app/test_bridge.py::test_a_failed_session_does_not_pretend_it_ended_cleanly"]

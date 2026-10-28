@@ -5,11 +5,12 @@
 
 import heapq
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from typing import Literal
 
 from heliograph.core.alarms import AlarmFired, AlarmQueue, Scheduler, SchedulerView
 from heliograph.core.bus import MessageBus
-from heliograph.core.clock import SimulatedClock
+from heliograph.core.clock import Clock, SimulatedClock
 from heliograph.core.errors import (
     AlarmLoopError,
     ClockError,
@@ -22,22 +23,15 @@ from heliograph.core.messages import Message, RunEnded, Settled
 from heliograph.core.time import Timestamp
 
 
-class BacktestEngine:
-    """Merges time-ordered feeds and publishes each message at its own instant.
+class _Sequencer:
+    """What both engines share: alarms in time order, instants settled once, finally.
 
-    Before a message is published, the simulated clock is moved to the
-    message's timestamp, so every component sees exactly what was known at
-    that moment and nothing later. Messages with equal timestamps are
-    published in the order of the feeds passed to :meth:`run`.
-
-    One loop takes whatever comes next in time, an alarm set through
-    :attr:`scheduler` or a feed message; an alarm due at the same instant as a
-    message fires first. When everything at an instant has been delivered,
-    and before time moves on or the run ends, the engine publishes
-    :class:`Settled` for that instant. Settling is final: a message or alarm
-    for a settled instant ends the run with ClockError. Each run ends with a
-    :class:`RunEnded` mark, which journals keep so a replay stops where the
-    run did.
+    Take what comes next in time, an alarm set through :attr:`scheduler` or an
+    input; an alarm due at the same instant as an input fires first. When
+    everything at an instant has been delivered, and before time moves on or
+    the run ends, :class:`Settled` is published for that instant. Settling is
+    final: a message or alarm for a settled instant ends the run with
+    ClockError.
     """
 
     MAX_ALARMS_PER_INSTANT = 10_000
@@ -54,9 +48,7 @@ class BacktestEngine:
         "_unsettled",
     )
 
-    def __init__(
-        self, clock: SimulatedClock, bus: MessageBus, alarms: AlarmQueue | None = None
-    ) -> None:
+    def __init__(self, clock: Clock, bus: MessageBus, alarms: AlarmQueue | None = None) -> None:
         if not bus.runs_on(clock):
             raise InvalidValueError("the engine and the bus must share one clock")
         if alarms is not None and not alarms.runs_on(clock):
@@ -74,6 +66,90 @@ class BacktestEngine:
     def scheduler(self) -> Scheduler:
         """Where components set and cancel alarms; only the engine fires them."""
         return self._scheduler
+
+    def _arrive(self, ts: Timestamp) -> None:
+        """Bring the clock to ``ts`` before a message stamped then is published."""
+        raise NotImplementedError
+
+    def _advance(self, limit: Timestamp, *, final: bool) -> None:
+        """Deliver every alarm due by ``limit`` and settle every instant before it.
+
+        With ``final``, the instant at ``limit`` is settled too. Settling may
+        set new alarms, so the loop looks again after each step.
+        """
+        instant: Timestamp | None = None
+        fired_here = 0
+        while True:
+            due = self._alarms.next_due()
+            moving_on = self._unsettled and self._instant is not None
+            if due is not None and due <= limit:
+                if moving_on and self._instant is not None and due > self._instant:
+                    self._settle()
+                    continue
+                alarm = self._alarms.pop_due(limit)
+                assert alarm is not None
+                fired_here = fired_here + 1 if alarm.ts == instant else 1
+                instant = alarm.ts
+                if fired_here > self.MAX_ALARMS_PER_INSTANT:
+                    raise AlarmLoopError(
+                        f"more than {self.MAX_ALARMS_PER_INSTANT} alarms fired at {alarm.ts}; "
+                        f"a handler probably re-sets {alarm.key!r} for the current instant"
+                    )
+                self._deliver(alarm, "engine")
+                continue
+            if moving_on and self._instant is not None and (self._instant < limit or final):
+                self._settle()
+                continue
+            return
+
+    def _deliver(self, message: Message, origin: Literal["input", "engine"]) -> None:
+        if self._settled_up_to is not None and message.ts <= self._settled_up_to:
+            raise ClockError(
+                f"{type(message).__name__} at {message.ts}, an instant that has already settled"
+            )
+        self._arrive(message.ts)
+        self._bus.publish(message, origin=origin)
+        self._instant = message.ts
+        self._unsettled = True
+
+    def _settle(self) -> None:
+        assert self._instant is not None
+        self._bus.publish(Settled(self._instant), origin="engine")
+        self._unsettled = False
+        self._settled_up_to = self._instant
+        due = self._alarms.next_due()
+        if due is not None and due <= self._instant:
+            raise ClockError(f"an alarm was set for {due}, an instant that has already settled")
+
+
+class BacktestEngine(_Sequencer):
+    """Merges time-ordered feeds and publishes each message at its own instant.
+
+    Before a message is published, the simulated clock is moved to the
+    message's timestamp, so every component sees exactly what was known at
+    that moment and nothing later. Messages with equal timestamps are
+    published in the order of the feeds passed to :meth:`run`.
+
+    One loop takes whatever comes next in time, an alarm set through
+    :attr:`scheduler` or a feed message; an alarm due at the same instant as a
+    message fires first. When everything at an instant has been delivered,
+    and before time moves on or the run ends, the engine publishes
+    :class:`Settled` for that instant. Settling is final: a message or alarm
+    for a settled instant ends the run with ClockError. Each run ends with a
+    :class:`RunEnded` mark, which journals keep so a replay stops where the
+    run did.
+    """
+
+    __slots__ = ("_simulated",)
+
+    def __init__(
+        self, clock: SimulatedClock, bus: MessageBus, alarms: AlarmQueue | None = None
+    ) -> None:
+        super().__init__(clock, bus, alarms)
+        self._simulated = clock
+
+    def _arrive(self, ts: Timestamp) -> None:
+        self._simulated.advance_to(ts)
 
     def run(self, *feeds: Iterable[Message], until: Timestamp | None = None) -> int:
         """Replay ``feeds`` to the end and return how many feed messages were published.
@@ -115,61 +191,81 @@ class BacktestEngine:
                 published += 1
             end = until if until is not None else self._clock.now()
             self._advance(end, final=True)
-            self._clock.advance_to(end)
+            self._simulated.advance_to(end)
             self._bus.publish(RunEnded(end), origin="engine")
             return published
         finally:
             self._running = False
 
-    def _advance(self, limit: Timestamp, *, final: bool) -> None:
-        """Deliver every alarm due by ``limit`` and settle every instant before it.
 
-        With ``final``, the instant at ``limit`` is settled too. Settling may
-        set new alarms, so the loop looks again after each step.
+class LiveEngine(_Sequencer):
+    """Publishes live data as it arrives, on the same footing as a backtest.
+
+    The clock is the real time (or, in tests, a simulated one something else
+    moves); the engine never moves it. Inputs arrive already stamped with the
+    clock's time at that moment, so stamps follow arrival and never go back,
+    but two may carry the same reading: both join one instant, which is
+    settled only once the clock has moved past it, so a repeated reading
+    cannot end the run. Alarms due by an input's stamp fire before it, as in
+    a backtest, and :meth:`tick` fires and settles whatever the clock has
+    passed while nothing arrived. A live day's journal therefore replays
+    through :class:`BacktestEngine` to the same entries.
+    """
+
+    __slots__ = ()
+
+    def receive(self, message: Message) -> None:
+        """Publish an input stamped by the clock at its arrival.
+
+        Raises:
+            InvalidTypeError: for an engine message (AlarmFired, Settled, RunEnded).
+            OutOfOrderError: if ``message`` is stamped before the latest instant.
+            ReentrancyError: if called from a handler.
+            ClockError: if the instant has settled.
         """
-        instant: Timestamp | None = None
-        fired_here = 0
-        while True:
-            due = self._alarms.next_due()
-            moving_on = self._unsettled and self._instant is not None
-            if due is not None and due <= limit:
-                if moving_on and self._instant is not None and due > self._instant:
-                    self._settle()
-                    continue
-                alarm = self._alarms.pop_due(limit)
-                assert alarm is not None
-                fired_here = fired_here + 1 if alarm.ts == instant else 1
-                instant = alarm.ts
-                if fired_here > self.MAX_ALARMS_PER_INSTANT:
-                    raise AlarmLoopError(
-                        f"more than {self.MAX_ALARMS_PER_INSTANT} alarms fired at {alarm.ts}; "
-                        f"a handler probably re-sets {alarm.key!r} for the current instant"
-                    )
-                self._deliver(alarm, "engine")
-                continue
-            if moving_on and self._instant is not None and (self._instant < limit or final):
-                self._settle()
-                continue
-            return
-
-    def _deliver(self, message: Message, origin: Literal["input", "engine"]) -> None:
-        if self._settled_up_to is not None and message.ts <= self._settled_up_to:
-            raise ClockError(
-                f"{type(message).__name__} at {message.ts}, an instant that has already settled"
+        if isinstance(message, ENGINE_MESSAGES):
+            raise InvalidTypeError(f"a live input is a {type(message).__name__}, an engine message")
+        if self._instant is not None and message.ts < self._instant:
+            raise OutOfOrderError(
+                f"live input went back in time from {self._instant} to {message.ts}"
             )
-        self._clock.advance_to(message.ts)
-        self._bus.publish(message, origin=origin)
-        self._instant = message.ts
-        self._unsettled = True
+        with self._exclusive():
+            self._advance(message.ts, final=False)
+            self._deliver(message, "input")
 
-    def _settle(self) -> None:
-        assert self._instant is not None
-        self._bus.publish(Settled(self._instant), origin="engine")
-        self._unsettled = False
-        self._settled_up_to = self._instant
+    def tick(self) -> None:
+        """Fire the alarms the clock has reached and settle the instants it has passed."""
+        with self._exclusive():
+            self._advance(self._clock.now(), final=False)
+
+    def next_wake(self) -> Timestamp | None:
+        """When :meth:`tick` next has something to do: the next alarm or the open instant's end."""
         due = self._alarms.next_due()
-        if due is not None and due <= self._instant:
-            raise ClockError(f"an alarm was set for {due}, an instant that has already settled")
+        if self._unsettled and self._instant is not None:
+            over = Timestamp(self._instant + 1)
+            return over if due is None else min(due, over)
+        return due
+
+    def finish(self) -> Timestamp:
+        """End the run now: fire what is due, settle the open instant, mark the end."""
+        with self._exclusive():
+            end = self._clock.now()
+            self._advance(end, final=True)
+            self._bus.publish(RunEnded(end), origin="engine")
+            return end
+
+    def _arrive(self, ts: Timestamp) -> None:
+        """Nothing to do: the clock is real time and already at or past ``ts``."""
+
+    @contextmanager
+    def _exclusive(self) -> Iterator[None]:
+        if self._running or self._bus.dispatching:
+            raise ReentrancyError("live input cannot be handled inside a handler or another step")
+        self._running = True
+        try:
+            yield
+        finally:
+            self._running = False
 
 
 ENGINE_MESSAGES = (AlarmFired, Settled, RunEnded)

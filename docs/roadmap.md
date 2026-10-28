@@ -242,15 +242,20 @@ Wizard.)
 - Paper broker on live data; took-it/skipped journal.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
 
-- From the review of 2026-10-23, to settle before live data: a live clock
-  that repeats a timestamp must not end the run (the engine treats a
-  settled instant as final); SIGTERM must flush and close the journal;
-  live alarms must fire and settle before each input, as the backtest
-  engine does, so a live day replays; Kraken's websocket replays its last
-  50 trades on each subscribe, trade ids are dropped, nothing reconnects,
-  and a live trade without a time is a TypeError; a person's took-it or skipped answer must reach the
-  strategy's position held; stage objects keep state, so optimisation
-  must build them afresh per run (Phase 5).
+- From the review of 2026-10-23, to settle before live data:
+  - [x] a live clock that repeats a timestamp must not end the run; live
+    alarms must fire and settle before each input, as the backtest engine
+    does, so a live day replays (`LiveEngine`, D43).
+  - [ ] SIGTERM must flush and close the journal (the session ends with
+    `RunEnded` on cancellation, D43; the process must turn the signal into a
+    cancellation and close the journal).
+  - [ ] Kraken's websocket replays its last 50 trades on each subscribe,
+    trade ids are dropped, nothing reconnects, and a live trade without a
+    time is a TypeError.
+  - [ ] a person's took-it or skipped answer must reach the strategy's
+    position held.
+  - [ ] stage objects keep state, so optimisation must build them afresh per
+    run (Phase 5).
 
 **Gate:** a paper session survives a restart with positions and clock intact,
 and a replayed day reproduces its signals.

@@ -7,11 +7,13 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 import pytest
 
 from heliograph.app.bridge import HistoryFeed, SourceLoop, run_live
+from heliograph.core.alarms import AlarmFired
 from heliograph.core.bars import TimeBars
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import WallClock
+from heliograph.core.engine import LiveEngine
 from heliograph.core.errors import InvalidValueError, OutOfOrderError
-from heliograph.core.messages import Bar, Instrument, Message, Point, Settled
+from heliograph.core.messages import Bar, Instrument, Message, Point, RunEnded, Settled
 from heliograph.core.sources import (
     Capabilities,
     HistoryRequest,
@@ -183,7 +185,7 @@ def live(*feeds: tuple[ScriptedSource, list[Subscription]]) -> tuple[list[Messag
     bus = MessageBus(clock)
     published: list[Message] = []
     bus.subscribe(Point, published.append)
-    asyncio.run(run_live(list(feeds), clock, bus.publish))
+    asyncio.run(run_live(list(feeds), LiveEngine(clock, bus), clock))
     return published, clock
 
 
@@ -235,7 +237,7 @@ def live_bars(time: SimulatedTime, *bars: Bar) -> list[Message]:
     bus.subscribe(Bar, published.append)
     source = ScriptedSource(live=list(bars), caps=LIVE_BARS)
     feeds = [(source, BARS_SUBSCRIBED)]
-    asyncio.run(run_live(feeds, time.clock, bus.publish, sleep=time.advance))
+    asyncio.run(run_live(feeds, LiveEngine(time.clock, bus), time.clock, sleep=time.advance))
     return published
 
 
@@ -328,3 +330,76 @@ def test_a_feed_counts_what_its_source_delivered(loop: SourceLoop) -> None:
     with HistoryFeed(loop, source, WHOLE_DAY) as feed:
         list(feed)
         assert feed.delivered == 3
+
+
+# -- live time: alarms, settling and the end mark ------------------------------------
+
+
+def watched(time: SimulatedTime) -> tuple[LiveEngine, MessageBus, list[str]]:
+    """A live engine on simulated time, and a record of what it published."""
+    bus = MessageBus(time.clock)
+    engine = LiveEngine(time.clock, bus)
+    seen: list[str] = []
+    for kind in (Point, AlarmFired, Settled, RunEnded):
+        bus.subscribe(kind, lambda m: seen.append(f"{type(m).__name__}{m.ts}"))
+    return engine, bus, seen
+
+
+def test_alarms_fire_and_instants_settle_while_nothing_arrives() -> None:
+    """The source waits for the alarm; only the timekeeper can wake the engine to fire it."""
+    time = SimulatedTime(start=0)
+    engine, bus, seen = watched(time)
+    fired = asyncio.Event()
+    bus.subscribe(AlarmFired, lambda m: fired.set())
+    engine.scheduler.at(Timestamp(50 * 10**9), "wake")
+    source = ScriptedSource(live=[trade(1, 1), fired.wait, trade(2, 2)])
+    run = run_live([(source, SUBSCRIBED)], engine, time.clock, sleep=time.advance)
+    asyncio.run(asyncio.wait_for(run, timeout=1))  # a source waiting for the alarm would hang
+    assert seen == [
+        "Point0",
+        "Settled0",
+        f"AlarmFired{50 * 10**9}",
+        f"Settled{50 * 10**9}",
+        f"Point{50 * 10**9 + 1}",
+        f"Settled{50 * 10**9 + 1}",
+        f"RunEnded{50 * 10**9 + 1}",
+    ]
+
+
+def test_the_run_ends_with_the_open_instant_settled_and_the_end_marked() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+    source = ScriptedSource(live=[trade(1, 1)])
+    asyncio.run(run_live([(source, SUBSCRIBED)], engine, time.clock, sleep=time.advance))
+    assert seen == ["Point7", "Settled7", "RunEnded7"]
+
+
+def test_a_cancelled_session_still_marks_its_end() -> None:
+    """A stop (SIGTERM becomes a cancellation) leaves a journal that is whole."""
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+    source = ScriptedSource(live=[trade(1, 1), asyncio.Event().wait])
+
+    async def main() -> None:
+        task = asyncio.create_task(
+            run_live([(source, SUBSCRIBED)], engine, time.clock, sleep=time.advance)
+        )
+        while "Point7" not in seen:
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(main())
+    assert seen[-1].startswith("RunEnded")
+    assert any(s.startswith("Settled") for s in seen)
+    assert source.streams_closed == 1
+
+
+def test_a_failed_session_does_not_pretend_it_ended_cleanly() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+    failing = ScriptedSource(live=[trade(1)], fail_after=0, failure=SourceUnavailableError("gone"))
+    with pytest.raises(SourceUnavailableError, match="gone"):
+        asyncio.run(run_live([(failing, SUBSCRIBED)], engine, time.clock, sleep=time.advance))
+    assert not any(s.startswith("RunEnded") for s in seen)

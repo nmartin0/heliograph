@@ -59,6 +59,11 @@ contract and a core purity test).
 - **BacktestEngine (built).** Merges time-ordered feeds, advances the clock to
   each message's `ts`, then publishes it. Equal timestamps keep feed order.
   Refuses re-entrant runs. The no-look-ahead property test is the Phase 0 gate.
+- **LiveEngine (built; D43).** The same loop for live data: inputs arrive
+  stamped by the clock, alarms fire before them, instants settle once the
+  clock has passed them (a repeated reading joins its instant), and a
+  timekeeper task wakes it for alarms and settling while nothing arrives.
+  A live day's journal replays through `BacktestEngine`.
 - **Settled (built).** When everything stamped T has been delivered, and
   before time moves on, the engine publishes `Settled(T)`. Consumers that
   combine streams act on it, so a 1-hour bar and a 4-hour bar both closing at

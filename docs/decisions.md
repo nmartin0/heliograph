@@ -1006,3 +1006,29 @@ copy of a fact); starting from nothing (mounts and streams need a data-source
 form first); hard-coding the strategy's roles in the window (a second list to keep in
 step with the engine); Vue Flow's built-in delete key (a person selecting text in a
 form would remove a node).
+
+## D43 · The live engine shares the backtest's loop (2026-10-27)
+
+**Decision:** `LiveEngine` (`core/engine.py`) and `BacktestEngine` share one
+sequencer: alarms fire in time order, an alarm due at an input's instant fires
+before it, and an instant settles once, finally, when everything stamped then has
+been delivered. The live engine never moves the clock. Inputs arrive stamped with
+the clock's reading at that moment; two with the same reading join one instant,
+which settles only once the clock has passed it (`tick`), or when the run ends
+(`finish`), so a repeated reading cannot end the run. `next_wake` says when
+`tick` next has work, and `run_live` (`app/bridge.py`) runs a timekeeper task that
+sleeps until then, so alarms fire and instants settle while nothing arrives. A run
+ends with `finish` (settle, `RunEnded`) when its sources end and when it is
+cancelled, which is how a stop signal will leave a whole journal; a failure
+leaves no end mark.
+
+**Why:** a live day replays through the backtest engine only if both put
+`AlarmFired` and `Settled` in the same places among the inputs. Publishing live
+data straight on the bus gave no alarms and no `Settled`, so the bars and the
+pipeline, which act on both, could not run live. A test replays a live day (with
+repeated readings, idle gaps and late alarms) and compares journals entry for
+entry.
+
+**Rejected:** bumping a repeated timestamp by a nanosecond (it invents times the
+journal would then carry); settling after every input (a second input at the same
+reading would be refused); a second copy of the loop for live (the two would drift).

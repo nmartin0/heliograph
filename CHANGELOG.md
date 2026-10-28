@@ -401,3 +401,5 @@ All notable changes to Heliograph are recorded here. The format follows
   and Phase 2's gate done, and moves streams on bar mounts to the next
   batch; testing.md describes the scenarios; the README says how to run
   the example.
+- D43 records the live engine: the backtest's loop for live data, with alarms,
+  settling and an end mark; the roadmap ticks the first pre-live fixes.
