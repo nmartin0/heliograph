@@ -974,12 +974,23 @@ in the Wizard's text, which is a new text and not an edit of the saved one, and
 date-times are written with a space (valid TOML).
 
 A configuration is kept with `PUT /api/configs/{name}` (`{"config": text,
-"replace": false}`): the engine runs the checks a run would make, writes the text
+"replace": false}`): the engine makes the checks that need no plug-in (the configuration's structure,
+not a plug-in's own parameters, which a run checks as it builds them), writes the text
 exactly as given to a part file and moves it into `--configs` (a new name is linked,
 so a name that has appeared since is not overwritten; `replace` renames over it),
 and answers 201 for a new name, 200 for a replaced one, 409 if the name exists
 without `replace` or the engine has no folder, 400 for a text that would not run.
-The folder only ever holds whole files. The Wizard's "Keep as" box uses it and then
+The folder only ever holds whole files.
+
+A configuration can start empty ("Start empty": a backtest with nothing in it) and
+be given data: "Add data…" opens a dialog (`gui/data_form.py`) that asks for a name,
+a data source (the engine's `data_sources` plug-ins) with the settings form its own
+schema draws, the instrument, the span and the size of the bars to build, and adds
+the mount and its stream together or neither. A source that says in its own settings
+what it delivers (`kind`, `bar_size`) is believed over the dialog's boxes, so the
+data and its source cannot disagree. A stream nothing reads can be removed, and its
+mount with it when no other stream is of it. Built this way, from nothing, a
+configuration ran to completion in the browser. The Wizard's "Keep as" box uses it and then
 offers the new name among the saved ones.
 
 **Why:** a whole configuration is hard to write by hand; the graph is what the

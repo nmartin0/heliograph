@@ -19,9 +19,30 @@ import copy
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import tomli_w
+
+INSTRUMENT_FIELDS = ("symbol", "venue", "asset_class", "quote_currency")
+MOUNT_KINDS = ("trades", "bars")
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
+
+
+def instant(text: str) -> datetime | None:
+    """A moment written as ISO 8601 text with a UTC offset (``2026-01-01T00:00:00Z``);
+    None for no text. Raises ValueError, saying why, for anything else."""
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        raise ValueError(f"{text!r} is not a date and time like 2026-01-01T00:00:00Z") from None
+    if moment.utcoffset() is None:
+        raise ValueError(f"{text} needs a UTC offset (Z or +hh:mm)")
+    return moment
+
 
 BAR_FIELDS = ("open", "high", "low", "close", "volume")
 DEFAULT_FIELD = "close"
@@ -175,7 +196,7 @@ class Wizard:
         for stream in self.config["streams"]:
             name = f"{stream['mount']}@{stream['bars']}"
             columns.setdefault(0, []).append(
-                (stream_id(stream["mount"], stream["bars"]), STREAM, name, "bars")
+                (stream_id(stream["mount"], stream["bars"]), STREAM, name, self._where(stream))
             )
         for component in shown:
             column = depth[component["name"]] if component["kind"] in self.rules.graph else stage
@@ -193,6 +214,14 @@ class Wizard:
             for column, members in sorted(columns.items())
             for row, (identity, kind, label, sub) in enumerate(members)
         ]
+
+    def _where(self, stream: Mapping[str, Any]) -> str:
+        """What a stream's bars come from: the source and the instrument of its mount."""
+        mount = self.config.get("mounts", {}).get(stream["mount"])
+        if not mount:
+            return "bars"
+        symbol = mount.get("instrument", {}).get("symbol")
+        return f"{mount.get('source', '?')} · {symbol}" if symbol else str(mount.get("source", "?"))
 
     def _depths(self, shown: list[dict[str, Any]]) -> dict[str, int]:
         """How many nodes deep each graph node reads: one if it reads only streams."""
@@ -309,8 +338,11 @@ class Wizard:
         return None if component is None else str(component["plugin"])
 
     def remove(self, node: str) -> list[str]:
-        """Remove a component or a strategy, and every edge that ran to or from it."""
+        """Remove a component or a strategy, and every edge that ran to or from it; or a
+        stream that nothing reads (and its mount, if no other stream is of it)."""
         kind, _, name = node.partition(":")
+        if kind == STREAM:
+            return self._remove_stream(name)
         if kind == STRATEGY:
             self.config["strategies"] = [s for s in self.config["strategies"] if s["name"] != name]
             return []
@@ -326,6 +358,104 @@ class Wizard:
                     strategy[role] = [n for n in strategy[role] if n != name]
                 elif strategy.get(role) == name:
                     del strategy[role]
+        return []
+
+    def _remove_stream(self, name: str) -> list[str]:
+        prefix = f"{name}."
+        readers = [
+            c["name"]
+            for c in self.config["components"]
+            if any(r.startswith(prefix) for r in c.get("inputs", ()))
+        ]
+        readers += [
+            s["name"] for s in self.config["strategies"] if s.get("price", "").startswith(prefix)
+        ]
+        if readers:
+            return [f"{name} is read by {', '.join(readers)}; remove those links first"]
+        mount, _, bars = name.partition("@")
+        before = len(self.config["streams"])
+        self.config["streams"] = [
+            s for s in self.config["streams"] if (s["mount"], s["bars"]) != (mount, bars)
+        ]
+        if len(self.config["streams"]) == before:
+            return [f"there is no stream {name}"]
+        if not any(s["mount"] == mount for s in self.config["streams"]):
+            self.config.get("mounts", {}).pop(mount, None)
+        return []
+
+    def add_mount(
+        self,
+        name: str,
+        source: str,
+        params: Mapping[str, Any],
+        instrument: Mapping[str, str],
+        kind: str,
+        bar_size: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[str]:
+        """Add a data source under ``name``, or say what is missing (and change nothing).
+        What the engine checks of the whole (the symbol's form, a span's order) it checks
+        when the configuration is kept or run."""
+        problems = []
+        if not _NAME.fullmatch(name):
+            problems.append("a name is letters, digits, _ and -, starting with a letter or _")
+        elif name in self.config.get("mounts", {}):
+            problems.append(f"there is already data named {name}")
+        if not source:
+            problems.append("choose a data source")
+        missing = [k for k in INSTRUMENT_FIELDS if not (instrument.get(k) or "").strip()]
+        if missing:
+            problems.append(f"the instrument needs {', '.join(missing)}")
+        if kind not in MOUNT_KINDS:
+            problems.append(f"data is of {' or '.join(MOUNT_KINDS)}")
+        elif (kind == "bars") != bool(bar_size):
+            problems.append("a bar size is given for bars, and only for bars")
+        if problems:
+            return problems
+        mount: dict[str, Any] = {"source": source, "kind": kind}
+        mount["params"] = copy.deepcopy(dict(params))
+        mount["instrument"] = {k: instrument[k].strip() for k in INSTRUMENT_FIELDS}
+        if bar_size:
+            mount["bar_size"] = bar_size
+        if start is not None:
+            mount["start"] = start
+        if end is not None:
+            mount["end"] = end
+        self.config.setdefault("mounts", {})[name] = mount
+        return []
+
+    def add_data(
+        self,
+        name: str,
+        source: str,
+        params: Mapping[str, Any],
+        instrument: Mapping[str, str],
+        kind: str,
+        bar_size: str | None,
+        start: datetime | None,
+        end: datetime | None,
+        bars: str,
+    ) -> list[str]:
+        """Add data and the bars to build from it together, or neither."""
+        problems = self.add_mount(name, source, params, instrument, kind, bar_size, start, end)
+        if problems:
+            return problems
+        problems = self.add_stream(name, bars)
+        if problems:
+            del self.config["mounts"][name]
+        return problems
+
+    def add_stream(self, mount: str, bars: str) -> list[str]:
+        """Add bars of ``bars`` (such as ``1h``) built from the data named ``mount``."""
+        bars = bars.strip()
+        if mount not in self.config.get("mounts", {}):
+            return [f"there is no data named {mount}"]
+        if not bars:
+            return ["give the size of the bars, such as 1h"]
+        if any((s["mount"], s["bars"]) == (mount, bars) for s in self.config["streams"]):
+            return [f"there already are {bars} bars of {mount}"]
+        self.config["streams"].append({"mount": mount, "bars": bars})
         return []
 
     def connect(self, source: str, target: str, field: str = DEFAULT_FIELD) -> list[str]:

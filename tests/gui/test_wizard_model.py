@@ -4,9 +4,12 @@
 """The Wizard's model: a configuration seen as a graph, and edited as one."""
 
 import tomllib
+from datetime import UTC, datetime
 from typing import Any
 
-from heliograph.gui.wizard_model import COLUMN, ROW, Rules, Wizard
+import pytest
+
+from heliograph.gui.wizard_model import COLUMN, ROW, Rules, Wizard, instant
 from tests.support.pipeline import PIPELINE, trend
 
 RULES = Rules.of(PIPELINE)
@@ -306,11 +309,112 @@ def test_a_strategy_is_removed_with_its_edges() -> None:
     assert not [e for e in w.edges() if e.target == "strategy:trend"]
 
 
-def test_a_stream_cannot_be_removed_here() -> None:
+def test_a_stream_that_is_read_cannot_be_removed() -> None:
     w = wizard()
-    assert w.remove(STREAM)
-    assert w.remove("nonsense")
+    got = w.remove(STREAM)
+    assert "btc@1h is read by" in got[0]
+    assert "ewmac16" in got[0]
+    assert "trend" in got[0]  # the strategy that decides at its close
     assert len(w.config["streams"]) == 1
+    assert w.remove("nonsense")
+
+
+def test_a_stream_that_nothing_reads_is_removed_with_its_mount() -> None:
+    w = Wizard({"mode": "backtest"}, RULES)
+    assert w.add_mount("eth", "file", {}, INSTRUMENT, "trades") == []
+    assert w.add_stream("eth", "1h") == []
+    assert w.add_stream("eth", "4h") == []
+    assert w.remove("stream:eth@1h") == []
+    assert "eth" in w.config["mounts"]  # another stream is of it
+    assert w.remove("stream:eth@4h") == []
+    assert w.config["mounts"] == {}
+    assert w.config["streams"] == []
+    assert w.remove("stream:eth@4h") == ["there is no stream eth@4h"]
+
+
+INSTRUMENT = {
+    "symbol": "ETH/USD",
+    "venue": "kraken",
+    "asset_class": "crypto",
+    "quote_currency": "USD",
+}
+
+
+def test_data_is_added_as_a_mount_the_engine_can_read_back() -> None:
+    w = Wizard({"mode": "backtest"}, RULES)
+    start, end = instant("2026-01-01T00:00:00Z"), instant("2026-02-01T00:00:00+00:00")
+    assert w.add_mount("eth", "file", {"path": "a.csv"}, INSTRUMENT, "bars", "1h", start, end) == []
+    assert w.add_stream("eth", " 1h ") == []
+    out = tomllib.loads(w.text())
+    assert out["mounts"]["eth"] == {
+        "source": "file",
+        "kind": "bars",
+        "params": {"path": "a.csv"},
+        "instrument": INSTRUMENT,
+        "bar_size": "1h",
+        "start": start,
+        "end": end,
+    }
+    assert out["streams"] == [{"mount": "eth", "bars": "1h"}]
+    stream = next(n for n in w.nodes() if n.id == "stream:eth@1h")
+    assert stream.sub == "file · ETH/USD"
+
+
+def test_a_stream_of_a_mount_with_no_instrument_is_described_by_its_source_or_not_at_all() -> None:
+    config = {"mounts": {"m": {"source": "file"}}, "streams": [{"mount": "m", "bars": "1h"}]}
+    assert next(iter(Wizard(config, RULES).nodes())).sub == "file"
+    config = {"streams": [{"mount": "m", "bars": "1h"}]}
+    assert next(iter(Wizard(config, RULES).nodes())).sub == "bars"
+
+
+def test_data_that_is_not_whole_is_not_added() -> None:
+    w = Wizard({"mode": "backtest"}, RULES)
+    bad = w.add_mount("1x", "", {}, {"symbol": "A"}, "ticks")
+    assert len(bad) == 4
+    assert "letters, digits" in bad[0]
+    assert w.add_mount("x", "file", {}, INSTRUMENT, "bars")  # bars need a size
+    assert w.add_mount("x", "file", {}, INSTRUMENT, "trades", "1h")  # trades take none
+    assert "mounts" not in w.config
+    assert w.add_mount("x", "file", {}, INSTRUMENT, "trades") == []
+    assert "already data named x" in w.add_mount("x", "file", {}, INSTRUMENT, "trades")[0]
+
+
+def test_params_of_a_mount_are_copied_in() -> None:
+    w = Wizard({}, RULES)
+    params: dict[str, Any] = {"nested": {"a": 1}}
+    w.add_mount("x", "file", params, INSTRUMENT, "trades")
+    params["nested"]["a"] = 2
+    assert w.config["mounts"]["x"]["params"] == {"nested": {"a": 1}}
+
+
+def test_a_stream_is_added_only_for_data_that_is_there_once() -> None:
+    w = Wizard({}, RULES)
+    assert w.add_stream("x", "1h") == ["there is no data named x"]
+    w.add_mount("x", "file", {}, INSTRUMENT, "trades")
+    assert w.add_stream("x", " ") == ["give the size of the bars, such as 1h"]
+    assert w.add_stream("x", "1h") == []
+    assert w.add_stream("x", "1h") == ["there already are 1h bars of x"]
+    assert w.config["streams"] == [{"mount": "x", "bars": "1h"}]
+
+
+def test_data_and_its_bars_are_added_together_or_not_at_all() -> None:
+    w = Wizard({}, RULES)
+    refused = w.add_data("x", "file", {}, INSTRUMENT, "trades", None, None, None, "")
+    assert refused == ["give the size of the bars, such as 1h"]
+    assert w.config.get("mounts", {}) == {}
+    assert w.add_data("x", "file", {}, INSTRUMENT, "trades", None, None, None, "1h") == []
+    assert list(w.config["mounts"]) == ["x"]
+    assert w.add_data("x", "file", {}, INSTRUMENT, "trades", None, None, None, "1h")  # a repeat
+    assert w.config["streams"] == [{"mount": "x", "bars": "1h"}]
+
+
+def test_a_moment_is_text_with_an_offset_or_nothing() -> None:
+    assert instant("  ") is None
+    assert instant("2026-01-01T00:00:00Z") == datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="needs a UTC offset"):
+        instant("2026-01-01T00:00:00")
+    with pytest.raises(ValueError, match="not a date and time"):
+        instant("yesterday")
 
 
 def test_an_input_edge_is_removed_by_its_id() -> None:

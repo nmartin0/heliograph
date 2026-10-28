@@ -489,7 +489,8 @@ def make_app(settings: Settings, clock: Clock, backtests: Backtests) -> Starlett
 
     def save_(name: str, body: object) -> Response:
         """Keep a configuration's text in the configurations folder, once it has passed the
-        checks a run would make; never half written, never over another unless told."""
+        checks that need no plug-in (parameters are checked when a run builds them);
+        never half written, never over another unless told."""
         if settings.configs is None:
             return _error(409, "the engine was started without --configs, so it keeps none")
         if not _ID.match(name):

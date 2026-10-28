@@ -261,6 +261,9 @@ All notable changes to Heliograph are recorded here. The format follows
 - `PUT /api/configs/{name}`: the engine keeps a configuration in `--configs`
   after checking it, whole or not at all, and never over another unless told;
   the Wizard's "Keep as" uses it.
+- The Wizard can start empty and add data: a dialog asks for a data source (with
+  the settings form its schema draws), the instrument, the span and the bars to
+  build; a stream nothing reads can be removed.
 
 ### Fixed
 

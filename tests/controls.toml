@@ -4058,3 +4058,150 @@ path = "src/heliograph/gui/wizard.py"
 old = "f\"Kept as {name}\" if created else f\"Replaced {name}\""
 new = "f\"Kept as {name}\""
 tests = ["tests/gui/test_wizard.py::test_a_configuration_replaced_is_said_to_be"]
+
+[[control]]
+describes = "a stream that is read is not removed"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if readers:\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_stream_that_is_read_cannot_be_removed"]
+
+[[control]]
+describes = "a mount with another stream is kept when one is removed"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if not any(s[\"mount\"] == mount for s in self.config[\"streams\"]):\n"
+new = "        if True:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_stream_that_nothing_reads_is_removed_with_its_mount"]
+
+[[control]]
+describes = "a mount with no stream left is removed"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if not any(s[\"mount\"] == mount for s in self.config[\"streams\"]):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_stream_that_nothing_reads_is_removed_with_its_mount"]
+
+[[control]]
+describes = "bars have a size and trades none"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        elif (kind == \"bars\") != bool(bar_size):\n"
+new = "        elif False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_data_that_is_not_whole_is_not_added"]
+
+[[control]]
+describes = "the instrument must be whole"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if missing:\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_data_that_is_not_whole_is_not_added"]
+
+[[control]]
+describes = "the parameters of a mount are copied in"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        mount[\"params\"] = copy.deepcopy(dict(params))\n"
+new = "        mount[\"params\"] = params\n"
+tests = ["tests/gui/test_wizard_model.py::test_params_of_a_mount_are_copied_in"]
+
+[[control]]
+describes = "a stream is not added twice"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if any((s[\"mount\"], s[\"bars\"]) == (mount, bars) for s in self.config[\"streams\"]):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_stream_is_added_only_for_data_that_is_there_once"]
+
+[[control]]
+describes = "the size of bars is trimmed"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        bars = bars.strip()\n"
+new = "        bars = bars\n"
+tests = ["tests/gui/test_wizard_model.py::test_data_is_added_as_a_mount_the_engine_can_read_back"]
+
+[[control]]
+describes = "a moment needs an offset"
+path = "src/heliograph/gui/wizard_model.py"
+old = "    if moment.utcoffset() is None:\n"
+new = "    if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_a_moment_is_text_with_an_offset_or_nothing"]
+
+[[control]]
+describes = "a name for data is checked"
+path = "src/heliograph/gui/wizard_model.py"
+old = "        if not _NAME.fullmatch(name):\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard_model.py::test_data_that_is_not_whole_is_not_added"]
+
+[[control]]
+describes = "the source's settings must be right before data is added"
+path = "src/heliograph/gui/data_form.py"
+old = "        if self.form is not None and not self.form.valid:\n"
+new = "        if False:\n"
+tests = ["tests/gui/test_wizard.py::test_settings_of_the_source_that_are_wrong_are_said_first"]
+
+[[control]]
+describes = "the dialog closes only when the data was taken"
+path = "src/heliograph/gui/data_form.py"
+old = "        if not problems:\n            self.dialog.close()"
+new = "        if True:\n            self.dialog.close()"
+tests = ["tests/gui/test_wizard.py::test_data_that_is_not_whole_is_said_in_the_dialog_which_stays_open"]
+
+[[control]]
+describes = "the source's settings go with the data"
+path = "src/heliograph/gui/data_form.py"
+old = "\"params\": {} if self.form is None else self.form.params(),"
+new = "\"params\": {},"
+tests = ["tests/gui/test_wizard.py::test_a_configuration_can_be_started_empty_and_given_data"]
+
+[[control]]
+describes = "the dialog offers the sources"
+path = "src/heliograph/gui/data_form.py"
+old = "        self.source.set_options(self._sources())\n"
+new = "        pass\n"
+tests = ["tests/gui/test_wizard.py::test_the_data_dialog_offers_the_sources_and_waits_for_a_configuration"]
+
+[[control]]
+describes = "the span of data is read from the dialog"
+path = "src/heliograph/gui/wizard.py"
+old = "            start, end = instant(spec[\"start\"]), instant(spec[\"end\"])"
+new = "            start, end = None, None"
+tests = ["tests/gui/test_wizard.py::test_a_configuration_can_be_started_empty_and_given_data"]
+
+[[control]]
+describes = "starting empty waits for the engine's rules"
+path = "src/heliograph/gui/wizard.py"
+old = "        if self.rules is None:\n            return\n        self._say(\"\")\n        self.model = Wizard({\"mode\""
+new = "        if False:\n            return\n        self._say(\"\")\n        self.model = Wizard({\"mode\""
+tests = ["tests/gui/test_wizard.py::test_starting_empty_waits_for_the_engines_rules"]
+
+[[control]]
+describes = "only data sources are offered as sources"
+path = "src/heliograph/gui/wizard.py"
+old = "if p[\"kind\"] == SOURCES"
+new = "if True"
+tests = ["tests/gui/test_wizard.py::test_the_data_dialog_offers_the_sources_and_waits_for_a_configuration"]
+
+[[control]]
+describes = "data not whole leaves no mount behind"
+path = "src/heliograph/gui/wizard_model.py"
+old = "            del self.config[\"mounts\"][name]\n"
+new = "            pass\n"
+tests = ["tests/gui/test_wizard_model.py::test_data_and_its_bars_are_added_together_or_not_at_all", "tests/gui/test_wizard.py::test_data_that_is_not_whole_is_said_in_the_dialog_which_stays_open"]
+
+[[control]]
+describes = "a source's own kind is believed over the dialog's"
+path = "src/heliograph/gui/data_form.py"
+old = "told.get(\"kind\") or self.kind.value"
+new = "self.kind.value"
+tests = ["tests/gui/test_wizard.py::test_what_a_source_says_it_delivers_is_believed_over_the_dialogs_own_boxes"]
+
+[[control]]
+describes = "a source's own bar size is believed over the dialog's"
+path = "src/heliograph/gui/data_form.py"
+old = "told.get(\"bar_size\") or (self.bar_size.value or \"\").strip() or None"
+new = "(self.bar_size.value or \"\").strip() or None"
+tests = ["tests/gui/test_wizard.py::test_what_a_source_says_it_delivers_is_believed_over_the_dialogs_own_boxes"]
+
+[[control]]
+describes = "the dialog's bar size is trimmed"
+path = "src/heliograph/gui/data_form.py"
+old = "(self.bar_size.value or \"\").strip() or None"
+new = "self.bar_size.value or None"
+tests = ["tests/gui/test_wizard.py::test_a_source_that_does_not_say_is_asked_in_the_dialog"]

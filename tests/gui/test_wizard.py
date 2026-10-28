@@ -41,7 +41,20 @@ PLUGINS = [
     {"kind": "forecasters", "name": "ewmac", "version": "1.0", "summary": "trend"},
     {"kind": "forecasters", "name": "breakout", "version": "1.0", "summary": "range"},
     {"kind": "sizers", "name": "fixed", "version": "1.0", "summary": "fixed"},
+    {"kind": "data_sources", "name": "file", "version": "1.0", "summary": "a file"},
+    {"kind": "data_sources", "name": "ccxt", "version": "1.0", "summary": "an exchange"},
 ]
+FILE = {
+    "kind": "data_sources",
+    "name": "file",
+    "version": "1.0",
+    "summary": "a file",
+    "params": {
+        "type": "object",
+        "properties": {"path": {"type": "string", "title": "Path"}},
+        "required": ["path"],
+    },
+}
 
 
 def scenario(
@@ -57,6 +70,7 @@ def engine_saying(
         "/pipeline": PIPELINE,
         "/plugins": {"plugins": PLUGINS},
         "/plugins/forecasters/ewmac": EWMAC,
+        "/plugins/data_sources/file": FILE,
         "/configs": {"configs": [{"name": "trend"}]},
         "/configs/trend": {"name": "trend", "text": TEXT},
         "/backtests": {"id": "r-1", "status": "queued"},
@@ -308,8 +322,11 @@ def test_what_cannot_be_removed_is_said() -> None:
         await started(screen)
         await screen._select(event(screen, id="stream:btc@1h"))
         await screen._remove()
-        assert "only a component or a strategy" in screen.message.text
+        assert "btc@1h is read by" in screen.message.text
         assert screen.selected == "stream:btc@1h"
+        await screen._select(event(screen, id="nonsense:x"))
+        await screen._remove()
+        assert "only a component" in screen.message.text
 
     scenario(engine_saying(), play)
 
@@ -397,6 +414,176 @@ def test_a_configuration_the_engine_will_not_keep_is_said_and_not_claimed_kept()
         assert screen.kept.text == ""
 
     scenario(engine_saying(overrides={"/configs/mine": 409}), play)
+
+
+async def fill(screen: WizardScreen, **told: str) -> None:
+    """Ask for data in the dialog, with the usual answers except those in ``told``."""
+    data = screen.data
+    data.open()
+    data.source.set_value("file")
+    await data.settled()
+    assert data.form is not None
+    box = data.form.inputs["path"]
+    assert isinstance(box, ui.input)
+    box.set_value("eth.csv")
+    data.name.set_value("eth")
+    for field, value in {
+        "symbol": "ETH/USD",
+        "venue": "kraken",
+        "asset_class": "crypto",
+        "quote_currency": "USD",
+    }.items():
+        data.instrument[field].set_value(value)
+    data.start.set_value(told.get("start", "2026-01-01T00:00:00Z"))
+    data.end.set_value(told.get("end", "2026-02-01T00:00:00Z"))
+    data.bars.set_value(told.get("bars", "1h"))
+
+
+def test_a_configuration_can_be_started_empty_and_given_data() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        assert not ids(screen)  # nothing drawn before a start
+        await screen._start_empty()
+        assert screen.model is not None
+        assert ids(screen) == set()
+        assert tomllib.loads(screen.text.text)["mode"] == "backtest"
+        await fill(screen)
+        assert screen.data.settings.default_slot.children  # the source's own form is drawn
+        screen.data.add()
+        assert screen.data.message.text == ""
+        assert not screen.data.dialog.value  # closed: it was taken
+        assert ids(screen) == {"stream:eth@1h"}
+        picture = screen.flow._props["picture"]["nodes"]
+        assert picture[0]["sub"] == "file · ETH/USD"
+        mount = tomllib.loads(screen.text.text)["mounts"]["eth"]
+        assert mount["params"] == {"path": "eth.csv"}
+        assert mount["kind"] == "trades"
+        assert mount["start"].year == 2026
+
+    scenario(engine_saying(), play)
+
+
+def test_what_a_source_says_it_delivers_is_believed_over_the_dialogs_own_boxes() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        await fill(screen)
+        assert screen.data.form is not None
+        screen.data.form.values.update({"kind": "bars", "bar_size": "5m"})
+        screen.data.kind.set_value("trades")
+        screen.data.bar_size.set_value("1h")
+        screen.data.add()
+        assert screen.model is not None
+        mount = screen.model.config["mounts"]["eth"]
+        assert (mount["kind"], mount["bar_size"]) == ("bars", "5m")
+
+    scenario(engine_saying(), play)
+
+
+def test_a_source_that_does_not_say_is_asked_in_the_dialog() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        await fill(screen)
+        screen.data.kind.set_value("bars")
+        screen.data.bar_size.set_value(" 1h ")
+        screen.data.add()
+        assert screen.model is not None
+        mount = screen.model.config["mounts"]["eth"]
+        assert (mount["kind"], mount["bar_size"]) == ("bars", "1h")
+
+    scenario(engine_saying(), play)
+
+
+def test_data_can_be_added_to_a_saved_configuration_too() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await started(screen)
+        await fill(screen)
+        screen.data.add()
+        assert {"stream:btc@1h", "stream:eth@1h"} <= ids(screen)
+
+    scenario(engine_saying(), play)
+
+
+def test_the_data_dialog_offers_the_sources_and_waits_for_a_configuration() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        screen._open_data()
+        assert screen.message.text == "start from a saved configuration first"
+        await screen._start_empty()
+        screen._open_data()
+        assert screen.data.source.options == ["ccxt", "file"]
+        assert screen.data.dialog.value
+
+    scenario(engine_saying(), play)
+
+
+def test_data_that_is_not_whole_is_said_in_the_dialog_which_stays_open() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        await fill(screen, bars="")
+        screen.data.instrument["venue"].set_value("")
+        screen.data.add()
+        assert "the instrument needs venue" in screen.data.message.text
+        assert screen.data.dialog.value
+        assert ids(screen) == set()
+        screen.data.instrument["venue"].set_value("kraken")
+        screen.data.add()
+        assert "give the size of the bars" in screen.data.message.text
+        assert screen.model is not None
+        assert screen.model.config.get("mounts", {}) == {}  # nothing half added
+
+    scenario(engine_saying(), play)
+
+
+def test_a_time_without_an_offset_is_said_not_taken() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        await fill(screen, start="2026-01-01T00:00:00")
+        screen.data.add()
+        assert "needs a UTC offset" in screen.data.message.text
+        assert screen.data.dialog.value
+
+    scenario(engine_saying(), play)
+
+
+def test_settings_of_the_source_that_are_wrong_are_said_first() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        screen.data.open()
+        screen.data.source.set_value("file")
+        await screen.data.settled()
+        screen.data.add()  # the path is required and empty
+        assert screen.data.message.text == "fix the settings of the source first"
+        assert ids(screen) == set()
+
+    scenario(engine_saying(), play)
+
+
+def test_a_source_whose_settings_cannot_be_got_is_said() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        screen.data.open()
+        screen.data.source.set_value("ccxt")
+        await screen.data.settled()
+        assert "nothing for" in screen.data.message.text
+        assert screen.data.form is None
+        screen.data.source.set_value(None)
+        await screen.data.settled()
+        assert screen.data.form is None
+
+    scenario(engine_saying(), play)
+
+
+def test_data_added_with_no_configuration_is_refused() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        assert screen._add_data({}) == ["start from a configuration first"]
+
+    scenario(engine_saying(), play)
+
+
+def test_starting_empty_waits_for_the_engines_rules() -> None:
+    async def play(user: User, screen: WizardScreen) -> None:
+        await screen._start_empty()
+        assert screen.model is None
+
+    scenario(engine_saying(overrides={"/pipeline": 500}), play)
 
 
 def test_the_picture_follows_the_dark_switch() -> None:

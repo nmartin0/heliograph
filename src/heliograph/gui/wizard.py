@@ -18,6 +18,7 @@ from nicegui import ui
 
 from heliograph.gui.catalogue import kind_title
 from heliograph.gui.client import Engine, EngineError
+from heliograph.gui.data_form import SOURCES, DataForm, Spec
 from heliograph.gui.flow import Flow
 from heliograph.gui.form import SettingsForm
 from heliograph.gui.forms import Schema
@@ -29,6 +30,7 @@ from heliograph.gui.wizard_model import (
     STRATEGY,
     Rules,
     Wizard,
+    instant,
 )
 from heliograph.gui.work import Work
 
@@ -56,7 +58,11 @@ class WizardScreen:
             self.saved = ui.select(
                 {}, label="Saved configuration", on_change=lambda e: self._work.start(self._start())
             ).classes("w-full")
+            ui.button("Start empty", on_click=self._start_empty).props("flat dense no-caps")
             ui.label("Add").classes("text-subtitle2")
+            ui.button("Add data…", on_click=self._open_data).props("no-caps")
+            self.data = DataForm(self.engine, self._sources, self._add_data)
+            self.data.build()
             self.kind = ui.select({}, label="Kind", on_change=lambda e: self._plugins_of()).classes(
                 "w-full"
             )
@@ -140,6 +146,38 @@ class WizardScreen:
         if self.model is None:
             self._say("start from a saved configuration first")
         return self.model
+
+    def _sources(self) -> list[str]:
+        return sorted(p["name"] for p in self.plugins if p["kind"] == SOURCES)
+
+    async def _start_empty(self) -> None:
+        if self.rules is None:
+            return
+        self._say("")
+        self.model = Wizard({"mode": "backtest"}, self.rules)
+        self.name.value = DEFAULT_NAME
+        await self._choose("")
+
+    def _open_data(self) -> None:
+        if self._need_model() is not None:
+            self.data.open()
+
+    def _add_data(self, spec: Spec) -> list[str]:
+        """Add what the dialog asked: the data, and the bars built from it."""
+        model = self.model
+        if model is None:
+            return ["start from a configuration first"]
+        try:
+            start, end = instant(spec["start"]), instant(spec["end"])
+        except ValueError as exc:
+            return [str(exc)]
+        problems = model.add_data(
+            spec["name"], spec["source"], spec["params"], spec["instrument"], spec["kind"],
+            spec["bar_size"], start, end, spec["bars"],
+        )  # fmt: skip
+        if not problems:
+            self._redraw()
+        return problems
 
     async def _add(self) -> None:
         model = self._need_model()

@@ -316,6 +316,9 @@ within each section.
   follows a choice beside what was chosen. A view that fits its nodes once
   also loses the new one: fit again when the count changes, not on every
   change, which would undo the person's own zoom.
+- **Point a browser test's engine at a scratch copy of `examples/`.** Walking
+  the Wizard's Keep button wrote a configuration into the repository's own
+  `examples/`. Use `--configs` on a copy.
 - **Run `licence_report.py` with `uv run`.** With the system Python it finds
   no package metadata and writes "UNKNOWN" over the whole table.
 - **Try a heuristic on the real data in the browser, not only on the test's.**
