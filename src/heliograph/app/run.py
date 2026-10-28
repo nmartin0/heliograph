@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from heliograph.app.bridge import HistoryFeed, SourceLoop, run_live
-from heliograph.app.composition import build_components
+from heliograph.app.composition import build_components, build_sinks
 from heliograph.app.config import (
     GRAPH_KINDS,
     STAGE_KINDS,
@@ -65,6 +65,7 @@ from heliograph.app.config import (
     StrategyConfig,
     parse_config,
 )
+from heliograph.app.dispatch import Dispatcher, Outcome
 from heliograph.app.limits import Sleep
 from heliograph.app.mounts import Mount, build_mounts
 from heliograph.core.alarms import AlarmFired
@@ -87,6 +88,7 @@ from heliograph.core.pipeline import (
     Strategy,
     StrategySpec,
 )
+from heliograph.core.sinks import Delivered, SignalSink
 from heliograph.core.sources import DataSource, Subscription
 from heliograph.core.streams import StreamSpec
 from heliograph.core.time import Timestamp
@@ -114,8 +116,9 @@ JOURNALLED = (
     Signal,
     SignalRefused,
     Fill,
+    Delivered,
 )
-"""Every message type a backtest run journals."""
+"""Every message type a run journals."""
 
 
 class RunStoppedError(HeliographError):
@@ -246,6 +249,8 @@ async def run_live_session(
     journal: Path,
     clock: Clock,
     sleep: Sleep = asyncio.sleep,
+    *,
+    grace: float = 10.0,
 ) -> RunSummary:
     """Run the live session ``loaded`` describes until its sources end or it is cancelled.
 
@@ -255,6 +260,12 @@ async def run_live_session(
     marked complete, ``RunEnded`` is its last entry, the sources are closed,
     and then the cancellation is raised again. A failure marks the journal
     failed, as in a backtest.
+
+    Each signal a strategy publishes is also given to the configuration's
+    sinks (decision D46), in the background; every outcome is journalled as
+    a ``Delivered`` input. When the run ends, deliveries under way get
+    ``grace`` seconds to finish; those that do not are recorded as not
+    delivered.
 
     Raises:
         ConfigError: as ``run_backtest``, and if the configuration is not live.
@@ -271,27 +282,115 @@ async def run_live_session(
     misaligned = config.misaligned({m.name: m.source.capabilities.live_delay for m in mounts})
     if misaligned:
         raise ConfigError("; ".join(misaligned))
+    sinks = build_sinks(config, registry)
     header = _header(loaded, mounts, components, clock.now(), None, None)
+    if sinks:
+        header["sinks"] = _sinks_described(config, sinks)
     feeds: list[tuple[DataSource, Sequence[Subscription]]] = []
     for mount in mounts:
         assert mount.subscription is not None  # a live mount always has one
         feeds.append((mount.source, [mount.subscription]))
     stopped = False
     delivered = 0
+    dispatcher = Dispatcher(cast(Mapping[str, SignalSink], sinks), sleep=sleep)
     try:
         with _assembled(
             config, journal, header, components, clock=clock, make=LiveEngine, batch=1
         ) as engine:
+            deliveries = Deliveries(engine, dispatcher, clock, grace) if sinks else None
             try:
-                await run_live(feeds, engine, clock, sleep=sleep)
+                await run_live(
+                    feeds,
+                    engine,
+                    clock,
+                    sleep=sleep,
+                    before_end=None if deliveries is None else deliveries.finish,
+                )
             except asyncio.CancelledError:
                 stopped = True
+            finally:
+                if deliveries is not None:
+                    deliveries.cancel()
             delivered = engine.received
     finally:
         await _aclose_all({id(m.source): m.source for m in mounts}.values())
+        await dispatcher.close()
     if stopped:
         raise asyncio.CancelledError
     return RunSummary(journal, delivered, header)
+
+
+def _sinks_described(config: RunConfig, sinks: Mapping[str, Plugin[Any]]) -> str:
+    """The journal header's account of the sinks: plug-in, version and validated parameters."""
+    described = {
+        name: {
+            "plugin": config.sinks[name].plugin,
+            "version": sink.manifest.version,
+            "params": sink.params.model_dump(mode="json"),
+        }
+        for name, sink in sinks.items()
+    }
+    return json.dumps(described, sort_keys=True, separators=(",", ":"))
+
+
+class Deliveries:
+    """Gives each signal the strategies publish to the sinks, and records what became of it.
+
+    Every signal is delivered in a task of its own, in the background, so a slow
+    sink never holds up the run or the signals after it. Each outcome enters the
+    engine as a ``Delivered`` input the moment its sink is done. At the end of the
+    run the deliveries under way are given ``grace`` seconds; what is left is
+    recorded as not delivered.
+    """
+
+    def __init__(
+        self, engine: LiveEngine, dispatcher: Dispatcher, clock: Clock, grace: float
+    ) -> None:
+        self._engine = engine
+        self._dispatcher = dispatcher
+        self._clock = clock
+        self._grace = grace
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._signals: dict[str, Signal] = {}
+        self._recorded: set[tuple[str, str]] = set()
+        engine.bus.subscribe(Signal, self._start)
+
+    def _start(self, signal: Signal) -> None:
+        self._signals[signal.id] = signal
+        self._tasks[signal.id] = asyncio.create_task(self._give(signal))
+
+    async def _give(self, signal: Signal) -> None:
+        await self._dispatcher.dispatch(signal, self._record_outcome)
+
+    def _record_outcome(self, outcome: Outcome) -> None:
+        self._record(outcome.signal, outcome.sink, outcome.ok, outcome.attempts, outcome.detail)
+
+    def _record(self, signal: str, sink: str, ok: bool, attempts: int, detail: str) -> None:
+        self._engine.receive(Delivered(self._clock.now(), signal, sink, ok, attempts, detail))
+        self._recorded.add((signal, sink))
+
+    def cancel(self) -> None:
+        """Stop delivering, if the run ended any way but by finishing."""
+        for task in self._tasks.values():
+            task.cancel()
+
+    async def finish(self) -> None:
+        """Wait for deliveries under way, for at most the grace; record the rest as undelivered."""
+        if not self._tasks:
+            return
+        _, pending = await asyncio.wait(self._tasks.values(), timeout=self._grace)
+        for task in self._tasks.values():
+            if task.done() and not task.cancelled() and (error := task.exception()) is not None:
+                raise error
+        for task in pending:
+            task.cancel()
+        for signal_id, task in self._tasks.items():
+            if task in pending:
+                for name in self._dispatcher.names:
+                    if (signal_id, name) not in self._recorded:
+                        self._record(
+                            signal_id, name, False, 0, "not delivered: the session ended first"
+                        )
 
 
 async def _aclose_all(sources: Iterable[DataSource]) -> None:

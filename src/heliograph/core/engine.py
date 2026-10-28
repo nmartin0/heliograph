@@ -67,6 +67,11 @@ class Sequencer:
         """Where components set and cancel alarms; only the engine fires them."""
         return self._scheduler
 
+    @property
+    def bus(self) -> MessageBus:
+        """The bus the engine publishes on, for components that listen."""
+        return self._bus
+
     def _arrive(self, ts: Timestamp) -> None:
         """Bring the clock to ``ts`` before a message stamped then is published."""
         raise NotImplementedError

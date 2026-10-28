@@ -1112,3 +1112,23 @@ integrations is a larger thing to add than this slice.
 **Not yet:** desktop notifications and Apprise; the `[[sinks]]` configuration that
 builds them and the dispatcher into a session.
 
+## D48 · A live session gives its signals to its sinks in the background (2026-10-28)
+
+**Decision:** a live configuration may have `[sinks.<name>]` tables (`plugin`, `params`);
+a backtest may not. `build_sinks` builds them all before anything starts, reporting every
+problem at once (an unknown plug-in, bad parameters, a missing secret). During the run each
+signal a strategy publishes is delivered in a task of its own through the dispatcher, so a
+slow or stuck sink holds up neither the run nor other signals; each sink's outcome is
+journalled the moment it is known as a `Delivered` input (signal id, sink, ok, attempts,
+detail), stamped by the run's clock. When the run ends, deliveries under way get `grace`
+seconds (10 by default); those not done are recorded as not delivered, with 0 attempts. The
+journal header's `sinks` records each sink's plug-in, version and validated parameters.
+
+**Why:** a delivery is an event in the outside world, so it is an input like market data and
+a live journal stays complete and replayable; a notification service being slow must not
+delay a decision about the next bar.
+
+**Rejected:** delivering in the order signals appear (one hung sink would starve all later
+signals; found by a test); waiting without limit at the end (a stop signal must end the
+process); leaving undelivered signals unrecorded (the person could not tell it was never sent).
+

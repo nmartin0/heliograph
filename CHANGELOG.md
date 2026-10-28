@@ -411,3 +411,5 @@ All notable changes to Heliograph are recorded here. The format follows
   sink, each retried on its own, none notified twice.
 - D47 records the first sinks, ntfy and a webhook, and how a reply decides
   whether the dispatcher asks again.
+- D48 records sinks in a live session: configured by name, each signal delivered in
+  its own task, every outcome journalled.

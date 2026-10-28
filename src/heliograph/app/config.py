@@ -198,6 +198,25 @@ def _frozen_params(params: Mapping[str, Any]) -> Mapping[str, Any]:
     return frozen
 
 
+class SinkConfig(BaseModel):
+    """One sink: the plug-in that tells a person, and its parameters."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    plugin: str
+    params: Mapping[str, Any] = Field(default_factory=dict)
+
+    @field_validator("params", mode="after")
+    @classmethod
+    def _freeze_params(cls, params: Mapping[str, Any]) -> Mapping[str, Any]:
+        return _frozen_params(params)
+
+    @field_serializer("params")
+    def _serialize_params(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        thawed: dict[str, Any] = _thaw(params)
+        return thawed
+
+
 class InstrumentConfig(BaseModel):
     """An instrument as written in configuration."""
 
@@ -444,6 +463,28 @@ class RunConfig(BaseModel):
     mounts: Mapping[str, MountConfig] = Field(default_factory=dict)
     streams: tuple[StreamConfig, ...] = ()
     strategies: tuple[StrategyConfig, ...] = ()
+    sinks: Mapping[str, SinkConfig] = Field(default_factory=dict)
+
+    @field_validator("sinks", mode="after")
+    @classmethod
+    def _freeze_sinks(cls, sinks: Mapping[str, SinkConfig]) -> Mapping[str, SinkConfig]:
+        bad = [name for name in sinks if not _NAME.fullmatch(name)]
+        if bad:
+            raise ValueError(
+                f"sink names {bad} must be letters, digits, underscores and hyphens, "
+                "starting with a letter or underscore"
+            )
+        return MappingProxyType(dict(sinks))
+
+    @field_serializer("sinks")
+    def _serialize_sinks(self, sinks: Mapping[str, SinkConfig]) -> dict[str, Any]:
+        return {name: sink.model_dump() for name, sink in sinks.items()}
+
+    @model_validator(mode="after")
+    def _sinks_are_live(self) -> "RunConfig":
+        if self.sinks and self.mode != "live":
+            raise ValueError("sinks tell a person about live signals; a backtest has none")
+        return self
 
     @field_validator("mounts", mode="after")
     @classmethod

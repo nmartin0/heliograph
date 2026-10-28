@@ -4,6 +4,7 @@
 """The dispatcher gives every signal to every sink, each retried on its own."""
 
 import asyncio
+import contextlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -181,3 +182,21 @@ def test_closing_without_failures_is_quiet() -> None:
     sinks = {"a": Sink()}
     asyncio.run(Dispatcher(sinks).close())
     assert sinks["a"].closed == 1
+
+
+def test_each_outcome_is_told_the_moment_its_sink_is_done_even_if_another_never_is() -> None:
+    told: list[Outcome] = []
+
+    class Hangs(Sink):
+        async def emit(self, signal: Signal) -> Delivery:
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
+
+    dispatcher = Dispatcher({"a": Sink(), "z": Hangs()}, sleep=Waits())
+
+    async def scenario() -> None:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(dispatcher.dispatch(signal(), told.append), timeout=0.01)
+
+    asyncio.run(scenario())
+    assert told == [Outcome("a", "s-1", True, 1, "")]

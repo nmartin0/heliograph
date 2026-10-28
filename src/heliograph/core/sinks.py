@@ -27,6 +27,7 @@ from typing import Protocol
 from heliograph.core.errors import HeliographError
 from heliograph.core.pipeline import Signal
 from heliograph.core.sources import Health
+from heliograph.core.time import Timestamp
 
 
 class SinkUnavailableError(HeliographError):
@@ -38,6 +39,23 @@ class Delivery:
     """What a sink says about one signal: delivered, or declined with the reason."""
 
     ok: bool
+    detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Delivered:
+    """What became of one signal at one sink, as the run records it.
+
+    It happens outside the run (a request over the network), so it is an input
+    like market data: stamped when it was learned, journalled, and replayed.
+    ``attempts`` is 0 for a signal never given to the sink.
+    """
+
+    ts: Timestamp
+    signal: str
+    sink: str
+    ok: bool
+    attempts: int
     detail: str = ""
 
 

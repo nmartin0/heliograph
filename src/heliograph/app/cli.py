@@ -245,7 +245,8 @@ def _free(path: Path) -> Path:
 
 def _registry(config: RunConfig) -> Registry:
     """The installed plug-ins of the kinds ``config`` uses."""
-    return Registry.installed({SOURCES, *(c.kind for c in config.components)})
+    kinds = {SOURCES, *(c.kind for c in config.components)}
+    return Registry.installed(kinds | {"sinks"} if config.sinks else kinds)
 
 
 if __name__ == "__main__":

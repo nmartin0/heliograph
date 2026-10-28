@@ -196,6 +196,7 @@ async def run_live(
     *,
     sleep: Sleep = asyncio.sleep,
     skew: int = SKEW,
+    before_end: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """Publish live data from every source through ``engine``, stamped on arrival, until all end.
 
@@ -206,6 +207,8 @@ async def run_live(
     instants settle while nothing arrives. The run ends with the engine's
     ``finish`` (the end mark), also when it is cancelled, so a stopped session
     leaves a complete journal; it does not when a source or a handler fails.
+    ``before_end`` is awaited first, both ways, for what must still be
+    recorded (deliveries still under way); it can still publish to ``engine``.
 
     Raises:
         InvalidValueError: for data a source was not subscribed to, or a bar
@@ -268,8 +271,12 @@ async def run_live(
             # the rest are usually its consequences.
             raise failures.exceptions[0] from failures
     except asyncio.CancelledError:
+        if before_end is not None:
+            await before_end()
         engine.finish()
         raise
+    if before_end is not None:
+        await before_end()
     engine.finish()
 
 

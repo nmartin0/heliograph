@@ -2219,8 +2219,8 @@ tests = ["tests/plugins/test_registry.py::test_the_installed_registry_loads_only
 [[control]]
 describes = "a run asks for the kinds its configuration uses"
 path = "src/heliograph/app/cli.py"
-old = "    return Registry.installed({SOURCES, *(c.kind for c in config.components)})\n"
-new = "    return Registry.installed()\n"
+old = "    kinds = {SOURCES, *(c.kind for c in config.components)}\n"
+new = "    kinds = None\n    return Registry.installed()\n    _ = {SOURCES, *(c.kind for c in config.components)}\n"
 tests = ["tests/app/test_cli.py::test_a_run_loads_only_the_kinds_its_configuration_uses"]
 
 [[control]]
@@ -4305,15 +4305,15 @@ tests = ["tests/app/test_bridge.py::test_alarms_fire_and_instants_settle_while_n
 [[control]]
 describes = "a live run that ends normally settles its open instant and marks the end"
 path = "src/heliograph/app/bridge.py"
-old = "        raise\n    engine.finish()\n"
-new = "        raise\n"
+old = "        await before_end()\n    engine.finish()\n"
+new = "        await before_end()\n"
 tests = ["tests/app/test_bridge.py::test_the_run_ends_with_the_open_instant_settled_and_the_end_marked"]
 
 [[control]]
 describes = "a cancelled live session still marks its end"
 path = "src/heliograph/app/bridge.py"
-old = "    except asyncio.CancelledError:\n        engine.finish()\n        raise\n"
-new = "    except asyncio.CancelledError:\n        raise\n"
+old = "        engine.finish()\n        raise\n"
+new = "        raise\n"
 tests = ["tests/app/test_bridge.py::test_a_cancelled_session_still_marks_its_end"]
 
 [[control]]
@@ -4457,8 +4457,8 @@ tests = ["tests/plugins/test_ccxt_source.py::test_an_exchange_that_thinks_it_is_
 [[control]]
 describes = "a dispatcher gives a signal to every sink and reports in name order"
 path = "src/heliograph/app/dispatch.py"
-old = "names = sorted(self._sinks)\n        return tuple("
-new = "names = list(self._sinks)\n        return tuple("
+old = "        return sorted(self._sinks)\n"
+new = "        return list(self._sinks)\n"
 tests = ["tests/app/test_dispatch.py::test_a_signal_goes_to_every_sink_and_each_outcome_is_reported_in_name_order"]
 
 [[control]]
@@ -4656,3 +4656,80 @@ path = "src/heliograph/plugins/notify_sinks.py"
 old = "            await client.aclose()"
 new = "            pass"
 tests = ["tests/plugins/test_notify_sinks.py::test_closing_a_sink_closes_its_connection"]
+
+[[control]]
+describes = "each signal is given to every sink of a live session"
+path = "src/heliograph/app/run.py"
+old = "        engine.bus.subscribe(Signal, self._start)\n"
+new = "        pass\n"
+tests = ["tests/app/test_live_session.py::test_each_signal_reaches_every_sink_and_every_outcome_is_journalled"]
+
+[[control]]
+describes = "every outcome is journalled as a Delivered input"
+path = "src/heliograph/app/run.py"
+old = "        self._engine.receive(Delivered(self._clock.now(), signal, sink, ok, attempts, detail))\n"
+new = "        pass\n"
+tests = ["tests/app/test_live_session.py::test_each_signal_reaches_every_sink_and_every_outcome_is_journalled"]
+
+[[control]]
+describes = "a live session waits for deliveries under way before it ends"
+path = "src/heliograph/app/run.py"
+old = "        _, pending = await asyncio.wait(self._tasks.values(), timeout=self._grace)\n"
+new = "        _, pending = await asyncio.wait(self._tasks.values(), timeout=0)\n"
+tests = ["tests/app/test_live_session.py::test_each_signal_reaches_every_sink_and_every_outcome_is_journalled"]
+
+[[control]]
+describes = "deliveries not finished by the end are recorded as not delivered"
+path = "src/heliograph/app/run.py"
+old = "                    if (signal_id, name) not in self._recorded:\n"
+new = "                    if False:\n"
+tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
+
+[[control]]
+describes = "a delivery never recorded twice for one signal and sink"
+path = "src/heliograph/app/run.py"
+old = "                    if (signal_id, name) not in self._recorded:\n"
+new = "                    if True:\n"
+tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
+
+[[control]]
+describes = "the header describes the sinks"
+path = "src/heliograph/app/run.py"
+old = "        header[\"sinks\"] = _sinks_described(config, sinks)\n"
+new = "        pass\n"
+tests = ["tests/app/test_live_session.py::test_the_header_describes_the_sinks_as_the_run_built_them"]
+
+[[control]]
+describes = "a session without sinks records none"
+path = "src/heliograph/app/run.py"
+old = "    if sinks:\n        header"
+new = "    if True:\n        header"
+tests = ["tests/app/test_live_session.py::test_a_session_without_sinks_records_none"]
+
+[[control]]
+describes = "every sink problem is reported with the others"
+path = "src/heliograph/app/composition.py"
+old = "            problems.append(f\"sinks.{name} ({config.sinks[name].plugin}): {exc}\")\n"
+new = "            raise\n"
+tests = ["tests/app/test_live_session.py::test_a_sink_whose_secret_is_missing_stops_the_session_before_it_starts"]
+
+[[control]]
+describes = "sinks are validated before any is built"
+path = "src/heliograph/app/composition.py"
+old = "        where = f\"sinks.{name} ({sink.plugin})\"\n"
+new = "        where = f\"sink {name}\"\n"
+tests = ["tests/app/test_live_session.py::test_a_sink_that_names_no_plug_in_or_cannot_be_built_is_reported_with_the_others"]
+
+[[control]]
+describes = "sinks belong to live configurations"
+path = "src/heliograph/app/config.py"
+old = "        if self.sinks and self.mode != \"live\":\n"
+new = "        if False:\n"
+tests = ["tests/app/test_live_session.py::test_sinks_belong_to_live_configurations"]
+
+[[control]]
+describes = "each outcome is told when its sink is done"
+path = "src/heliograph/app/dispatch.py"
+old = "            if on_outcome is not None:\n                on_outcome(outcome)\n"
+new = "            pass\n"
+tests = ["tests/app/test_dispatch.py::test_each_outcome_is_told_the_moment_its_sink_is_done_even_if_another_never_is"]
