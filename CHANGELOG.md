@@ -267,6 +267,10 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- `HELIOGRAPH_STOP_DEADLINE` (seconds, default 10) says how long a stop may take;
+  the process tests give it ten minutes, so a machine that is slow for a while does
+  not fail them for taking longer than a quiet one.
+
 - The window, from what was left open after using it: a line drawn over the
   price that is not in the price's units (an ATR) has a scale of its own at the
   left and no longer flattens the candles; the snippet for a component reminds

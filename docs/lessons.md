@@ -316,6 +316,12 @@ within each section.
   follows a choice beside what was chosen. A view that fits its nodes once
   also loses the new one: fit again when the count changes, not on every
   change, which would undo the person's own zoom.
+- **A promise in seconds is a setting, so the tests that are not about it can
+  lengthen it.** A process test that asserted "exits 0" (the engine's word that it
+  stopped within ten seconds) failed on an owner's machine that ran the suite
+  fifteen times slower than ours. Removing the test's own clock (as before) left
+  the engine's. `HELIOGRAPH_STOP_DEADLINE` now lets the tests that check *that* it
+  stops give it ten minutes, and one test with a short deadline checks the miss.
 - **Point a browser test's engine at a scratch copy of `examples/`.** Walking
   the Wizard's Keep button wrote a configuration into the repository's own
   `examples/`. Use `--configs` on a copy.

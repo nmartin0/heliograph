@@ -10,13 +10,14 @@ import logging
 import sqlite3
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from heliograph.app import server
-from heliograph.app.config import parse_config
+from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.server import Backtests, _JsonLines
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.errors import HeliographError
@@ -228,3 +229,22 @@ def test_a_journal_is_not_tidied_after_its_run_while_the_process_stops(
     backtests.stop()
     assert backtests.wait(10.0)
     assert tidied == []
+
+
+def test_a_stop_is_promised_within_ten_seconds_unless_the_environment_says_otherwise() -> None:
+    assert server.settings_from("d", None, None, None, {}).stop_deadline == 10.0
+    said = {"HELIOGRAPH_STOP_DEADLINE": "45.5"}
+    assert server.settings_from("d", None, None, None, said).stop_deadline == 45.5
+
+
+@pytest.mark.parametrize("text", ["", "soon", "0", "-3", "nan", "inf"])
+def test_a_deadline_that_is_not_a_number_of_seconds_above_zero_is_refused(text: str) -> None:
+    with pytest.raises(ConfigError, match=r"HELIOGRAPH_STOP_DEADLINE must be .* not "):
+        server.settings_from("d", None, None, None, {"HELIOGRAPH_STOP_DEADLINE": text})
+
+
+def test_the_time_left_to_stop_counts_from_the_signal_and_runs_to_the_deadline() -> None:
+    stopping = server._Stopping(deadline=5.0)
+    assert 4.9 < stopping.left() <= 5.0  # no signal yet: the whole of it
+    stopping.since = time.monotonic() - 3.0
+    assert 1.9 < stopping.left() < 2.1

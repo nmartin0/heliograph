@@ -758,7 +758,10 @@ SIGTERM or SIGINT, the moment it arrives, tells the running backtest to
 stop at its next input (`run_backtest(stop=)`: its journal is closed as
 failed, saying it was stopped); then the queued ones are dropped, open
 requests get three seconds to finish, and the process exits 0 within ten
-seconds of the signal. The signal handler only sets plain flags (no lock,
+seconds of the signal (`HELIOGRAPH_STOP_DEADLINE` says otherwise: the process tests
+give it ten minutes, since what they test is that it stops, and a busy machine took
+longer than ten seconds once; the miss has its own test with a short one). The
+signal handler only sets plain flags (no lock,
 no logging), so signals arriving inside one another cannot deadlock it.
 A backtest that has not stopped by then (blocked reading a file, in a
 thread Python would wait for at exit), or a request still being answered

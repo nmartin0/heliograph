@@ -19,13 +19,16 @@ process:
 - logs one JSON object per line to stderr for each event;
 - on SIGTERM or SIGINT tells the running backtest to stop at its next
   input (its journal is closed, marked as stopped), drops the queued ones,
-  stops taking requests, and exits 0 within ``STOP_DEADLINE`` seconds; a
+  stops taking requests, and exits 0 within ``STOP_DEADLINE`` seconds (10, or what
+  ``HELIOGRAPH_STOP_DEADLINE`` says); a
   backtest that has not stopped by then (blocked reading a file, say) is
   left behind, its journal marked running (read later as interrupted),
   and the process exits 1.
 
 Every option can also come from the environment: ``HELIOGRAPH_HOST``,
-``HELIOGRAPH_PORT``, ``HELIOGRAPH_DATA``, ``HELIOGRAPH_CONFIGS``. Relative
+``HELIOGRAPH_PORT``, ``HELIOGRAPH_DATA``, ``HELIOGRAPH_CONFIGS``; and
+``HELIOGRAPH_STOP_DEADLINE`` (seconds, default 10) says how long a stop may take,
+which a slow machine may lengthen. Relative
 paths in a configuration (a data file's, say) are relative to the folder
 the process was started in, as for the ``heliograph`` command.
 
@@ -139,6 +142,8 @@ class Settings:
     configs: Path | None = None
     host: str = "127.0.0.1"
     port: int = DEFAULT_PORT
+    stop_deadline: float = STOP_DEADLINE
+    """Seconds from a stop signal within which the process promises to have exited."""
 
 
 # -- logging ---------------------------------------------------------------------------
@@ -764,11 +769,21 @@ def settings_from(
         port = int(text)
     if not 0 <= port <= 65535:
         raise ConfigError(f"the port must be from 0 to 65535, not {port}")
+    deadline_text = environ.get("HELIOGRAPH_STOP_DEADLINE", str(STOP_DEADLINE))
+    try:
+        stop_deadline = float(deadline_text)
+    except ValueError:
+        stop_deadline = math.nan
+    if not (math.isfinite(stop_deadline) and stop_deadline > 0):
+        raise ConfigError(
+            f"HELIOGRAPH_STOP_DEADLINE must be a number of seconds above 0, not {deadline_text!r}"
+        )
     return Settings(
         data=Path(data),
         configs=Path(configs) if configs else None,
         host=host or environ.get("HELIOGRAPH_HOST", "127.0.0.1"),
         port=port,
+        stop_deadline=stop_deadline,
     )
 
 
@@ -797,6 +812,7 @@ class _Stopping:
     backtests: Backtests | None = None
     server: _Server | None = None
     since: float | None = None  # time.monotonic() at the first signal
+    deadline: float = STOP_DEADLINE
 
     def handle(self, number: int, frame: object) -> None:
         # Before uvicorn installs its own handlers, and again when it raises the
@@ -812,7 +828,7 @@ class _Stopping:
     def left(self) -> float:
         """Seconds left until the process must have exited."""
         since = time.monotonic() if self.since is None else self.since
-        return STOP_DEADLINE - (time.monotonic() - since)
+        return self.deadline - (time.monotonic() - since)
 
 
 def serve(settings: Settings) -> int:
@@ -822,7 +838,7 @@ def serve(settings: Settings) -> int:
     Raises:
         ConfigError: if a folder is not one, or the address cannot be listened on.
     """
-    stopping = _Stopping()
+    stopping = _Stopping(deadline=settings.stop_deadline)
     signal.signal(signal.SIGTERM, stopping.handle)
     signal.signal(signal.SIGINT, stopping.handle)
     clock = WallClock()
@@ -859,13 +875,13 @@ def serve(settings: Settings) -> int:
             "a backtest did not finish stopping in time",
             logging.ERROR,
             id=backtests.running(),
-            deadline=STOP_DEADLINE,
+            deadline=stopping.deadline,
         )
         status = 1
     elif not _threads_done(stopping.left()):
         # Requests still being answered (a long report) on threads Python would
         # wait for at exit.
-        _event("requests did not finish in time", logging.ERROR, deadline=STOP_DEADLINE)
+        _event("requests did not finish in time", logging.ERROR, deadline=stopping.deadline)
         status = 1
     else:
         _event("stopped")

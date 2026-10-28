@@ -28,6 +28,13 @@ STARTING = 30.0
 """Seconds an engine has to say it is listening; generous for a slow computer."""
 
 
+PATIENCE = 600.0
+"""The engine's deadline for stopping, in these tests: what they test is that it stops (the
+run ends, its journal closes, the queue goes), not that a machine busy with other work
+does it within the ten seconds the engine promises on a quiet one. The promise has a
+test of its own, with its own deadline."""
+
+
 class Engine:
     """One ``heliograph serve`` process: its log events and its API."""
 
@@ -43,7 +50,7 @@ class Engine:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env={**os.environ, **(env or {})},
+            env={**os.environ, "HELIOGRAPH_STOP_DEADLINE": str(PATIENCE), **(env or {})},
             cwd=cwd,
         )
         self.lines: list[str] = []

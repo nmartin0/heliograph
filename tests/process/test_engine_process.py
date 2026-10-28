@@ -22,11 +22,11 @@ from typing import Any
 
 import pytest
 
-from tests.support.engine import Engine, trades_csv, trend_config
+from tests.support.engine import PATIENCE, Engine, trades_csv, trend_config
 
 ROOT = Path(__file__).resolve().parents[2]
-DEADLINE = 10.0
-"""Seconds from a stop signal to the engine's exit, as the engine promises."""
+WAIT = 3.0
+"""The deadline given to the engine in the test of what it does when a stop is not in time."""
 
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$")
 
@@ -415,9 +415,7 @@ def test_a_running_backtest_is_stopped_its_journal_closed_and_the_queue_dropped(
         engine.until("/api/health", lambda h: h["running"] == long["id"])
         status, body = engine.request("GET", f"/api/backtests/{queued['id']}/report")
         assert (status, body) == (409, {"error": f"backtest {queued['id']} has no report (queued)"})
-        # Exit 0 is the engine's word that it stopped within its own deadline (it exits 1
-        # otherwise); a clock here would also count a loaded machine's own delays.
-        assert engine.stop(number) == 0
+        assert engine.stop(number, timeout=PATIENCE + 100) == 0  # 0: within its deadline
     finally:
         engine.close()
     dropped = [e for e in engine.events() if e["event"] == "backtests dropped"]
@@ -453,6 +451,9 @@ def test_the_settings_may_come_from_the_environment(tmp_path: Path) -> None:
     ("args", "env", "says"),
     [
         ((), {}, "give a data folder: --data, or HELIOGRAPH_DATA"),
+        (("--data", "d"), {"HELIOGRAPH_STOP_DEADLINE": "soon"}, "HELIOGRAPH_STOP_DEADLINE must be"),
+        (("--data", "d"), {"HELIOGRAPH_STOP_DEADLINE": "0"}, "above 0, not '0'"),
+        (("--data", "d"), {"HELIOGRAPH_STOP_DEADLINE": "nan"}, "above 0, not 'nan'"),
         (("--data", "d"), {"HELIOGRAPH_PORT": "eighty"}, "HELIOGRAPH_PORT must be a port number"),
         (("--data", "d", "--configs", "nowhere"), {}, "configurations folder nowhere"),
     ],
@@ -541,19 +542,21 @@ def test_a_backtest_that_will_not_stop_is_left_and_the_engine_exits_1_in_time(
     os.mkfifo(pipe)
     text = trend_config(pipe, "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z")
     data_dir = tmp_path / "data"
-    engine = Engine("--data", str(data_dir), "--port", "0").started()
+    engine = Engine(
+        "--data", str(data_dir), "--port", "0", env={"HELIOGRAPH_STOP_DEADLINE": str(WAIT)}
+    ).started()
     try:
         stuck = engine.request("POST", "/api/backtests", {"config": text, "name": "stuck"})[1]
         journal = data_dir / "runs" / f"{stuck['id']}.sqlite"
         engine.polling(lambda: written(journal))
         asked = time.monotonic()
-        assert engine.stop(signal.SIGTERM, timeout=DEADLINE + 20) == 1
-        assert DEADLINE - 1 < time.monotonic() - asked < DEADLINE + 15  # slack: a loaded machine
+        assert engine.stop(signal.SIGTERM, timeout=WAIT + 30) == 1
+        assert WAIT - 1 < time.monotonic() - asked < WAIT + 25  # slack: a loaded machine
     finally:
         engine.close()
-    assert [e["id"] for e in engine.events() if e["event"].startswith("a backtest did not")] == [
-        stuck["id"]
-    ]
+    missed = [e for e in engine.events() if e["event"].startswith("a backtest did not")]
+    assert [e["id"] for e in missed] == [stuck["id"]]
+    assert missed[0]["deadline"] == WAIT
     again = Engine("--data", str(data_dir), "--port", "0").started()
     try:
         assert again.get(f"/api/backtests/{stuck['id']}")["status"] == "interrupted"
@@ -626,7 +629,7 @@ def test_a_burst_of_signals_stops_the_engine_once_and_in_time(tmp_path: Path) ->
             if engine.process.poll() is not None:
                 break
             engine.process.send_signal(signal.SIGTERM)
-        assert engine.wait(DEADLINE + 20) == 0  # 0: stopped within the engine's own deadline
+        assert engine.wait(PATIENCE + 100) == 0  # 0: stopped within the engine's deadline
     finally:
         engine.close()
     assert [e["event"] for e in engine.events()].count("stopped") == 1
