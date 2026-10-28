@@ -1032,3 +1032,25 @@ entry.
 **Rejected:** bumping a repeated timestamp by a nanosecond (it invents times the
 journal would then carry); settling after every input (a second input at the same
 reading would be refused); a second copy of the loop for live (the two would drift).
+
+## D44 · A live session is the backtest's assembly on a real clock (2026-10-27)
+
+**Decision:** `run_live_session` (`app/run.py`) builds a live configuration the way
+`run_backtest` builds a backtest (one assembly, `_assembled`, now takes the clock
+and the engine): the same mounts, bars, graph and strategies, on the wall clock and
+a `LiveEngine`, journalled to a new SQLite file with a batch of one entry, so a
+crash loses nothing but the entry in flight. Its journal's `kind` is `live` and has
+no `end` or `until`. A stop signal becomes a cancellation of the task; the engine
+marks the end, the journal closes `complete`, the sources close, and the
+cancellation is raised again. `heliograph live <config>` runs it, journals under
+`runs/<name>-live-<time>.sqlite`, and exits 0 after SIGTERM or Ctrl-C. A failure
+marks the journal failed, as in a backtest.
+
+**Why:** the pre-live review required that a stop leave a whole journal, and that
+live and backtest share their wiring so a live day replays. Two assemblies would
+drift.
+
+**Not yet:** replaying a live journal (`replay_backtest` refuses `kind = live`);
+running a live session from the engine's process and window; the paper broker and
+sinks (next in Phase 4).
+

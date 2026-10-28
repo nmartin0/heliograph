@@ -4,6 +4,7 @@
 """The ``heliograph`` command: run a backtest, report on it, replay it (decision D32).
 
     heliograph backtest examples/trend.toml          # run, journal, print the report
+    heliograph live examples/trend-live.toml         # run on live data until stopped
     heliograph report runs/trend-20261023T101500Z.sqlite
     heliograph replay runs/trend-20261023T101500Z.sqlite
     heliograph serve --data ~/heliograph-data --configs examples
@@ -22,6 +23,10 @@ problem Heliograph can name (a configuration that does not validate, a
 file that is not a backtest's journal, a source that failed), printed as
 one message. Anything else is a bug and shows its traceback.
 
+``live`` runs a live configuration, journalling to ``runs/<name>-live-<UTC time>.sqlite``
+as it goes, until its sources end or it is stopped (SIGTERM, or Ctrl-C): the
+engine marks the end, the journal is closed complete, and the exit status is 0.
+
 ``serve`` runs the engine's own process and its JSON API (D18; see
 app/server.py) until it is stopped (SIGTERM, or Ctrl-C), then exits 0, or
 1 if a backtest had not stopped by the deadline.
@@ -30,15 +35,16 @@ app/server.py) until it is stopped (SIGTERM, or Ctrl-C), then exits 0, or
 import argparse
 import asyncio
 import os
+import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from heliograph import __version__
-from heliograph.app.config import RunConfig, load_config, parse_config
+from heliograph.app.config import LoadedConfig, RunConfig, load_config, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import report
-from heliograph.app.run import replay_backtest, run_backtest
+from heliograph.app.run import replay_backtest, run_backtest, run_live_session
 from heliograph.app.server import DEFAULT_PORT, serve, settings_from
 from heliograph.core.clock import WallClock
 from heliograph.core.errors import HeliographError
@@ -73,6 +79,13 @@ def _parser() -> argparse.ArgumentParser:
         "--journal", type=Path, help="where to journal it (default: runs/<name>-<time>.sqlite)"
     )
     backtest.set_defaults(command=_backtest)
+
+    live = commands.add_parser("live", help="run a live configuration until it is stopped")
+    live.add_argument("config", type=Path, help="the session's configuration (TOML, mode live)")
+    live.add_argument(
+        "--journal", type=Path, help="where to journal it (default: runs/<name>-live-<time>.sqlite)"
+    )
+    live.set_defaults(command=_live)
 
     report_ = commands.add_parser("report", help="print the report of a backtest's journal")
     report_.add_argument("journal", type=Path)
@@ -128,6 +141,43 @@ def _backtest(args: argparse.Namespace) -> int:
     print(report(summary.journal), end="")
     print(f"\njournal {summary.journal} ({summary.delivered} inputs delivered)")
     return 0
+
+
+def _live(args: argparse.Namespace) -> int:
+    loaded = load_config(args.config)
+    clock = WallClock()
+    journal: Path = args.journal or _free(
+        Path("runs") / f"{args.config.stem}-live-{to_datetime(clock.now()):%Y%m%dT%H%M%SZ}.sqlite"
+    )
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        asyncio.run(_session(loaded, journal, clock))
+    except HeliographError as exc:
+        if journal.is_file():
+            raise HeliographError(f"{exc} (the journal {journal} records it)") from exc
+        raise
+    return 0
+
+
+async def _session(loaded: LoadedConfig, journal: Path, clock: WallClock) -> None:
+    """Run the session; SIGTERM and SIGINT cancel it, which ends it cleanly.
+
+    (asyncio.run already cancels on SIGINT; naming both keeps the behaviour in one place.)
+    """
+    task = asyncio.current_task()
+    assert task is not None
+    loop = asyncio.get_running_loop()
+    for stop in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(stop, task.cancel)
+    print(f"live session; journal {journal}", flush=True)
+    try:
+        summary = await run_live_session(
+            loaded, _registry(loaded.config), journal, clock, asyncio.sleep
+        )
+    except asyncio.CancelledError:
+        print(f"stopped; journal {journal}", flush=True)
+        return
+    print(f"ended; journal {summary.journal} ({summary.delivered} inputs delivered)")
 
 
 def _report(args: argparse.Namespace) -> int:

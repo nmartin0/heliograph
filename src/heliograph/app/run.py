@@ -35,10 +35,15 @@ components from the registry, refused unless each has the version and the
 parameters the run recorded. A replay's entries are the original's, byte
 for byte (tests/app/test_run.py).
 
+``run_live_session`` runs a live configuration through the same assembly on the
+wall clock (decision D44); its journal's kind is ``live``, it has no ``end`` or
+``until``, and a stop ends it complete.
+
 Components of any other kind than the graph's and the strategies' are
 refused rather than run without them.
 """
 
+import asyncio
 import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -48,7 +53,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from heliograph.app.bridge import HistoryFeed, SourceLoop
+from heliograph.app.bridge import HistoryFeed, SourceLoop, run_live
 from heliograph.app.composition import build_components
 from heliograph.app.config import (
     GRAPH_KINDS,
@@ -67,7 +72,7 @@ from heliograph.core.bars import BarsFromBars, TimeBars
 from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import Clock, SimulatedClock
-from heliograph.core.engine import BacktestEngine
+from heliograph.core.engine import BacktestEngine, LiveEngine, Sequencer
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import BarField, Graph, Indicator, IndicatorValues
 from heliograph.core.journal import runs
@@ -82,7 +87,7 @@ from heliograph.core.pipeline import (
     Strategy,
     StrategySpec,
 )
-from heliograph.core.sources import DataSource
+from heliograph.core.sources import DataSource, Subscription
 from heliograph.core.streams import StreamSpec
 from heliograph.core.time import Timestamp
 from heliograph.plugins.manifest import Plugin
@@ -198,7 +203,15 @@ def run_backtest(
     sources: dict[int, DataSource] = {id(m.source): m.source for m in mounts}
     with SourceLoop() as loop:
         try:
-            with _assembled(config, journal, header, components, progress) as engine:
+            with _assembled(
+                config,
+                journal,
+                header,
+                components,
+                clock=SimulatedClock(start),
+                make=BacktestEngine,
+                progress=progress,
+            ) as engine:
                 feeds: list[HistoryFeed] = []
                 try:
                     for mount, wanted in zip(mounts, requests, strict=True):
@@ -225,6 +238,72 @@ def run_backtest(
         finally:
             _close_all(loop, sources.values())
     return RunSummary(journal, delivered, header)
+
+
+async def run_live_session(
+    loaded: LoadedConfig,
+    registry: Registry,
+    journal: Path,
+    clock: Clock,
+    sleep: Sleep = asyncio.sleep,
+) -> RunSummary:
+    """Run the live session ``loaded`` describes until its sources end or it is cancelled.
+
+    The same components as a backtest, on the real ``clock`` and
+    ``LiveEngine``, journalled to a new file in small batches. Cancelling the
+    task (a stop signal) ends the engine's run properly: the journal is
+    marked complete, ``RunEnded`` is its last entry, the sources are closed,
+    and then the cancellation is raised again. A failure marks the journal
+    failed, as in a backtest.
+
+    Raises:
+        ConfigError: as ``run_backtest``, and if the configuration is not live.
+        InvalidValueError: if ``journal`` already exists.
+        asyncio.CancelledError: after a clean stop.
+        Whatever a source raised; the journal then records the failure.
+    """
+    config = loaded.config
+    _runnable(config, "live")
+    if journal.exists():
+        raise InvalidValueError(f"{journal} exists; a run writes a new journal")
+    components = _components(config, registry)
+    mounts = build_mounts(config, registry, clock, sleep)
+    misaligned = config.misaligned({m.name: m.source.capabilities.live_delay for m in mounts})
+    if misaligned:
+        raise ConfigError("; ".join(misaligned))
+    header = _header(loaded, mounts, components, clock.now(), None, None)
+    feeds: list[tuple[DataSource, Sequence[Subscription]]] = []
+    for mount in mounts:
+        assert mount.subscription is not None  # a live mount always has one
+        feeds.append((mount.source, [mount.subscription]))
+    stopped = False
+    delivered = 0
+    try:
+        with _assembled(
+            config, journal, header, components, clock=clock, make=LiveEngine, batch=1
+        ) as engine:
+            try:
+                await run_live(feeds, engine, clock, sleep=sleep)
+            except asyncio.CancelledError:
+                stopped = True
+            delivered = engine.received
+    finally:
+        await _aclose_all({id(m.source): m.source for m in mounts}.values())
+    if stopped:
+        raise asyncio.CancelledError
+    return RunSummary(journal, delivered, header)
+
+
+async def _aclose_all(sources: Iterable[DataSource]) -> None:
+    """Close every source; the first failure is raised once all are closed, unless raising."""
+    failures: list[BaseException] = []
+    for source in sources:
+        try:
+            await source.close()
+        except Exception as exc:
+            failures.append(exc)
+    if failures and sys.exc_info()[1] is None:
+        raise failures[0]
 
 
 def _until_stopped(feed: Iterable[Message], stop: Stop) -> Iterator[Message]:
@@ -309,10 +388,12 @@ class _Only:
         return forecast
 
 
-def _runnable(config: RunConfig) -> None:
-    """Raise unless ``config`` is a backtest this module can run."""
-    if config.mode != "backtest":
-        raise ConfigError("this configuration is live; run_backtest runs backtests")
+def _runnable(config: RunConfig, mode: str = "backtest") -> None:
+    """Raise unless ``config`` is a ``mode`` run this module can run."""
+    if config.mode != mode:
+        if mode == "backtest":
+            raise ConfigError("this configuration is live; run_backtest runs backtests")
+        raise ConfigError("this configuration is a backtest; run_live_session runs live ones")
     later = sorted({c.kind for c in config.components if c.kind not in GRAPH_KINDS | STAGE_KINDS})
     if later:
         raise ConfigError(
@@ -320,7 +401,9 @@ def _runnable(config: RunConfig) -> None:
             "forecasters and gates, and its strategies' combiners, sizers, exits and risk gates"
         )
     if not config.mounts:
-        raise ConfigError("a backtest needs at least one mount")
+        raise ConfigError(
+            f"a {'backtest' if mode == 'backtest' else 'live session'} needs at least one mount"
+        )
 
 
 def _close_all(loop: SourceLoop, sources: Iterable[DataSource]) -> None:
@@ -399,27 +482,41 @@ def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
     header["heliograph"] = version("heliograph")
     replayed = runs(read_entries(journal, JOURNALLED))
     delivered = 0
-    with _assembled(loaded.config, out, header, components) as engine:
+    with _assembled(
+        loaded.config,
+        out,
+        header,
+        components,
+        clock=SimulatedClock(Timestamp(int(header["start"]))),
+        make=BacktestEngine,
+    ) as engine:
         for inputs, until in replayed:
             delivered += engine.run(inputs, until=until)
     return RunSummary(out, delivered, header)
 
 
 @contextmanager
-def _assembled(
+def _assembled[E: Sequencer](
     config: RunConfig,
     journal: Path,
     header: Mapping[str, str],
     components: Built,
+    *,
+    clock: Clock,
+    make: Callable[[Any, MessageBus], E],
     progress: Callable[[Timestamp], None] | None = None,
-) -> Iterator[BacktestEngine]:
-    """An engine on a journalled bus: streams build bars, the graph its nodes, strategies decide."""
-    start = Timestamp(int(header["start"]))
-    clock = SimulatedClock(start)
-    params = SqliteJournalParams(path=str(journal))
+    batch: int = 1000,
+) -> Iterator[E]:
+    """An engine on a journalled bus: streams build bars, the graph its nodes, strategies decide.
+
+    A backtest passes a simulated ``clock`` and ``BacktestEngine``; a live
+    session its real clock and ``LiveEngine``, and a small ``batch`` so that a
+    crash loses little.
+    """
+    params = SqliteJournalParams(path=str(journal), batch=batch)
     with SqliteJournal(params, dict(header)) as sink:
         bus = MessageBus(clock, sink)
-        engine = BacktestEngine(clock, bus)
+        engine = make(clock, bus)
         if progress is not None:
             # Each instant as it settles: what the run has done, not what it has read ahead.
             bus.subscribe(Settled, lambda settled: progress(settled.ts))
@@ -554,10 +651,13 @@ def _header(
     mounts: Sequence[Mount],
     built: "Built",
     start: Timestamp,
-    end: Timestamp,
-    until: Timestamp,
+    end: Timestamp | None,
+    until: Timestamp | None,
 ) -> dict[str, str]:
-    """What the journal says about the run that wrote it."""
+    """What the journal says about the run that wrote it.
+
+    A live session has no ``end`` or ``until``: it runs until it is stopped.
+    """
     described: dict[str, Any] = {}
     snapshots: set[str] = set()
     for mount in mounts:
@@ -581,8 +681,9 @@ def _header(
             "params": plugin.params.model_dump(mode="json"),
             "inputs": list(component.inputs),
         }
+    live = end is None or until is None
     return {
-        "kind": "backtest",
+        "kind": "live" if live else "backtest",
         "config_digest": loaded.digest,
         "config_text": loaded.text,
         "mounts": json.dumps(described, sort_keys=True, separators=(",", ":")),
@@ -594,8 +695,7 @@ def _header(
             separators=(",", ":"),
         ),
         "start": str(start),
-        "end": str(end),
-        "until": str(until),
+        **({} if end is None or until is None else {"end": str(end), "until": str(until)}),
         "bars": BARS_RULES,
         "heliograph": version("heliograph"),
     }

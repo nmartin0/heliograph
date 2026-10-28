@@ -1092,8 +1092,8 @@ tests = ["tests/app/test_run.py::test_what_a_backtest_cannot_run_is_refused"]
 [[control]]
 describes = "a run never writes over a journal"
 path = "src/heliograph/app/run.py"
-old = "    if journal.exists():\n"
-new = "    if journal.exists() and False:\n"
+old = "    _runnable(config)\n    if journal.exists():\n"
+new = "    _runnable(config)\n    if journal.exists() and False:\n"
 tests = ["tests/app/test_run.py::test_a_run_never_writes_over_a_journal"]
 
 [[control]]
@@ -1129,22 +1129,22 @@ tests = [
 [[control]]
 describes = "every source is closed after a run, even when one fails to close"
 path = "src/heliograph/app/run.py"
-old = "            failures.append(exc)\n"
-new = "            raise\n"
+old = "            loop.run(source.close())\n        except Exception as exc:\n            failures.append(exc)\n"
+new = "            loop.run(source.close())\n        except Exception as exc:\n            raise\n"
 tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
 
 [[control]]
 describes = "a run's own error is not hidden by a source failing to close"
 path = "src/heliograph/app/run.py"
-old = "    if failures and sys.exc_info()[1] is None:\n"
-new = "    if failures:\n"
+old = "    if failures and sys.exc_info()[1] is None:\n        raise failures[0]\n\n\nREQUIRED"
+new = "    if failures:\n        raise failures[0]\n\n\nREQUIRED"
 tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
 
 [[control]]
 describes = "a source that fails only to close fails the run"
 path = "src/heliograph/app/run.py"
-old = "    if failures and sys.exc_info()[1] is None:\n"
-new = "    if failures and False:\n"
+old = "    if failures and sys.exc_info()[1] is None:\n        raise failures[0]\n\n\nREQUIRED"
+new = "    if failures and False:\n        raise failures[0]\n\n\nREQUIRED"
 tests = ["tests/app/test_run.py::test_a_source_that_fails_to_close_does_not_leave_the_others_open"]
 
 [[control]]
@@ -2170,8 +2170,8 @@ tests = ["tests/app/test_cli.py::test_a_problem_heliograph_can_name_is_one_line_
 [[control]]
 describes = "a backtest journals under runs by default"
 path = "src/heliograph/app/cli.py"
-old = "        Path(\"runs\") / f\"{args.config.stem}"
-new = "        Path(\".\") / f\"{args.config.stem}"
+old = "        Path(\"runs\") / f\"{args.config.stem}-{to_datetime"
+new = "        Path(\".\") / f\"{args.config.stem}-{to_datetime"
 tests = ["tests/app/test_cli.py::test_a_backtest_prints_its_report_and_journals_under_runs"]
 
 [[control]]
@@ -2240,8 +2240,8 @@ tests = ["tests/app/test_cli.py::test_a_run_that_failed_names_its_journal_and_it
 [[control]]
 describes = "a failed run's error names its journal"
 path = "src/heliograph/app/cli.py"
-old = "        if journal.is_file():\n"
-new = "        if False:\n"
+old = "        if journal.is_file():\n            raise HeliographError(f\"{exc} (the journal {journal} records it)\") from exc\n        raise\n    print(report"
+new = "        if False:\n            raise HeliographError(f\"{exc} (the journal {journal} records it)\") from exc\n        raise\n    print(report"
 tests = ["tests/app/test_cli.py::test_a_run_that_failed_names_its_journal_and_its_report_says_so"]
 
 [[control]]
@@ -4322,3 +4322,59 @@ path = "src/heliograph/app/bridge.py"
 old = "            raise failures.exceptions[0] from failures\n    except asyncio.CancelledError:"
 new = "            engine.finish()\n            raise failures.exceptions[0] from failures\n    except asyncio.CancelledError:"
 tests = ["tests/app/test_bridge.py::test_a_failed_session_does_not_pretend_it_ended_cleanly"]
+
+[[control]]
+describes = "a stopped live session ends with a complete journal"
+path = "src/heliograph/app/run.py"
+old = "            except asyncio.CancelledError:\n                stopped = True\n"
+new = "            except KeyboardInterrupt:\n                stopped = True\n"
+tests = ["tests/app/test_live_session.py::test_a_stopped_session_leaves_a_complete_journal_and_closed_sources"]
+
+[[control]]
+describes = "a live session journals in small batches, so a crash loses little"
+path = "src/heliograph/app/run.py"
+old = "clock=clock, make=LiveEngine, batch=1\n"
+new = "clock=clock, make=LiveEngine, batch=1000\n"
+tests = ["tests/app/test_live_session.py::test_a_stopped_session_leaves_a_complete_journal_and_closed_sources"]
+
+[[control]]
+describes = "a live session closes its sources however it ends"
+path = "src/heliograph/app/run.py"
+old = "    finally:\n        await _aclose_all("
+new = "    finally:\n        _ = ("
+tests = [
+    "tests/app/test_live_session.py::test_a_live_session_journals_what_it_read_and_ends_marked_complete",
+    "tests/app/test_live_session.py::test_a_failed_session_is_marked_failed_and_its_sources_closed",
+    "tests/app/test_live_session.py::test_a_stopped_session_leaves_a_complete_journal_and_closed_sources",
+]
+
+[[control]]
+describes = "a live session and a backtest each refuse the other's configuration"
+path = "src/heliograph/app/run.py"
+old = "    if config.mode != mode:\n"
+new = "    if False:\n"
+tests = [
+    "tests/app/test_live_session.py::test_a_backtest_configuration_is_not_a_live_session",
+    "tests/app/test_live_session.py::test_a_live_configuration_is_not_a_backtest",
+]
+
+[[control]]
+describes = "a live session's journal says it is live and has no end"
+path = "src/heliograph/app/run.py"
+old = "    live = end is None or until is None\n"
+new = "    live = False\n"
+tests = ["tests/app/test_live_session.py::test_a_live_session_journals_what_it_read_and_ends_marked_complete"]
+
+[[control]]
+describes = "a live session's journal goes under runs unless told otherwise"
+path = "src/heliograph/app/cli.py"
+old = 'Path("runs") / f"{args.config.stem}-live-'
+new = 'Path("elsewhere") / f"{args.config.stem}-live-'
+tests = ["tests/app/test_cli_live.py::test_a_live_session_without_a_journal_option_journals_under_runs"]
+
+[[control]]
+describes = "a live session never writes over a journal"
+path = "src/heliograph/app/run.py"
+old = "    _runnable(config, \"live\")\n    if journal.exists():\n"
+new = "    _runnable(config, \"live\")\n    if journal.exists() and False:\n"
+tests = ["tests/app/test_live_session.py::test_a_session_does_not_overwrite_a_journal"]

@@ -246,9 +246,9 @@ Wizard.)
   - [x] a live clock that repeats a timestamp must not end the run; live
     alarms must fire and settle before each input, as the backtest engine
     does, so a live day replays (`LiveEngine`, D43).
-  - [ ] SIGTERM must flush and close the journal (the session ends with
-    `RunEnded` on cancellation, D43; the process must turn the signal into a
-    cancellation and close the journal).
+  - [x] SIGTERM must flush and close the journal (`heliograph live`: the
+    signal cancels the session, which ends marked complete, D44; the engine's
+    process does not run live sessions yet).
   - [ ] Kraken's websocket replays its last 50 trades on each subscribe,
     trade ids are dropped, nothing reconnects, and a live trade without a
     time is a TypeError.

@@ -403,3 +403,5 @@ All notable changes to Heliograph are recorded here. The format follows
   the example.
 - D43 records the live engine: the backtest's loop for live data, with alarms,
   settling and an end mark; the roadmap ticks the first pre-live fixes.
+- D44 records the live session and `heliograph live`: the backtest's assembly
+  on the wall clock, journalled as it goes, stopped cleanly by SIGTERM or Ctrl-C.

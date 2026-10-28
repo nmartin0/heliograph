@@ -23,7 +23,7 @@ from heliograph.core.messages import Message, RunEnded, Settled
 from heliograph.core.time import Timestamp
 
 
-class _Sequencer:
+class Sequencer:
     """What both engines share: alarms in time order, instants settled once, finally.
 
     Take what comes next in time, an alarm set through :attr:`scheduler` or an
@@ -122,7 +122,7 @@ class _Sequencer:
             raise ClockError(f"an alarm was set for {due}, an instant that has already settled")
 
 
-class BacktestEngine(_Sequencer):
+class BacktestEngine(Sequencer):
     """Merges time-ordered feeds and publishes each message at its own instant.
 
     Before a message is published, the simulated clock is moved to the
@@ -198,7 +198,7 @@ class BacktestEngine(_Sequencer):
             self._running = False
 
 
-class LiveEngine(_Sequencer):
+class LiveEngine(Sequencer):
     """Publishes live data as it arrives, on the same footing as a backtest.
 
     The clock is the real time (or, in tests, a simulated one something else
@@ -212,7 +212,16 @@ class LiveEngine(_Sequencer):
     through :class:`BacktestEngine` to the same entries.
     """
 
-    __slots__ = ()
+    __slots__ = ("_received",)
+
+    def __init__(self, clock: Clock, bus: MessageBus, alarms: AlarmQueue | None = None) -> None:
+        super().__init__(clock, bus, alarms)
+        self._received = 0
+
+    @property
+    def received(self) -> int:
+        """How many inputs have been published."""
+        return self._received
 
     def receive(self, message: Message) -> None:
         """Publish an input stamped by the clock at its arrival.
@@ -232,6 +241,7 @@ class LiveEngine(_Sequencer):
         with self._exclusive():
             self._advance(message.ts, final=False)
             self._deliver(message, "input")
+            self._received += 1
 
     def tick(self) -> None:
         """Fire the alarms the clock has reached and settle the instants it has passed."""
