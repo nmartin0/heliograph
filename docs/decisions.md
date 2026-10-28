@@ -1092,3 +1092,23 @@ reply must not send twice.
 configuration, recording outcomes in the journal, and the signal-rate and staleness
 alerts.
 
+## D47 · The first sinks: ntfy and a webhook, over HTTP (2026-10-28)
+
+**Decision:** `plugins/notify_sinks.py` holds two plug-ins of the new kind `sinks`:
+`ntfy` (a topic on ntfy.sh or one's own server; the headline as the title, the
+details as the body, a priority) and `webhook` (the signal as JSON, its id as the
+`Idempotency-Key`). A connection that failed, a timeout, 408/425/429 or a 5xx is
+`SinkUnavailableError` (the dispatcher asks again); any other refusal is
+`InvalidValueError` (it does not). A secret is never in a configuration: `token_env`
+names the environment variable, read when the sink is built, and an unset one stops
+the build naming it. Servers and URLs must be http or https. ntfy's health is its
+`/v1/health`; a webhook has no health to ask until there is something to say.
+
+**Why:** a phone and a webhook cover most of the places a person wants a signal, with
+the HTTP client the project already depends on (httpx, BSD-3-Clause) and no new
+dependency. Apprise would reach more services, but a library of two hundred
+integrations is a larger thing to add than this slice.
+
+**Not yet:** desktop notifications and Apprise; the `[[sinks]]` configuration that
+builds them and the dispatcher into a session.
+

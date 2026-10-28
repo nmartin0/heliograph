@@ -92,6 +92,10 @@ limits = "heliograph.plugins.stages:Limits"
 [project.entry-points."heliograph.sizers"]
 vol_target = "heliograph.plugins.stages:VolTarget"
 
+[project.entry-points."heliograph.sinks"]
+ntfy = "heliograph.plugins.notify_sinks:Ntfy"
+webhook = "heliograph.plugins.notify_sinks:Webhook"
+
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"
 

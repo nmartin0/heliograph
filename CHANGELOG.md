@@ -409,3 +409,5 @@ All notable changes to Heliograph are recorded here. The format follows
   trades without a time skipped, dropped connections retried.
 - D46 records the signal sink port and the dispatcher: every signal to every
   sink, each retried on its own, none notified twice.
+- D47 records the first sinks, ntfy and a webhook, and how a reply decides
+  whether the dispatcher asks again.
