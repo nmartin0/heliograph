@@ -34,6 +34,12 @@ within each section.
   loaded machine's delays and failed at 10.2 s of 10 in a thirty-minute run.
   Assert the exit status; give any outer bound slack.
 
+- **A test clock that equals the message time hides live-clock bugs.** An alarm set "at" a
+  time already past raises, and only a clock ahead of its alarms shows it. The first
+  review of the answers work found two such crashes; tests for anything that sets alarms
+  from a handler now also move the clock by hand past the alarm (`lagging` in
+  `tests/core/test_followed.py`).
+
 ## Python and libraries
 
 - **Python trusts a cached `.pyc` by its source's modification second and

@@ -222,18 +222,18 @@ TOOK: Answer = ("took", None, None)
 SKIPPED: Answer = ("skipped", None, None)
 
 
-def test_a_person_who_answers_nothing_is_taken_to_have_done_what_every_signal_asked(
+def test_a_person_who_answers_nothing_is_taken_to_have_done_what_has_happened(
     tmp_path: Path, registry: Registry
 ) -> None:
-    """Held 2, 1, 4, 3, 0 at the paper fills' prices, the last at its close of 100.
+    """Held 2, 1, 4, 3 at the paper fills' prices; the last signal, to be flat, had no fill yet.
 
-    Cash: -204.02, then +102.96, -312.09, +99 and +300 (the paper fills' prices: no costs).
+    Cash: -204.02, then +102.96, -312.09 and +99 (the paper fills' prices: no costs).
     """
     journal = told(tmp_path, registry, {})
     _, (one,) = figures(journal)
     assert one.yours is not None
     assert (one.yours.took, one.yours.skipped, one.yours.expired, one.yours.waiting) == (0, 0, 0, 5)
-    assert one.yours.position == 0
+    assert one.yours.position == 3
     assert one.yours.result == pytest.approx(-14.15)
 
 

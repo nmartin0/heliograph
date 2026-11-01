@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from heliograph.app.answers import Answers, inbox_for, submit
+from heliograph.app.answers import Answers, hand_over, inbox_for, submit
 from heliograph.core.answers import SignalAnswer
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
@@ -165,3 +165,29 @@ def test_the_file_holds_plain_json(tmp_path: Path) -> None:
         "price": None,
         "quantity": 2.0,
     }
+
+
+def test_answers_unread_when_a_session_is_resumed_move_to_the_new_inbox(tmp_path: Path) -> None:
+    clock = SimulatedClock(Timestamp(100))
+    old, new = tmp_path / "old.sqlite", tmp_path / "new.sqlite"
+    inbox_for(old).mkdir()
+    submit(inbox_for(old), clock, "s1", "took")
+    assert hand_over(old, new) == 1
+    assert [p.name for p in inbox_for(old).glob("*.json")] == []
+    assert len(list(inbox_for(new).glob("*.json"))) == 1
+
+
+def test_an_answer_to_a_resumed_session_names_the_session_that_took_over(tmp_path: Path) -> None:
+    clock = SimulatedClock(Timestamp(100))
+    old, new = tmp_path / "old.sqlite", tmp_path / "new.sqlite"
+    inbox_for(old).mkdir()
+    hand_over(old, new)
+    with pytest.raises(HeliographError, match=r"resumed; answer new\.sqlite instead"):
+        submit(inbox_for(old), clock, "s1", "took")
+    assert list(inbox_for(old).glob("*.json")) == []
+
+
+def test_there_is_nothing_to_hand_over_from_a_session_that_never_had_an_inbox(
+    tmp_path: Path,
+) -> None:
+    assert hand_over(tmp_path / "old.sqlite", tmp_path / "new.sqlite") == 0

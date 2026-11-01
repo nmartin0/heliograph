@@ -277,6 +277,10 @@ All notable changes to Heliograph are recorded here. The format follows
 
 ### Fixed
 
+- A live session no longer stops with a clock error when a signal is made while an older one
+  waits for its answer, or when it resumes after a gap longer than the time to answer.
+- Answers left for a session that is then resumed reach the resumed session; the old journal
+  refuses further answers and names the new one.
 - `HELIOGRAPH_STOP_DEADLINE` (seconds, default 10) says how long a stop may take;
   the process tests give it ten minutes, so a machine that is slow for a while does
   not fail them for taking longer than a quiet one.

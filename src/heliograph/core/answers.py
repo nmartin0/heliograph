@@ -22,6 +22,7 @@ goes back to what they hold.
 
 import math
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -119,6 +120,7 @@ class Followed:
         *,
         filled: bool,
         within: int,
+        now: Callable[[], Timestamp],
     ) -> None:
         if within <= 0:
             raise InvalidValueError(f"the time to answer must be positive, not {within}")
@@ -128,6 +130,7 @@ class Followed:
         self._scheduler = scheduler
         self._filled = filled
         self._within = within
+        self._now = now
         self._signals: dict[str, _Signalled] = {}
         self._waiting: deque[tuple[Timestamp, str]] = deque()
         self._position = 0.0
@@ -154,7 +157,8 @@ class Followed:
             return
         self._signals[signal.id] = _Signalled(signal.target, applied=not self._filled)
         self._waiting.append((Timestamp(signal.ts + self._within), signal.id))
-        self._scheduler.at(self._waiting[0][0], self._key)
+        if len(self._waiting) == 1:  # else the alarm already stands for an earlier one
+            self._arm()
         self._follow()
 
     def _on_answer(self, answer: SignalAnswer) -> None:
@@ -168,15 +172,22 @@ class Followed:
     def _on_alarm(self, alarm: AlarmFired) -> None:
         if alarm.key != self._key:
             return
-        while self._waiting and self._waiting[0][0] <= alarm.ts:
-            _, identity = self._waiting.popleft()
+        # A live clock may be well past the alarm (a stalled process, a resume after a
+        # gap): every signal already due expires now, each as of its own deadline.
+        limit = max(alarm.ts, self._now())
+        while self._waiting and self._waiting[0][0] <= limit:
+            due, identity = self._waiting.popleft()
             found = self._signals[identity]
             if found.verdict is None:
                 found.verdict = "expired"
-                self._bus.publish(SignalExpired(alarm.ts, identity))
+                self._bus.publish(SignalExpired(due, identity))
         if self._waiting:
-            self._scheduler.at(self._waiting[0][0], self._key)
+            self._arm()
         self._follow()
+
+    def _arm(self) -> None:
+        """Set the alarm for the earliest signal waiting (not before now: the clock may lag)."""
+        self._scheduler.at(Timestamp(max(self._waiting[0][0], self._now())), self._key)
 
     def _follow(self) -> None:
         position = 0.0

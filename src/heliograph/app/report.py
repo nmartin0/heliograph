@@ -16,7 +16,8 @@ A live session's report also says what the person did (decision D54): how many
 signals they took, skipped or let expire, the position they hold, and their
 result beside the signal's own paper result. They are worked out as
 ``core.answers.Followed`` does it: a signal counts for them unless skipped or
-expired (one still waiting counts, as the strategy took it), moving the position
+expired (one still waiting counts once it has happened: when its paper fill is
+made, or at once if there was nothing to trade), moving the position
 to its target, or by the quantity they said they traded. A trade is at the price
 they gave, else the paper fill's, else the close the signal was made on; their
 result is marked at the last close and takes no costs of theirs into account.
@@ -270,9 +271,12 @@ def _yours(book: _Book) -> Yours:
     """What the person did, folded in the order of the signals (see the module)."""
     position = cash = 0.0
     counts = {"took": 0, "skipped": 0, "expired": 0, None: 0}
+    previous = 0.0
     for told in book.told.values():
         counts[told.verdict] += 1
-        if told.verdict in ("skipped", "expired"):
+        happened = told.paper is not None or told.target == previous
+        previous = told.target
+        if told.verdict in ("skipped", "expired") or (told.verdict is None and not happened):
             continue
         after = told.target if told.quantity is None else position + told.quantity
         price = told.paid or told.paper or told.price

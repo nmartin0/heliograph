@@ -17,7 +17,7 @@ from heliograph.app.answers import inbox_for, submit
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest, run_live_session
 from heliograph.core.answers import SignalAnswer, SignalExpired
-from heliograph.core.errors import InvalidValueError
+from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import IndicatorValues
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.pipeline import Signal, SignalRefused
@@ -275,6 +275,7 @@ class Recorder(Plugin[RecorderParams]):
     )
     got: ClassVar[list[tuple[str, str]]] = []
     cancelled: ClassVar[int] = 0
+    turns: ClassVar[int] = 3
 
     def __init__(self, params: RecorderParams) -> None:
         super().__init__(params)
@@ -286,7 +287,7 @@ class Recorder(Plugin[RecorderParams]):
                 await asyncio.Event().wait()
             finally:
                 Recorder.cancelled += 1
-        for _ in range(3):  # a delivery takes a few turns of the loop
+        for _ in range(Recorder.turns):  # a delivery takes a few turns of the loop
             await asyncio.sleep(0)
         self.asks += 1
         if self.asks <= self.params.fail_first:
@@ -306,6 +307,7 @@ def with_sinks(registry: Registry) -> Registry:
     registry.register(Recorder)
     Recorder.got.clear()
     Recorder.cancelled = 0
+    Recorder.turns = 3
     return registry
 
 
@@ -753,3 +755,36 @@ def test_a_session_resumes_only_a_live_journal_of_its_own_configuration(
     with pytest.raises(InvalidValueError, match="not the journal of a live session"):
         resuming(STRATEGY, tmp_path / "x.sqlite", backtest)
     assert not (tmp_path / "other.sqlite").exists()
+
+
+def test_an_answer_left_for_a_session_that_is_resumed_reaches_the_new_one(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    first = tmp_path / "first.sqlite"
+    stopped = play(registry, first, start=NOW, signals_wanted=1)
+    trades = sum(1 for m in history(first) if isinstance(m, Point))
+    (made,) = [m for m in history(first) if isinstance(m, Signal)]
+    # the person answers after the session stopped, before it was resumed
+    submit(inbox_for(first), time.clock, made.id, "skipped")
+    second = tmp_path / "second.sqlite"
+    play(registry, second, start=stopped, signals_wanted=2, start_at=trades, resume=first)
+    answered = [m for m in history(second) if isinstance(m, SignalAnswer)]
+    assert [(a.signal, a.verdict) for a in answered] == [(made.id, "skipped")]
+    with pytest.raises(HeliographError, match=r"resumed; answer second\.sqlite instead"):
+        submit(inbox_for(first), time.clock, made.id, "took")
+
+
+def test_a_session_waits_for_deliveries_still_under_way_when_it_ends(
+    with_sinks: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    """Deliveries taking far more turns of the loop than the end of the run has to spare."""
+    slow = """
+[sinks.slow]
+plugin = "recorder"
+params = { name = "slow" }
+"""
+    Recorder.turns = 200
+    journal = strategy_session(slow, with_sinks, tmp_path, time)
+    made = signals(journal)
+    assert [d.ok for d in deliveries(journal)] == [True] * len(made)
+    assert sorted(i for _, i in Recorder.got) == sorted(s.id for s in made)

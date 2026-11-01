@@ -8,7 +8,10 @@ It leaves a file in the session's inbox, a folder beside the journal
 (``<journal>.answers``); the session looks in the folder now and then, turns each
 file into a ``SignalAnswer`` stamped by its clock, and publishes it as an input.
 A file is written under a temporary name and renamed, so the session never reads
-half of one. An answer the session cannot use (not JSON, not an answer, a signal
+half of one. When a session is resumed (decision D53) the answers still unread in the old
+inbox move to the new one and the old one is marked, so an answer addressed to the old
+journal afterwards is refused with the new journal's name rather than lost (``hand_over``).
+An answer the session cannot use (not JSON, not an answer, a signal
 it has not seen) is moved to ``rejected/`` with a ``.why`` beside it, never lost.
 """
 
@@ -26,6 +29,8 @@ from heliograph.core.errors import HeliographError
 from heliograph.core.pipeline import Signal
 
 FIELDS = ("signal", "verdict", "price", "quantity")
+RESUMED = "RESUMED"
+"""The file that marks an inbox whose session was resumed; it holds the new journal's name."""
 INTERVAL = 1.0
 """Seconds between looks in the inbox."""
 
@@ -51,6 +56,10 @@ def submit(
     """
     if not inbox.is_dir():
         raise HeliographError(f"{inbox} does not exist: no live session has started with it")
+    resumed = inbox / RESUMED
+    if resumed.is_file():
+        successor = resumed.read_text(encoding="utf-8").strip()
+        raise HeliographError(f"that session was resumed; answer {successor} instead")
     now = clock.now()
     SignalAnswer(ts=now, signal=signal, verdict=verdict, price=price, quantity=quantity)
     text = json.dumps(
@@ -71,6 +80,23 @@ def submit(
         finally:
             pending.unlink()
         return target
+
+
+def hand_over(old: Path, new: Path) -> int:
+    """Move the answers unread in the inbox of ``old`` to that of ``new``; how many moved.
+
+    The old inbox is then marked as resumed. Does nothing if the old session left none.
+    """
+    before, after = inbox_for(old), inbox_for(new)
+    if not before.is_dir():
+        return 0
+    after.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for path in sorted(before.glob("*.json")):
+        os.replace(path, after / path.name)
+        moved += 1
+    (before / RESUMED).write_text(new.name + "\n", encoding="utf-8")
+    return moved
 
 
 class Answers:

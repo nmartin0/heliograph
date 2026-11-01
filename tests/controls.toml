@@ -2106,7 +2106,7 @@ tests = ["tests/core/test_pipeline.py::test_with_a_broker_the_position_held_is_w
 describes = "a run tells each strategy what its broker filled"
 path = "src/heliograph/app/run.py"
 old = "                    broker.on_fill(_holding(running))\n"
-new = ""
+new = "                    pass\n"
 tests = ["tests/app/test_report.py::test_signals_are_filled_at_the_next_open_less_half_the_spread"]
 
 [[control]]
@@ -4676,7 +4676,7 @@ describes = "a live session waits for deliveries under way before it ends"
 path = "src/heliograph/app/run.py"
 old = "        _, pending = await asyncio.wait(self._tasks.values(), timeout=self._grace)\n"
 new = "        _, pending = await asyncio.wait(self._tasks.values(), timeout=0)\n"
-tests = ["tests/app/test_live_session.py::test_each_signal_reaches_every_sink_and_every_outcome_is_journalled"]
+tests = ["tests/app/test_live_session.py::test_a_session_waits_for_deliveries_still_under_way_when_it_ends"]
 
 [[control]]
 describes = "deliveries not finished by the end are recorded as not delivered"
@@ -4884,7 +4884,7 @@ tests = ["tests/core/test_followed.py::test_an_answer_to_another_strategys_or_an
 [[control]]
 describes = "the expiry alarm is re-armed for the next signal waiting"
 path = "src/heliograph/core/answers.py"
-old = "        if self._waiting:\n            self._scheduler.at(self._waiting[0][0], self._key)\n        self._follow()"
+old = "        if self._waiting:\n            self._arm()\n        self._follow()"
 new = "        self._follow()"
 tests = ["tests/core/test_followed.py::test_each_signal_expires_in_turn_at_its_own_time"]
 
@@ -5010,8 +5010,8 @@ tests = ["tests/app/test_report.py::test_the_price_and_quantity_a_person_gave_ar
 [[control]]
 describes = "a skipped or expired signal leaves the person's position alone"
 path = "src/heliograph/app/report.py"
-old = "if told.verdict in (\"skipped\", \"expired\"):\n            continue"
-new = "if told.verdict == \"never\":\n            continue"
+old = "if told.verdict in (\"skipped\", \"expired\") or ("
+new = "if told.verdict == \"never\" or ("
 tests = ["tests/app/test_report.py::test_skipped_and_expired_signals_leave_the_person_where_they_were"]
 
 [[control]]
@@ -5026,7 +5026,7 @@ describes = "a signal's paper fill price is what an unpriced answer is taken at"
 path = "src/heliograph/app/report.py"
 old = "                paper.paper = message.price"
 new = "                paper.paper = None"
-tests = ["tests/app/test_report.py::test_a_person_who_answers_nothing_is_taken_to_have_done_what_every_signal_asked", "tests/app/test_report.py::test_skipped_and_expired_signals_leave_the_person_where_they_were"]
+tests = ["tests/app/test_report.py::test_a_person_who_answers_nothing_is_taken_to_have_done_what_has_happened", "tests/app/test_report.py::test_skipped_and_expired_signals_leave_the_person_where_they_were"]
 
 [[control]]
 describes = "a backtest reports no answers"
@@ -5034,3 +5034,45 @@ path = "src/heliograph/app/report.py"
 old = "yours=_yours(book) if live and book.filled else None"
 new = "yours=_yours(book) if book.filled else None"
 tests = ["tests/app/test_report.py::test_a_backtest_has_no_answers_to_report"]
+
+[[control]]
+describes = "the expiry alarm is never set before now"
+path = "src/heliograph/core/answers.py"
+old = "Timestamp(max(self._waiting[0][0], self._now()))"
+new = "self._waiting[0][0]"
+tests = ["tests/core/test_followed.py::test_a_signal_made_after_its_own_deadline_expires_as_of_the_deadline"]
+
+[[control]]
+describes = "a signal expires as of its own deadline"
+path = "src/heliograph/core/answers.py"
+old = "SignalExpired(due, identity)"
+new = "SignalExpired(alarm.ts, identity)"
+tests = ["tests/core/test_followed.py::test_every_signal_past_its_deadline_expires_when_the_clock_is_found_far_ahead"]
+
+[[control]]
+describes = "an unanswered signal counts for the person once it has happened"
+path = "src/heliograph/app/report.py"
+old = "if told.verdict in (\"skipped\", \"expired\") or (told.verdict is None and not happened):"
+new = "if told.verdict in (\"skipped\", \"expired\"):"
+tests = ["tests/app/test_report.py::test_a_person_who_answers_nothing_is_taken_to_have_done_what_has_happened"]
+
+[[control]]
+describes = "unread answers follow a resumed session to its new inbox"
+path = "src/heliograph/app/answers.py"
+old = "        os.replace(path, after / path.name)\n        moved += 1"
+new = "        moved += 1"
+tests = ["tests/app/test_answers_inbox.py::test_answers_unread_when_a_session_is_resumed_move_to_the_new_inbox"]
+
+[[control]]
+describes = "an answer to a resumed session is refused, naming the new one"
+path = "src/heliograph/app/answers.py"
+old = "    if resumed.is_file():"
+new = "    if False:"
+tests = ["tests/app/test_answers_inbox.py::test_an_answer_to_a_resumed_session_names_the_session_that_took_over"]
+
+[[control]]
+describes = "a resumed session takes over its predecessor's inbox"
+path = "src/heliograph/app/run.py"
+old = "                hand_over(resume, journal)\n"
+new = ""
+tests = ["tests/app/test_live_session.py::test_an_answer_left_for_a_session_that_is_resumed_reaches_the_new_one"]

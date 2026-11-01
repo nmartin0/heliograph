@@ -53,7 +53,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from heliograph.app.answers import Answers, inbox_for
+from heliograph.app.answers import Answers, hand_over, inbox_for
 from heliograph.app.bridge import HistoryFeed, SourceLoop, run_live
 from heliograph.app.composition import build_components, build_sinks
 from heliograph.app.config import (
@@ -323,6 +323,8 @@ async def run_live_session(
         ) as engine:
             answers = Answers(engine, session_clock, inbox_for(journal), answers_sleep)
             if earlier is not None:
+                assert resume is not None
+                hand_over(resume, journal)
                 assert isinstance(session_clock, ResumedClock)
                 _restore(engine, session_clock, earlier)
             # After the restore: what the old session made has been given to the sinks already.
@@ -796,6 +798,7 @@ def _assembled[E: Sequencer](
                         bus,
                         engine.scheduler,
                         filled=strategy.fills is not None,
+                        now=clock.now,
                         within=(
                             found[1].bar_spec().size
                             if strategy.answer_within is None

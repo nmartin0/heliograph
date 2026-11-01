@@ -1244,7 +1244,10 @@ paper session survives a restart with its positions and clock intact.
 
 **Not done:** a restart loses the time the process was down (the data it would have seen); the
 journal grows with the history each time (replaying a long history takes as long as it did to
-run, less the waiting); the old inbox's unread answers go nowhere (answer to the new journal).
+run, less the waiting); a crash between a signal being journalled and its delivery being
+recorded leaves it unsent after a resume (the restore treats every restored signal as already
+delivered). Answers still unread in the old inbox move to the new one, and the old inbox then
+refuses answers, naming the new journal.
 
 **Rejected:** saving state beside the journal (a second record that could disagree with it);
 appending to the old journal file (a run writes a new journal; the old one stays as it ended).
@@ -1257,7 +1260,8 @@ marked at the closes), and, for a strategy with a fill model, what the person di
 signals they took, skipped, let expire, or have not answered, the position they hold, and their
 profit and loss beside the difference from the paper result. The person's result is worked out
 from the journal alone, in the order the signals were made, as `Followed` (D51) does: a signal
-counts for them unless skipped or expired (one still waiting counts, as the strategy took it);
+counts for them unless skipped or expired (one still waiting counts once it has happened:
+its paper fill was made, or there was nothing to trade);
 it moves them to its target, or by the quantity they said they traded. A trade is at the price
 they gave, else the paper fill's, else the close the signal was made on. Marked at the last
 close; none of their own costs are known, so none are taken.

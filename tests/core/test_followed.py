@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from heliograph.core.alarms import AlarmFired
 from heliograph.core.answers import Followed, SignalAnswer, SignalExpired, Verdict
+from heliograph.core.bus import MessageBus
+from heliograph.core.clock import SimulatedClock
+from heliograph.core.engine import LiveEngine
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.journal import JournalEntry, MemoryJournal
 from heliograph.core.messages import Message
@@ -50,7 +54,15 @@ def case(filled: bool = False, within: int = LONG) -> Case:
     return Case(
         w,
         holder,
-        Followed("trend", holder, w.bus, w.engine.scheduler, filled=filled, within=within),
+        Followed(
+            "trend",
+            holder,
+            w.bus,
+            w.engine.scheduler,
+            filled=filled,
+            within=within,
+            now=w.clock.now,
+        ),
         journal,
     )
 
@@ -195,4 +207,71 @@ def test_a_signal_replaced_before_its_fill_is_never_held_unless_taken() -> None:
 def test_the_time_to_answer_is_positive() -> None:
     w = world()
     with pytest.raises(InvalidValueError, match="time to answer must be positive"):
-        Followed("trend", Holder(), w.bus, w.engine.scheduler, filled=False, within=0)
+        Followed(
+            "trend", Holder(), w.bus, w.engine.scheduler, filled=False, within=0, now=w.clock.now
+        )
+
+
+@dataclass
+class Lagging:
+    """A live engine whose clock is moved by hand, as a wall clock runs past its alarms."""
+
+    clock: SimulatedClock
+    engine: LiveEngine
+    bus: MessageBus
+    holder: Holder
+    expired: list[SignalExpired]
+
+    def at(self, ts: int) -> None:
+        self.clock.advance_to(Timestamp(ts))
+
+
+def lagging(within: int) -> Lagging:
+    clock = SimulatedClock(Timestamp(0))
+    bus = MessageBus(clock)
+    engine = LiveEngine(clock, bus)
+    holder = Holder()
+    Followed("trend", holder, bus, engine.scheduler, filled=False, within=within, now=clock.now)
+    expired: list[SignalExpired] = []
+    bus.subscribe(SignalExpired, expired.append)
+    return Lagging(clock, engine, bus, holder, expired)
+
+
+def test_every_signal_past_its_deadline_expires_when_the_clock_is_found_far_ahead() -> None:
+    """A stalled process, or a resume after a gap: two are waiting, 3 h to answer, now 10 h."""
+    live = lagging(3 * HOUR)
+    live.at(1 * HOUR)
+    live.engine.receive(signal(1, 1.0))
+    live.at(2 * HOUR)
+    live.engine.receive(signal(2, 2.0))
+    live.at(10 * HOUR)
+    live.engine.tick()
+    assert [(e.ts, e.signal) for e in live.expired] == [(4 * HOUR, "s1"), (5 * HOUR, "s2")]
+    assert live.holder.told == [1.0, 2.0, 0.0]
+
+
+def test_a_signal_made_as_an_older_one_runs_out_does_not_move_the_older_ones_alarm() -> None:
+    """A signal made by an alarm just after the older one's deadline, the clock a moment late."""
+    live = lagging(1 * HOUR)
+    live.engine.scheduler.claim("bars")
+    live.engine.scheduler.every(Timestamp(2 * HOUR), HOUR, "bars")
+    live.bus.subscribe(
+        AlarmFired,
+        lambda a: live.bus.publish(signal(a.ts // HOUR, 2.0)) if a.key == "bars" else None,
+    )
+    live.at(1 * HOUR)
+    live.engine.receive(signal(1, 1.0))
+    live.at(2 * HOUR + 1000)
+    live.engine.tick()
+    assert [(e.ts, e.signal) for e in live.expired] == [(2 * HOUR, "s1")]
+    assert live.holder.told == [1.0, 2.0]
+
+
+def test_a_signal_made_after_its_own_deadline_expires_as_of_the_deadline() -> None:
+    """The clock is found 2 h on from a signal given 1 h to be answered: no alarm in the past."""
+    live = lagging(1 * HOUR)
+    live.at(3 * HOUR)
+    live.engine.receive(signal(1, 1.0))
+    live.engine.tick()
+    assert [(e.ts, e.signal) for e in live.expired] == [(2 * HOUR, "s1")]
+    assert live.holder.told == [1.0, 0.0]
