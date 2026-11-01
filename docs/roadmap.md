@@ -254,8 +254,8 @@ Wizard.)
   - [x] A live session resumes from an earlier journal: positions, answers and clock
     intact (`heliograph live --resume`, D53).
   - [x] A report comparing the person's result with the signal's paper result (D54).
-- Risk gate and `Halted` state live; signal-rate and staleness alerts (spec:
-  [specs/halt.md](specs/halt.md)).
+- [x] Risk gate and `Halted` state live; signal-rate and staleness alerts (D55 to D59; its
+  spec was deleted when the last commit landed).
   - [x] `Halted` / `Cleared`, the `Halt` gate every live strategy has first, and
     `heliograph halt` / `clear` through the inbox (D55).
   - [x] A staleness watch and a signal-rate watch that halt (`halt_after_silence`,
@@ -263,7 +263,7 @@ Wizard.)
   - [x] A feed that gives up halts the session: the halt is journalled and deliveries are
     awaited before it ends failed (D57). It cannot carry on: nothing is left to trade on.
   - [x] Alerts: a halt or clear delivered to the sinks that take alerts (D58).
-  - [ ] The report says when the session was halted and why.
+  - [x] The report says when the session was halted and why (D59).
 
 - From the review of 2026-10-23, to settle before live data:
   - [x] a live clock that repeats a timestamp must not end the run; live

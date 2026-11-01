@@ -37,6 +37,7 @@ from heliograph.app.run import JOURNALLED
 from heliograph.core.answers import SignalAnswer, SignalExpired
 from heliograph.core.broker import Fill
 from heliograph.core.errors import InvalidValueError
+from heliograph.core.halt import Cleared, Halted
 from heliograph.core.messages import Bar, Settled
 from heliograph.core.pipeline import Signal, SignalRefused
 from heliograph.core.time import Timestamp, to_datetime
@@ -78,6 +79,7 @@ class _Book:
     filled: bool
     signals: int = 0
     refused: int = 0
+    by_halt: int = 0  # of those refused, the ones a halt kept in
     doubted: int = 0
     fills: int = 0
     bought: float = 0.0
@@ -132,6 +134,8 @@ class Figures:
     exposed: int
     yours: Yours | None = None
     """Set for a live session; None for a backtest, whose person answers nothing."""
+    by_halt: int = 0
+    """Of the signals refused, how many a halt kept in (D55)."""
 
 
 def figures(journal: Path) -> tuple[dict[str, str], list[Figures]]:
@@ -211,6 +215,8 @@ def _read(journal: Path) -> tuple[dict[str, str], list[_Book]]:
                 books[message.strategy].doubted += 1
             else:
                 books[message.strategy].refused += 1
+                if message.refused_by == "halt":
+                    books[message.strategy].by_halt += 1
         elif isinstance(message, Fill):
             _fill(books[message.strategy], message)
             paper = books[message.strategy].told.get(message.signal)
@@ -243,9 +249,29 @@ def report(journal: Path) -> str:
         lines.append(
             f"NOT COMPLETE ({header.get('status')}): the figures cover what was journalled"
         )
+    lines += _halt_lines(journal) if header["kind"] == "live" else []
     for one in all_figures:
         lines += ["", *_lines(one)]
     return "\n".join(lines) + "\n"
+
+
+def _halt_lines(journal: Path) -> list[str]:
+    """When the session was halted and cleared, and why; the last line says if it still is."""
+    lines: list[str] = []
+    halted = False
+    for entry in read_entries(journal, JOURNALLED, only=(Halted, Cleared)):
+        message = entry.message
+        if isinstance(message, Halted):
+            if halted:
+                continue  # the first halt stands (D55); a second says nothing new
+            halted = True
+            lines.append(f"HALTED {_when(str(message.ts))} by {message.by}: {message.reason}")
+        elif isinstance(message, Cleared) and halted:
+            halted = False
+            lines.append(f"halt cleared {_when(str(message.ts))}")
+    if halted:
+        lines.append("STILL HALTED at the end of the journal")
+    return lines
 
 
 def _fill(book: _Book, fill: Fill) -> None:
@@ -313,6 +339,7 @@ def _figures(book: _Book, live: bool = False) -> Figures:
         closes=book.closes,
         exposed=book.exposed,
         yours=_yours(book) if live and book.filled else None,
+        by_halt=book.by_halt,
     )
 
 
@@ -321,6 +348,7 @@ def _lines(f: Figures) -> list[str]:
     rows = [
         ("signals sent", f"{f.signals}"),
         ("signals refused", f"{f.refused}"),
+        *([("  of which by a halt", f"{f.by_halt}")] if f.by_halt else []),
         ("closes doubted", f"{f.doubted}"),
     ]
     if not f.filled:

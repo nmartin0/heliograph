@@ -16,8 +16,9 @@ from heliograph.app.run import JOURNALLED
 from heliograph.core.answers import SignalAnswer, SignalExpired, Verdict
 from heliograph.core.broker import Fill
 from heliograph.core.errors import InvalidValueError
+from heliograph.core.halt import Cleared, Halted
 from heliograph.core.journal import JournalEntry, Origin
-from heliograph.core.pipeline import Signal
+from heliograph.core.pipeline import Signal, SignalRefused
 from heliograph.core.time import Timestamp
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
@@ -178,7 +179,11 @@ def test_a_journal_that_is_not_a_backtests_or_a_sessions_has_no_report(tmp_path:
         report(path)
 
 
-def as_live(source: Path, target: Path, *later: SignalAnswer | SignalExpired) -> list[str]:
+def as_live(
+    source: Path,
+    target: Path,
+    *later: SignalAnswer | SignalExpired | Halted | Cleared | SignalRefused,
+) -> list[str]:
     """``source``'s entries as a live session's journal, then ``later`` ones; its signal ids."""
     header = {k: v for k, v in read_header(source).items() if k not in RESERVED_HEADER}
     header["kind"] = "live"
@@ -187,7 +192,9 @@ def as_live(source: Path, target: Path, *later: SignalAnswer | SignalExpired) ->
         for entry in entries:
             journal.append(entry)
         for seq, message in enumerate(later, start=len(entries) + 1):
-            origin: Origin = "derived" if isinstance(message, SignalExpired) else "input"
+            origin: Origin = (
+                "derived" if isinstance(message, SignalExpired | SignalRefused) else "input"
+            )
             journal.append(JournalEntry(seq, origin, message))
     return [e.message.id for e in entries if isinstance(e.message, Signal)]
 
@@ -370,3 +377,93 @@ def test_late_data_a_run_left_out_is_recorded_and_reported(
     assert report(journal).splitlines()[2] == (
         "LATE DATA LEFT OUT (after its bar closed): btc@1h 3"
     )
+
+
+def halted_journal(tmp_path: Path, registry: Registry, *later: Halted | Cleared) -> Path:
+    source = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, source)
+    target = tmp_path / "live.sqlite"
+    as_live(source, target, *later)
+    return target
+
+
+def test_a_halt_the_owner_cleared_is_reported_with_who_halted_it_and_why(
+    tmp_path: Path, registry: Registry
+) -> None:
+    journal = halted_journal(
+        tmp_path,
+        registry,
+        Halted(ts=Timestamp(START + 7 * HOUR), reason="exchange maintenance"),
+        Cleared(ts=Timestamp(START + 9 * HOUR)),
+    )
+    lines = report(journal).splitlines()
+    assert lines[2:4] == [
+        "HALTED 2026-10-01T07:00:00Z by owner: exchange maintenance",
+        "halt cleared 2026-10-01T09:00:00Z",
+    ]
+    assert "STILL HALTED" not in "\n".join(lines)
+
+
+def test_a_session_still_halted_at_the_end_of_its_journal_says_so(
+    tmp_path: Path, registry: Registry
+) -> None:
+    journal = halted_journal(
+        tmp_path,
+        registry,
+        Halted(ts=Timestamp(START + 7 * HOUR), reason="no price of BTC/USD for 5m", by="silence:t"),
+        Halted(ts=Timestamp(START + 8 * HOUR), reason="a second halt says nothing new"),
+    )
+    lines = report(journal).splitlines()
+    assert lines[2:4] == [
+        "HALTED 2026-10-01T07:00:00Z by silence:t: no price of BTC/USD for 5m",
+        "STILL HALTED at the end of the journal",
+    ]
+
+
+def test_signals_a_halt_kept_in_are_counted_apart(tmp_path: Path, registry: Registry) -> None:
+    source = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, source)
+    instrument = next(
+        e.message.instrument
+        for e in read_entries(source, JOURNALLED)
+        if isinstance(e.message, Signal)
+    )
+
+    def refused(hour: int, by: str) -> SignalRefused:
+        return SignalRefused(
+            ts=Timestamp(START + hour * HOUR),
+            id=f"r{hour}",
+            strategy="trend",
+            instrument=instrument,
+            target=1.0,
+            held=0.0,
+            price=100.0,
+            exit="",
+            refused_by=by,
+            reason="why",
+        )
+
+    target = tmp_path / "live.sqlite"
+    as_live(source, target, refused(7, "halt"), refused(8, "halt"), refused(9, "limits"))
+    _, (one,) = figures(target)
+    assert (one.refused, one.by_halt) == (3, 2)
+    rows = [line.split() for line in report(target).splitlines()]
+    refused_row = next(r for r in rows if r[:2] == ["signals", "refused"])
+    halt_row = next(r for r in rows if r[:4] == ["of", "which", "by", "a"])
+    assert (refused_row[-1], halt_row[-1]) == ("3", "2")
+    assert rows.index(halt_row) == rows.index(refused_row) + 1
+
+
+def test_a_backtest_report_has_no_halt_lines(tmp_path: Path, registry: Registry) -> None:
+    journal = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, journal)
+    text = report(journal)
+    assert "HALTED" not in text
+    assert "of which by a halt" not in text
+
+
+def test_a_clear_when_nothing_was_halted_says_nothing(tmp_path: Path, registry: Registry) -> None:
+    journal = halted_journal(tmp_path, registry, Cleared(ts=Timestamp(START + 7 * HOUR)))
+    text = report(journal)
+    assert "halt cleared" not in text
+    assert "HALTED" not in text

@@ -5244,3 +5244,31 @@ path = "src/heliograph/app/run.py"
 old = "        self._names[signal.id] = self._dispatcher.names\n"
 new = "        self._names[signal.id] = []\n"
 tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
+
+[[control]]
+describes = "the report names a second halt only once"
+path = "src/heliograph/app/report.py"
+old = "            if halted:\n                continue  # the first halt stands (D55); a second says nothing new\n"
+new = ""
+tests = ["tests/app/test_report.py::test_a_session_still_halted_at_the_end_of_its_journal_says_so"]
+
+[[control]]
+describes = "the report says a session is still halted"
+path = "src/heliograph/app/report.py"
+old = "    if halted:\n        lines.append(\"STILL HALTED"
+new = "    if False:\n        lines.append(\"STILL HALTED"
+tests = ["tests/app/test_report.py::test_a_session_still_halted_at_the_end_of_its_journal_says_so"]
+
+[[control]]
+describes = "the report counts only refusals by a halt as a halt's"
+path = "src/heliograph/app/report.py"
+old = "                if message.refused_by == \"halt\":"
+new = "                if True:"
+tests = ["tests/app/test_report.py::test_signals_a_halt_kept_in_are_counted_apart"]
+
+[[control]]
+describes = "the report ignores a clear when nothing was halted"
+path = "src/heliograph/app/report.py"
+old = "        elif isinstance(message, Cleared) and halted:"
+new = "        elif isinstance(message, Cleared):"
+tests = ["tests/app/test_report.py::test_a_clear_when_nothing_was_halted_says_nothing"]

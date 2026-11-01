@@ -1359,3 +1359,16 @@ expiries (a refused signal is already in the journal, and flooding the phone def
 
 **Rejected:** making `alert` required (it would break every sink written before this); sending
 alerts as fake signals (they have no target, strategy or price to put in a signal).
+
+## D59 · The report says when a session was halted (2026-11-01)
+
+**Decision:** a live session's report lists, under its header, each halt ("HALTED <time> by <who>:
+<why>") and the clearing that ended it, and ends the list with "STILL HALTED at the end of the
+journal" if no clear came. A halt while halted is not listed (the first stands, D55); a clear
+when nothing was halted says nothing. Each strategy's table adds "of which by a halt" under
+"signals refused" when a halt kept anything in.
+
+**Why:** a returning owner needs to see at once that the figures below were made with a halt in
+force, and which signals never left because of it.
+
+**Not done:** the time spent halted as a share of the session; where in the equity the halts fell.
