@@ -46,6 +46,7 @@ refused rather than run without them.
 import asyncio
 import hashlib
 import json
+import re
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -422,6 +423,11 @@ def _sinks_described(config: RunConfig, sinks: Mapping[str, Plugin[Any]]) -> str
     return json.dumps(described, sort_keys=True, separators=(",", ":"))
 
 
+def _without_urls(text: str) -> str:
+    """``text`` with each web address cut back to its host: a path or query may carry a key."""
+    return re.sub(r"(https?://[^/\s'\"?#]+)[^\s'\"]*", r"\1/...", text)
+
+
 def _alert_id(kind: str, ts: Timestamp, by: str) -> str:
     """A stable identity for an alert: the same event always has the same one."""
     return hashlib.sha256(f"{kind}:{ts}:{by}".encode()).hexdigest()[:16]
@@ -430,7 +436,7 @@ def _alert_id(kind: str, ts: Timestamp, by: str) -> str:
 def _feed_gave_up(engine: LiveEngine, clock: Clock, source: DataSource, failure: Exception) -> None:
     """Halt the session: a feed has given up, so nothing is known about what the market does."""
     name = getattr(getattr(source, "manifest", None), "name", type(source).__name__)
-    reason = f"the {name} feed gave up: {type(failure).__name__}: {failure}"
+    reason = f"the {name} feed gave up: {type(failure).__name__}: {_without_urls(str(failure))}"
     engine.receive(Halted(ts=clock.now(), reason=reason[:300], by=f"feed:{name}"))
 
 
@@ -462,6 +468,7 @@ class Deliveries:
         self._signals: dict[str, Signal] = {}
         self._recorded: set[tuple[str, str]] = set()
         engine.bus.subscribe(Signal, self._start)
+        self._halted_now = False  # whether a halt is in force, so a stray clear is not alerted
         engine.bus.subscribe(Halted, self._halted)
         engine.bus.subscribe(Cleared, self._cleared)
 
@@ -471,6 +478,9 @@ class Deliveries:
         self._tasks[signal.id] = asyncio.create_task(self._give(signal))
 
     def _halted(self, halted: Halted) -> None:
+        if self._halted_now:
+            return  # the first halt stands (D55); a second tells the owner nothing new
+        self._halted_now = True
         self._alert(
             Alert(
                 ts=halted.ts,
@@ -484,6 +494,9 @@ class Deliveries:
         )
 
     def _cleared(self, cleared: Cleared) -> None:
+        if not self._halted_now:
+            return
+        self._halted_now = False
         self._alert(
             Alert(
                 ts=cleared.ts,

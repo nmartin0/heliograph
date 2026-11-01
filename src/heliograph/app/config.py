@@ -584,6 +584,23 @@ class RunConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _silence_is_watched_on_trades(self) -> "RunConfig":
+        """halt_after_silence listens for trades, so its strategy's mount must deliver them."""
+        problems = []
+        for index, strategy in enumerate(self.strategies):
+            if self.mode != "live" or strategy.halt_after_silence is None:
+                continue
+            found = self.stream_field(strategy.price)
+            if found is not None and self.mounts[found[0]].kind != "trades":
+                problems.append(
+                    f"strategies[{index}] ({strategy.name}): halt_after_silence watches "
+                    f"trades, and mounts.{found[0]} delivers {self.mounts[found[0]].kind}"
+                )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+    @model_validator(mode="after")
     def _components_read_what_exists(self) -> "RunConfig":
         problems = []
         nodes: set[str] = set()  # the graph nodes defined so far

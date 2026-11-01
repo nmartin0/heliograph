@@ -5272,3 +5272,38 @@ path = "src/heliograph/app/report.py"
 old = "        elif isinstance(message, Cleared) and halted:"
 new = "        elif isinstance(message, Cleared):"
 tests = ["tests/app/test_report.py::test_a_clear_when_nothing_was_halted_says_nothing"]
+
+[[control]]
+describes = "a silence watch must sit on a trades mount"
+path = "src/heliograph/app/config.py"
+old = "self.mounts[found[0]].kind != \"trades\""
+new = "self.mounts[found[0]].kind != \"never\""
+tests = ["tests/app/test_live_session.py::test_a_silence_watch_needs_a_mount_that_delivers_trades"]
+
+[[control]]
+describes = "a stray clear is not alerted"
+path = "src/heliograph/app/run.py"
+old = "        if not self._halted_now:\n            return\n"
+new = ""
+tests = ["tests/app/test_live_session.py::test_a_clear_when_nothing_is_halted_and_a_second_halt_are_not_alerted"]
+
+[[control]]
+describes = "a second halt is not alerted"
+path = "src/heliograph/app/run.py"
+old = "        if self._halted_now:\n            return  # the first halt stands (D55); a second tells the owner nothing new\n"
+new = ""
+tests = ["tests/app/test_live_session.py::test_a_clear_when_nothing_is_halted_and_a_second_halt_are_not_alerted"]
+
+[[control]]
+describes = "a feed failure's reason leaves out web addresses' paths"
+path = "src/heliograph/app/run.py"
+old = "    return re.sub(r\"(https?://[^/\\s'\\\"?#]+)[^\\s'\\\"]*\", r\"\\1/...\", text)"
+new = "    return text"
+tests = ["tests/app/test_live_session.py::test_a_feed_failures_reason_leaves_out_what_a_web_address_carries"]
+
+[[control]]
+describes = "nothing is left for a session that has ended"
+path = "src/heliograph/app/cli.py"
+old = "        if status != \"running\":"
+new = "        if False:"
+tests = ["tests/app/test_cli_answer.py::test_nothing_is_left_for_a_session_that_has_ended"]

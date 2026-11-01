@@ -237,7 +237,19 @@ async def _session(
     print(f"ended; journal {summary.journal} ({summary.delivered} inputs delivered)")
 
 
+def _running(journal: Path) -> None:
+    """Refuse to leave an answer or order for a session that has ended: nobody would read it."""
+    if journal.is_file():
+        status = read_header(journal).get("status")
+        if status != "running":
+            raise HeliographError(
+                f"{journal} is a session that ended ({status}); nothing is reading its inbox "
+                "(carry on from it with: heliograph live <config> --resume <journal>)"
+            )
+
+
 def _answer(args: argparse.Namespace) -> int:
+    _running(args.journal)
     inbox = inbox_for(args.journal)
     submit(inbox, WallClock(), args.signal, args.verdict, args.price, args.quantity)
     print(f"{args.verdict} {args.signal}: left in {inbox}; the session takes it within a second")
@@ -245,6 +257,7 @@ def _answer(args: argparse.Namespace) -> int:
 
 
 def _halt(args: argparse.Namespace) -> int:
+    _running(args.journal)
     inbox = inbox_for(args.journal)
     order(inbox, WallClock(), "halt", " ".join(args.reason))
     print(f"halt: left in {inbox}; the session takes it within a second")
@@ -252,6 +265,7 @@ def _halt(args: argparse.Namespace) -> int:
 
 
 def _clear(args: argparse.Namespace) -> int:
+    _running(args.journal)
     inbox = inbox_for(args.journal)
     order(inbox, WallClock(), "clear")
     print(f"clear: left in {inbox}; the session takes it within a second")

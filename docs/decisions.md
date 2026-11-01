@@ -1306,6 +1306,7 @@ and, if it fires, publishes `Halted` (derived, `by` "silence:<strategy>") as of 
 however late the session notices. `RateWatch` counts the strategy's signals in a sliding window
 and publishes `Halted` (`by` "rate:<strategy>") at the signal that makes one too many; a burst
 halts once. They only start the halt; the `Halt` gate (D55) refuses, and the owner clears.
+The silence watch counts trades, so a configuration that sets it on a bars mount is refused.
 
 **Why:** the owner asked for both; the alarms and the bus already replay derived messages, so a
 day with a watch's halt replays byte for byte with no extra record.

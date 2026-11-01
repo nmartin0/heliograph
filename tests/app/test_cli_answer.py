@@ -10,6 +10,7 @@ import pytest
 
 from heliograph.app.answers import inbox_for
 from heliograph.app.cli import FAILED, main
+from heliograph.plugins.sqlite_journal import SqliteJournal, SqliteJournalParams
 
 
 def test_an_answer_is_left_in_the_sessions_inbox(
@@ -69,3 +70,24 @@ def test_halting_without_a_session_says_so(
 ) -> None:
     assert main(["halt", str(tmp_path / "live.sqlite")]) == FAILED
     assert "no live session has started with it" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", [["answer", "x", "took"], ["halt"], ["clear"]])
+def test_nothing_is_left_for_a_session_that_has_ended(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: list[str]
+) -> None:
+    journal = tmp_path / "live.sqlite"
+    SqliteJournal(SqliteJournalParams(path=str(journal)), {"kind": "live"}).close()
+    inbox_for(journal).mkdir()
+    status = main([command[0], str(journal), *command[1:]])
+    assert status == FAILED
+    assert "a session that ended (complete)" in capsys.readouterr().err
+    assert not list(inbox_for(journal).iterdir())
+
+
+def test_a_session_still_running_takes_orders(tmp_path: Path) -> None:
+    journal = tmp_path / "live.sqlite"
+    running = SqliteJournal(SqliteJournalParams(path=str(journal)), {"kind": "live"})
+    inbox_for(journal).mkdir()
+    assert main(["halt", str(journal)]) == 0
+    running.close()

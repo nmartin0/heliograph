@@ -17,6 +17,9 @@ from heliograph.app.answers import inbox_for, order, submit
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest, run_live_session
 from heliograph.core.answers import SignalAnswer, SignalExpired
+from heliograph.core.bus import MessageBus
+from heliograph.core.clock import SimulatedClock
+from heliograph.core.engine import LiveEngine
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import IndicatorValues
 from heliograph.core.halt import Cleared, Halted
@@ -1130,3 +1133,55 @@ def test_a_halt_restored_by_a_resume_is_not_told_again(
         )
     )
     assert len(Recorder.alerts) == told
+
+
+def test_a_clear_when_nothing_is_halted_and_a_second_halt_are_not_alerted(
+    with_sinks: Registry, tmp_path: Path
+) -> None:
+    from heliograph.app.run import Deliveries
+
+    clock = SimulatedClock(NOW)
+    engine = LiveEngine(clock, MessageBus(clock))
+    got: list[str] = []
+
+    class Quiet:
+        names: ClassVar[list[str]] = []
+        alert_names: ClassVar[list[str]] = ["phone"]
+
+        async def alert(self, alert: Alert, on_outcome: object = None) -> tuple[()]:
+            got.append(alert.title)
+            return ()
+
+    async def go() -> None:
+        Deliveries(engine, Quiet(), clock, 1.0, tmp_path / "j.sqlite")  # type: ignore[arg-type]
+        engine.receive(Cleared(ts=NOW))
+        engine.receive(Halted(ts=NOW, reason="a"))
+        engine.receive(Halted(ts=NOW, reason="b"))
+        engine.receive(Cleared(ts=NOW))
+        engine.receive(Cleared(ts=NOW))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(go())
+    assert got == ["Heliograph halted by owner", "Heliograph halt cleared"]
+
+
+def test_a_feed_failures_reason_leaves_out_what_a_web_address_carries(
+    with_sinks: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    from heliograph.app.run import _without_urls
+
+    text = "kraken GET https://api.example.com/v2/orders?key=SECRET&sig=abc 403 {'url': 'http://h:9/p'}"
+    assert _without_urls(text) == (
+        "kraken GET https://api.example.com/... 403 {'url': 'http://h:9/...'}"
+    )
+    assert "SECRET" not in _without_urls(text)
+    assert _without_urls("no address here") == "no address here"
+
+
+def test_a_silence_watch_needs_a_mount_that_delivers_trades() -> None:
+    text = STRATEGY.replace('sizer = "vol"\n', 'sizer = "vol"\nhalt_after_silence = "5m"\n')
+    parse_config(text)  # trades: fine
+    bars = text.replace('kind = "trades"', 'kind = "bars"\nbar_size = "1h"')
+    with pytest.raises(ConfigError, match=r"halt_after_silence watches trades.*delivers bars"):
+        parse_config(bars)
