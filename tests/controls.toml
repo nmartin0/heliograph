@@ -5167,3 +5167,31 @@ path = "src/heliograph/core/halt.py"
 old = "max(point.ts + self._span, self._now())"
 new = "self._now() + self._span"
 tests = ["tests/core/test_halt.py::test_the_deadline_counts_from_when_the_price_was_known_not_when_it_was_read"]
+
+[[control]]
+describes = "a feed that fails is reported to the session"
+path = "src/heliograph/app/bridge.py"
+old = "                on_feed_failure(source, exc)\n"
+new = ""
+tests = ["tests/app/test_bridge.py::test_a_feed_that_fails_is_reported_before_the_run_ends_failed_and_deliveries_awaited"]
+
+[[control]]
+describes = "deliveries are awaited after a reported feed failure"
+path = "src/heliograph/app/bridge.py"
+old = "            if told and before_end is not None:"
+new = "            if False:"
+tests = ["tests/app/test_bridge.py::test_a_feed_that_fails_is_reported_before_the_run_ends_failed_and_deliveries_awaited"]
+
+[[control]]
+describes = "deliveries are not awaited for other failures"
+path = "src/heliograph/app/bridge.py"
+old = "            if told and before_end is not None:"
+new = "            if before_end is not None:"
+tests = ["tests/app/test_bridge.py::test_deliveries_are_not_awaited_for_a_failure_nobody_was_told_of"]
+
+[[control]]
+describes = "a feed that gives up halts the session"
+path = "src/heliograph/app/run.py"
+old = "    engine.receive(Halted(ts=clock.now(), reason=reason[:300], by=f\"feed:{name}\"))"
+new = "    return"
+tests = ["tests/app/test_live_session.py::test_a_feed_that_gives_up_halts_the_session_in_its_journal_before_it_fails", "tests/app/test_live_session.py::test_resuming_a_session_whose_feed_gave_up_starts_halted_until_the_owner_clears_it"]

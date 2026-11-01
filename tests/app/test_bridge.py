@@ -405,6 +405,62 @@ def test_a_failed_session_does_not_pretend_it_ended_cleanly() -> None:
     assert not any(s.startswith("RunEnded") for s in seen)
 
 
+def test_a_feed_that_fails_is_reported_before_the_run_ends_failed_and_deliveries_awaited() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+    failing = ScriptedSource(live=[trade(1)], fail_after=0, failure=SourceUnavailableError("gone"))
+    told: list[tuple[object, str]] = []
+    order: list[str] = []
+
+    async def before_end() -> None:
+        order.append("deliveries awaited")
+
+    def on_failure(source: object, error: Exception) -> None:
+        told.append((source, str(error)))
+        order.append("told")
+
+    with pytest.raises(SourceUnavailableError, match="gone"):
+        asyncio.run(
+            run_live(
+                [(failing, SUBSCRIBED)],
+                engine,
+                time.clock,
+                sleep=time.advance,
+                before_end=before_end,
+                on_feed_failure=on_failure,
+            )
+        )
+    assert told == [(failing, "gone")]
+    assert order == ["told", "deliveries awaited"]
+    assert not any(s.startswith("RunEnded") for s in seen)
+
+
+def test_deliveries_are_not_awaited_for_a_failure_nobody_was_told_of() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, _ = watched(time)
+    awaited: list[str] = []
+
+    async def before_end() -> None:
+        awaited.append("yes")
+
+    async def alongside() -> None:
+        raise InvalidValueError("the inbox broke")
+
+    held = ScriptedSource(live=[trade(1, 1), asyncio.Event().wait])
+    run = run_live(
+        [(held, SUBSCRIBED)],
+        engine,
+        time.clock,
+        sleep=time.advance,
+        before_end=before_end,
+        alongside=[alongside],
+        on_feed_failure=lambda *_: None,
+    )
+    with pytest.raises(InvalidValueError, match="the inbox broke"):
+        asyncio.run(asyncio.wait_for(run, timeout=2))
+    assert awaited == []
+
+
 # -- work that runs alongside the sources --------------------------------------------------
 
 

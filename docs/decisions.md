@@ -1317,3 +1317,24 @@ span halts at once (the owner decides whether to clear); halting a single strate
 
 **Rejected:** a default span (a thin market's quiet hour is not a fault; the owner sets what is
 normal for each instrument).
+
+## D57 · A feed that gives up halts the session on its way out (2026-11-01)
+
+**Decision:** when a source fails (after its own retries), `run_live` tells the session before
+cancelling anything (`on_feed_failure`); the session publishes `Halted` as an input, `by`
+"feed:<source name>", reason "the <name> feed gave up: <ErrorType>: <message>" (at most 300
+characters). The deliveries under way (the alerts, from the next commit) are then awaited for the
+grace, and the run still ends failed with the source's own error. A resume of that journal
+restores the halt, so the session starts refusing entries until the owner clears it.
+
+**Why:** the owner asked that a feed giving up halts and alerts. Staying up halted would help
+nobody: with the feed gone there is nothing to trade on and no one to watch, and a restart is a
+`--resume`, which now carries the halt over. Only source failures count; a failing handler or
+inbox is a bug and fails the run as before, without waiting for deliveries.
+
+**Not done:** retrying or reconnecting a feed from the session (the sources retry before they
+give up); halting when one of several feeds fails and the rest go on (a failure still stops them
+all, as before).
+
+**Rejected:** catching the failure and continuing halted (a session with no data that looks
+alive).

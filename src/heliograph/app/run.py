@@ -340,6 +340,9 @@ async def run_live_session(
                     sleep=sleep,
                     before_end=None if deliveries is None else deliveries.finish,
                     alongside=[answers.watch],
+                    on_feed_failure=lambda source, exc: _feed_gave_up(
+                        engine, session_clock, source, exc
+                    ),
                 )
             except asyncio.CancelledError:
                 stopped = True
@@ -414,6 +417,13 @@ def _sinks_described(config: RunConfig, sinks: Mapping[str, Plugin[Any]]) -> str
         for name, sink in sinks.items()
     }
     return json.dumps(described, sort_keys=True, separators=(",", ":"))
+
+
+def _feed_gave_up(engine: LiveEngine, clock: Clock, source: DataSource, failure: Exception) -> None:
+    """Halt the session: a feed has given up, so nothing is known about what the market does."""
+    name = getattr(getattr(source, "manifest", None), "name", type(source).__name__)
+    reason = f"the {name} feed gave up: {type(failure).__name__}: {failure}"
+    engine.receive(Halted(ts=clock.now(), reason=reason[:300], by=f"feed:{name}"))
 
 
 class Deliveries:

@@ -185,6 +185,59 @@ def test_a_failed_session_is_marked_failed_and_its_sources_closed(
     assert Pulse.closed == 1
 
 
+def test_a_feed_that_gives_up_halts_the_session_in_its_journal_before_it_fails(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    Pulse.then = "fail"
+    journal = tmp_path / "live.sqlite"
+    with pytest.raises(SourceUnavailableError, match="went away"):
+        asyncio.run(session(LIVE, registry, journal, time))
+    halts = [
+        (e.origin, e.message)
+        for e in read_entries(journal, JOURNALLED)
+        if isinstance(e.message, Halted)
+    ]
+    assert [origin for origin, _ in halts] == ["input"]
+    assert halts[0][1].by == "feed:pulse"
+    assert halts[0][1].reason == (
+        "the pulse feed gave up: SourceUnavailableError: the exchange went away"
+    )
+    assert read_header(journal)["status"].startswith("failed: SourceUnavailableError")
+
+
+def test_resuming_a_session_whose_feed_gave_up_starts_halted_until_the_owner_clears_it(
+    registry: Registry, tmp_path: Path
+) -> None:
+    first = tmp_path / "first.sqlite"
+    time = SimulatedTime(start=NOW)
+    Pulse.time, Pulse.closed, Pulse.gate, Pulse.start_at = time, 0, None, 0
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, 4, "fail"
+    with pytest.raises(SourceUnavailableError):
+        asyncio.run(session(STRATEGY, registry, first, time))
+    second = tmp_path / "second.sqlite"
+    again = SimulatedTime(start=time.clock.now())
+    Pulse.time, Pulse.then, Pulse.steps, Pulse.start_at = again, "end", len(UP_THEN_DOWN), 4
+    asyncio.run(
+        run_live_session(
+            parse_config(STRATEGY),
+            registry,
+            second,
+            again.clock,
+            again.advance,
+            answers_sleep=lambda _: asyncio.sleep(0),
+            resume=first,
+        )
+    )
+    kinds = [
+        type(e.message).__name__
+        for e in read_entries(second, JOURNALLED)
+        if isinstance(e.message, Halted | Cleared | SignalRefused)
+    ]
+    assert kinds[0] == "Halted"
+    assert "Cleared" not in kinds
+    assert "SignalRefused" in kinds  # what the strategy wanted to add was kept in
+
+
 def test_a_session_does_not_overwrite_a_journal(
     registry: Registry, tmp_path: Path, time: SimulatedTime
 ) -> None:

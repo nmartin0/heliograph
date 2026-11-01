@@ -198,6 +198,7 @@ async def run_live(
     skew: int = SKEW,
     before_end: Callable[[], Awaitable[None]] | None = None,
     alongside: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
+    on_feed_failure: Callable[[DataSource, Exception], None] | None = None,
 ) -> None:
     """Publish live data from every source through ``engine``, stamped on arrival, until all end.
 
@@ -212,6 +213,9 @@ async def run_live(
     recorded (deliveries still under way); it can still publish to ``engine``.
     Each of ``alongside`` runs as a task of the same group while the sources do
     (a failure in one fails the run) and is cancelled when they have all ended.
+    When a source fails, ``on_feed_failure`` is called with it and the error before
+    anything is cancelled, and ``before_end`` is awaited before the error is raised, so
+    the failure can be recorded and told (a halt, D57); the run still ends failed.
 
     Raises:
         InvalidValueError: for data a source was not subscribed to, or a bar
@@ -222,6 +226,7 @@ async def run_live(
     type Wanted = frozenset[tuple[str, str, int | None]]
     queue: asyncio.Queue[tuple[Wanted, Message] | None] = asyncio.Queue()
     changed = asyncio.Event()
+    told: list[Exception] = []  # feed failures on_feed_failure has been told of
 
     async def produce(source: DataSource, subscriptions: Sequence[Subscription]) -> None:
         wanted = frozenset((s.instrument.key, s.kind, s.bar_size) for s in subscriptions)
@@ -229,6 +234,11 @@ async def run_live(
         try:
             async for message in stream:
                 await queue.put((wanted, message))
+        except Exception as exc:
+            if on_feed_failure is not None:
+                on_feed_failure(source, exc)
+                told.append(exc)
+            raise
         finally:
             await _close(stream)
             await queue.put(None)
@@ -275,6 +285,8 @@ async def run_live(
         except* Exception as failures:
             # The task group gathers every failure; the first is the cause, and
             # the rest are usually its consequences.
+            if told and before_end is not None:
+                await before_end()
             raise failures.exceptions[0] from failures
     except asyncio.CancelledError:
         if before_end is not None:

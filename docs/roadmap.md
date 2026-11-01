@@ -260,7 +260,8 @@ Wizard.)
     `heliograph halt` / `clear` through the inbox (D55).
   - [x] A staleness watch and a signal-rate watch that halt (`halt_after_silence`,
     `halt_after_signals`; D56).
-  - [ ] A feed that gives up halts the session and alerts instead of ending it.
+  - [x] A feed that gives up halts the session: the halt is journalled and deliveries are
+    awaited before it ends failed (D57). It cannot carry on: nothing is left to trade on.
   - [ ] Alerts: a halt or clear delivered to the sinks.
   - [ ] The report says when the session was halted and why.
 
