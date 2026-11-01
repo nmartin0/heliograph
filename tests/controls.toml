@@ -2028,7 +2028,7 @@ tests = ["tests/core/test_broker.py::test_a_later_signal_replaces_one_not_yet_fi
 [[control]]
 describes = "no trade, no fill"
 path = "src/heliograph/core/broker.py"
-old = "        if quantity == 0:\n            return\n"
+old = "        if quantity == 0:\n            for done in self._applied:\n                done(pending.id)\n            return\n"
 new = ""
 tests = ["tests/core/test_broker.py::test_a_later_signal_replaces_one_not_yet_filled_and_no_trade_fills_nothing"]
 
@@ -4817,3 +4817,94 @@ path = "src/heliograph/app/answers.py"
 old = "    SignalAnswer(ts=now, signal=signal, verdict=verdict, price=price, quantity=quantity)\n"
 new = "    pass\n"
 tests = ["tests/app/test_answers_inbox.py::test_submitting_checks_the_answer_and_needs_an_inbox"]
+
+[[control]]
+describes = "a broker names a signal once its fill is published"
+path = "src/heliograph/core/broker.py"
+old = "        for listener in self._heard:\n            listener(fill)\n        for done in self._applied:\n            done(pending.id)"
+new = "        for listener in self._heard:\n            listener(fill)"
+tests = ["tests/core/test_broker.py::test_the_broker_names_each_signal_it_is_done_with_once_filled_or_not_needed"]
+
+[[control]]
+describes = "a broker names a signal it had nothing to trade for"
+path = "src/heliograph/core/broker.py"
+old = "        if quantity == 0:\n            for done in self._applied:\n                done(pending.id)\n            return\n"
+new = "        if quantity == 0:\n            return\n"
+tests = ["tests/core/test_broker.py::test_the_broker_names_each_signal_it_is_done_with_once_filled_or_not_needed"]
+
+[[control]]
+describes = "a skipped signal never happened for the person"
+path = "src/heliograph/core/answers.py"
+old = "        return self.verdict == \"took\" or (self.verdict is None and self.applied)"
+new = "        return self.verdict != \"skipped\" and self.applied"
+tests = ["tests/core/test_followed.py::test_with_a_broker_a_took_answer_counts_before_the_fill_and_a_skip_never_does"]
+
+[[control]]
+describes = "a quantity moves the position by that quantity"
+path = "src/heliograph/core/answers.py"
+old = "position = found.target if found.quantity is None else position + found.quantity"
+new = "position = found.target"
+tests = ["tests/core/test_followed.py::test_a_signal_taken_in_another_quantity_moves_the_position_by_that_quantity"]
+
+[[control]]
+describes = "an unanswered signal counts as held once it has happened"
+path = "src/heliograph/core/answers.py"
+old = "        return self.verdict == \"took\" or (self.verdict is None and self.applied)"
+new = "        return self.verdict == \"took\""
+tests = ["tests/core/test_followed.py::test_a_signal_the_strategy_takes_as_made_moves_the_position_at_once"]
+
+[[control]]
+describes = "a signal expires after its time to answer"
+path = "src/heliograph/core/answers.py"
+old = "        self._waiting.append((Timestamp(signal.ts + self._within), signal.id))"
+new = "        self._waiting.append((Timestamp(signal.ts + 2 * self._within), signal.id))"
+tests = ["tests/core/test_followed.py::test_a_signal_nobody_answers_in_time_expires_and_counts_as_skipped"]
+
+[[control]]
+describes = "an answered signal does not expire"
+path = "src/heliograph/core/answers.py"
+old = "            if found.verdict is None:\n                found.verdict = \"expired\""
+new = "            if True:\n                found.verdict = \"expired\""
+tests = ["tests/core/test_followed.py::test_a_signal_answered_in_time_does_not_expire"]
+
+[[control]]
+describes = "a later answer replaces an earlier one"
+path = "src/heliograph/core/answers.py"
+old = "        found.verdict = answer.verdict\n        found.quantity = answer.quantity\n"
+new = "        if found.verdict is not None:\n            return\n        found.verdict = answer.verdict\n        found.quantity = answer.quantity\n"
+tests = ["tests/core/test_followed.py::test_a_later_answer_to_a_signal_replaces_an_earlier"]
+
+[[control]]
+describes = "each strategy follows only its own signals"
+path = "src/heliograph/core/answers.py"
+old = "        if signal.strategy != self._strategy:\n            return\n        self._signals[signal.id]"
+new = "        self._signals[signal.id]"
+tests = ["tests/core/test_followed.py::test_an_answer_to_another_strategys_or_an_unknown_signal_is_ignored"]
+
+[[control]]
+describes = "the expiry alarm is re-armed for the next signal waiting"
+path = "src/heliograph/core/answers.py"
+old = "        if self._waiting:\n            self._scheduler.at(self._waiting[0][0], self._key)\n        self._follow()"
+new = "        self._follow()"
+tests = ["tests/core/test_followed.py::test_each_signal_expires_in_turn_at_its_own_time"]
+
+[[control]]
+describes = "a live session follows the answers"
+path = "src/heliograph/app/run.py"
+old = "                if config.mode == \"live\":\n                    following = Followed("
+new = "                if False:\n                    following = Followed("
+tests = ["tests/app/test_live_session.py::test_the_strategy_holds_what_the_person_did_not_what_the_signal_asked"]
+
+[[control]]
+describes = "the time to answer defaults to one bar of the price stream"
+path = "src/heliograph/app/run.py"
+old = "                            found[1].bar_spec().size\n                            if strategy.answer_within is None"
+new = "                            found[1].bar_spec().size * 1000\n                            if strategy.answer_within is None"
+tests = ["tests/app/test_live_session.py::test_by_default_a_signal_has_one_bar_to_be_answered"]
+
+[[control]]
+describes = "the time to answer is a span"
+path = "src/heliograph/app/config.py"
+old = "        if value is not None:\n            try:\n                parse_span(value)"
+new = "        if False:\n            try:\n                parse_span(value)"
+tests = ["tests/app/test_strategy_roles.py::test_the_time_to_answer_is_a_span_or_absent"]

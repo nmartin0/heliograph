@@ -345,7 +345,12 @@ retrying each independently. Fields map onto FIX tags for future brokers.
 The paper broker is a `Broker` on live data with the backtester's fill and cost
 model, bridged to `SignalSink`; a paper session survives restarts. You mark
 each signal *took it* (with your price and size), *skipped* or *expired*; the
-journal compares your results with the signal's paper result.
+journal compares your results with the signal's paper result. In a live
+session the strategy's position held is the one *you* hold (`Followed`): a
+signal counts as followed until you skip it or its time to answer runs out
+(`answer_within`, one bar by default); the broker's fills stay the signal's own
+paper result. Answers reach the session through an inbox beside the journal
+(`heliograph answer`).
 
 No adapter in version 1 can place a real-money order. A live broker would ship
 disabled, behind an explicit setting and the same risk gate.

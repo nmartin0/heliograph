@@ -70,7 +70,7 @@ from heliograph.app.dispatch import Dispatcher, Outcome
 from heliograph.app.limits import Sleep
 from heliograph.app.mounts import Mount, build_mounts
 from heliograph.core.alarms import AlarmFired
-from heliograph.core.answers import SignalAnswer
+from heliograph.core.answers import Followed, SignalAnswer, SignalExpired
 from heliograph.core.bars import BarsFromBars, TimeBars
 from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
@@ -93,7 +93,7 @@ from heliograph.core.pipeline import (
 from heliograph.core.sinks import Delivered, SignalSink
 from heliograph.core.sources import DataSource, Subscription
 from heliograph.core.streams import StreamSpec
-from heliograph.core.time import Timestamp
+from heliograph.core.time import Timestamp, parse_span
 from heliograph.plugins.manifest import Plugin
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
@@ -120,6 +120,7 @@ JOURNALLED = (
     Fill,
     Delivered,
     SignalAnswer,
+    SignalExpired,
 )
 """Every message type a run journals."""
 
@@ -683,9 +684,25 @@ def _assembled[E: Sequencer](
             for strategy in config.strategies:
                 spec_ = _strategy_spec(config, strategy, components, header["config_digest"])
                 running = Strategy(spec_, graph, bus)
+                found = config.stream_field(strategy.price)
+                assert found is not None  # RunConfig requires it
+                # A live session has a person to answer its signals, so the position the
+                # strategy holds follows what they did (D51); a backtest has none.
+                following = None
+                if config.mode == "live":
+                    following = Followed(
+                        strategy.name,
+                        running,
+                        bus,
+                        engine.scheduler,
+                        filled=strategy.fills is not None,
+                        within=(
+                            found[1].bar_spec().size
+                            if strategy.answer_within is None
+                            else parse_span(strategy.answer_within)
+                        ),
+                    )
                 if strategy.fills is not None:
-                    found = config.stream_field(strategy.price)
-                    assert found is not None  # RunConfig requires it
                     broker = SimulatedBroker(
                         strategy.name,
                         spec_.instrument,
@@ -693,7 +710,10 @@ def _assembled[E: Sequencer](
                         cast(FillModel, models[strategy.fills]),
                         bus,
                     )
-                    broker.on_fill(_holding(running))
+                    if following is None:
+                        broker.on_fill(_holding(running))
+                    else:
+                        broker.on_applied(following.applied)
         yield engine
         # What each stream left out for arriving after its bar had closed, which only
         # the end of the run knows: the report says so when it is not nothing.

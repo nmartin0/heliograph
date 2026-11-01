@@ -247,7 +247,8 @@ Wizard.)
 - Paper broker on live data; took-it/skipped journal (spec: [specs/paper-answers.md](specs/paper-answers.md)).
   - [x] A person's answer (`SignalAnswer`) journalled as an input; the inbox beside the
     journal and `heliograph answer` (D50).
-  - [ ] The position held follows the answers; unanswered signals expire as skipped.
+  - [x] The position held follows the answers; an unanswered signal is taken as followed
+    until it expires, then counts as skipped (D51).
   - [ ] A live session saves and restores its paper positions and clock.
   - [ ] A report comparing the person's result with the signal's paper result.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
@@ -265,8 +266,8 @@ Wizard.)
     (as many failures in a row as `retries`), and a trade without a time is
     skipped and counted (D45). Not carried: the id itself (a `Point` holds
     numbers only); owner to run `uv run pytest -m live` against Kraken.
-  - [ ] a person's took-it or skipped answer must reach the strategy's
-    position held.
+  - [x] a person's took-it or skipped answer must reach the strategy's
+    position held (`Followed`, D51).
   - [ ] stage objects keep state, so optimisation must build them afresh per
     run (Phase 5).
 

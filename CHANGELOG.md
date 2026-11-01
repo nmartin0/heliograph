@@ -266,6 +266,9 @@ All notable changes to Heliograph are recorded here. The format follows
   build; a stream nothing reads can be removed.
 - `heliograph answer`: tell a running live session whether you took or skipped a signal
   (with the price and quantity if they differ). The answer is journalled as an input.
+- A live strategy's position held follows what the person did: a signal is taken as followed
+  until it is skipped or its time to answer (`answer_within` on the strategy, one bar by
+  default) runs out.
 
 ### Fixed
 
@@ -416,3 +419,4 @@ All notable changes to Heliograph are recorded here. The format follows
 - D48 records sinks in a live session: configured by name, each signal delivered in
   its own task, every outcome journalled.
 - D50 records a person's answer as an input, left in an inbox beside the journal.
+- D51 records the position held following the person's answers and signals that expire.

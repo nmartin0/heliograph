@@ -186,3 +186,20 @@ def test_a_fill_that_cannot_be_is_refused_as_it_is_made(
             signal="x",
             **fields,
         )
+
+
+def test_the_broker_names_each_signal_it_is_done_with_once_filled_or_not_needed() -> None:
+    w = world()
+    sim = SimulatedBroker("s", BTC, HOUR, Plus(), w.bus)
+    order: list[str] = []
+    sim.on_fill(lambda fill: order.append(f"fill {fill.signal}"))
+    sim.on_applied(lambda signal_id: order.append(f"applied {signal_id}"))
+    messages: list[Message] = [
+        signal(1, 2.0),
+        signal(1, 5.0),  # replaces the one before: never filled, never named
+        bar(1, 100, 100),
+        signal(2, 5.0),  # already held: nothing to trade
+        bar(2, 100, 100),
+    ]
+    w.engine.run(messages, until=Timestamp(3 * HOUR))
+    assert order == ["fill s-1-5.0", "applied s-1-5.0", "applied s-2-5.0"]

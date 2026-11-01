@@ -81,6 +81,7 @@ class SimulatedBroker:
 
     __slots__ = (
         "_after",
+        "_applied",
         "_bus",
         "_ended",
         "_heard",
@@ -110,6 +111,7 @@ class SimulatedBroker:
         self._ended: int | None = None  # the latest end of a bar of the stream
         self._position = 0.0
         self._heard: list[Callable[[Fill], None]] = []
+        self._applied: list[Callable[[str], None]] = []
         bus.subscribe(Signal, self._on_signal)
         bus.subscribe(Bar, self._on_bar)
 
@@ -120,6 +122,15 @@ class SimulatedBroker:
     def on_fill(self, listener: Callable[[Fill], None]) -> None:
         """Call ``listener`` with each fill, as it is published."""
         self._heard.append(listener)
+
+    def on_applied(self, listener: Callable[[str], None]) -> None:
+        """Call ``listener`` with the id of each signal once the broker is done with it.
+
+        That is after its fill is published, or when there was nothing to trade
+        (the position already was the target), so a signal replaced before it was
+        filled is never named.
+        """
+        self._applied.append(listener)
 
     def _on_signal(self, signal: Signal) -> None:
         if signal.strategy == self._strategy:
@@ -136,6 +147,8 @@ class SimulatedBroker:
         self._pending = None
         quantity = pending.target - self._position
         if quantity == 0:
+            for done in self._applied:
+                done(pending.id)
             return
         price = self._model.price(bar.open, quantity)
         commission = self._model.commission(price, quantity)
@@ -154,3 +167,5 @@ class SimulatedBroker:
         self._bus.publish(fill)
         for listener in self._heard:
             listener(fill)
+        for done in self._applied:
+            done(pending.id)

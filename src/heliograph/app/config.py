@@ -435,6 +435,19 @@ class StrategyConfig(BaseModel):
     exits: tuple[str, ...] = ()
     risk_gates: tuple[str, ...] = ()
     fills: str | None = None
+    answer_within: str | None = None
+    """How long a person has to answer a signal (live only; a span such as ``30m``);
+    by default one bar of the price stream. An unanswered signal then counts as skipped."""
+
+    @field_validator("answer_within")
+    @classmethod
+    def _answer_within_is_a_span(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                parse_span(value)
+            except InvalidValueError as exc:
+                raise ValueError(str(exc)) from exc
+        return value
 
     def stages(self) -> dict[str, tuple[str, ...]]:
         """The names this strategy uses, by the kind each must be."""

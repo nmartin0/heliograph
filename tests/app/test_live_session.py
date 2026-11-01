@@ -14,7 +14,7 @@ import pytest
 from heliograph.app.answers import inbox_for, submit
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, run_backtest, run_live_session
-from heliograph.core.answers import SignalAnswer
+from heliograph.core.answers import SignalAnswer, SignalExpired
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.pipeline import Signal
@@ -63,6 +63,7 @@ class Pulse(Plugin[NoParams]):
     prices: ClassVar[Sequence[float] | None] = None  # default: 100, 101, 102...
     then: ClassVar[str] = "end"  # "end", "wait" for a stop, or "fail"
     closed: ClassVar[int] = 0
+    gate: ClassVar["asyncio.Queue[None] | None"] = None  # each trade waits for a permit
 
     @property
     def capabilities(self) -> Capabilities:
@@ -78,6 +79,8 @@ class Pulse(Plugin[NoParams]):
     async def subscribe(self, subscriptions: Sequence[Subscription]) -> AsyncIterator[Message]:
         instrument = subscriptions[0].instrument
         for step in range(self.steps):
+            if Pulse.gate is not None:
+                await Pulse.gate.get()
             await Pulse.time.advance(10 * 60 if step == 0 else 60 * 60)
             at = Pulse.time.clock.now()
             yield Point(
@@ -107,6 +110,7 @@ class Pulse(Plugin[NoParams]):
 def time() -> SimulatedTime:
     simulated = SimulatedTime(start=NOW)
     Pulse.time, Pulse.steps, Pulse.then, Pulse.closed, Pulse.prices = simulated, 3, "end", 0, None
+    Pulse.gate = None
     return simulated
 
 
@@ -475,3 +479,109 @@ def test_an_answer_left_in_the_inbox_while_the_session_runs_is_journalled(
     inputs = [e for e in read_entries(journal, JOURNALLED) if isinstance(e.message, SignalAnswer)]
     assert [e.origin for e in inputs] == ["input"]
     assert read_header(journal)["status"] == "complete"
+
+
+def test_the_strategy_holds_what_the_person_did_not_what_the_signal_asked(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    """Unanswered or taken, the next signal starts from the target; skipped, from flat."""
+    held: dict[str, float] = {}
+    for verdict in (None, "took", "skipped"):
+        first, second = asked_then_next_signal(registry, tmp_path / str(verdict), verdict, "6h")
+        assert first.target != 0
+        held[str(verdict)] = second.held
+    assert held == {"None": first.target, "took": first.target, "skipped": 0.0}
+
+
+def test_a_signal_nobody_answers_in_time_is_not_held_afterwards(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    first, second = asked_then_next_signal(registry, tmp_path, None, "30m")
+    assert first.target != 0
+    assert second.held == 0.0
+    expired = [
+        e
+        for e in read_entries(tmp_path / "live.sqlite", JOURNALLED)
+        if isinstance(e.message, SignalExpired)
+    ]
+    assert {e.origin for e in expired} == {"derived"}
+    assert next(e.message for e in expired) == SignalExpired(expired[0].message.ts, first.id)
+
+
+def test_by_default_a_signal_has_one_bar_to_be_answered(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    first, second = asked_then_next_signal(registry, tmp_path, None, None)
+    assert first.target != 0
+    assert second.held == 0.0  # the next signal came hours later; the first had expired
+
+
+def asked_then_next_signal(
+    registry: Registry, folder: Path, verdict: str | None, within: str | None
+) -> tuple[Signal, Signal]:
+    """Run a session one trade at a time, answer its first signal, and return it and the next."""
+    folder.mkdir(parents=True, exist_ok=True)
+    time = SimulatedTime(start=NOW)  # each session has a clock of its own
+    Pulse.time, Pulse.closed = time, 0
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, len(UP_THEN_DOWN), "wait"
+    Pulse.gate = asyncio.Queue()
+    journal = folder / "live.sqlite"
+    text = STRATEGY
+    if within is not None:
+        text = text.replace('sizer = "vol"\n', f'sizer = "vol"\nanswer_within = "{within}"\n')
+
+    def signals() -> list[Signal]:
+        return [
+            e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Signal)
+        ]
+
+    def points() -> int:
+        return sum(1 for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Point))
+
+    async def look() -> None:
+        await asyncio.sleep(0)
+
+    async def idle(_: float) -> None:
+        # The trades move this session's clock; waiting for an alarm must not, or the clock
+        # would run ahead to the expiry before the next trade could be read.
+        await asyncio.sleep(0)
+
+    async def until_signals(count: int) -> None:
+        while len(signals()) < count:
+            assert Pulse.gate is not None
+            taken = points()
+            Pulse.gate.put_nowait(None)
+            while points() == taken:  # the session has read the trade
+                await asyncio.sleep(0)
+            for _ in range(100):  # and what it set off (bars closing, the strategy deciding)
+                await asyncio.sleep(0)
+
+    async def main() -> tuple[Signal, Signal]:
+        task = asyncio.create_task(
+            run_live_session(
+                parse_config(text),
+                registry,
+                journal,
+                time.clock,
+                idle,
+                answers_sleep=lambda _: look(),
+            )
+        )
+        while not journal.exists():
+            await asyncio.sleep(0)
+        await until_signals(1)
+        first = signals()[0]
+        if verdict is not None:
+            submit(inbox_for(journal), time.clock, first.id, verdict)  # type: ignore[arg-type]
+            while not any(
+                isinstance(e.message, SignalAnswer) for e in read_entries(journal, JOURNALLED)
+            ):
+                await asyncio.sleep(0)
+        await until_signals(2)
+        second = signals()[1]
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return first, second
+
+    return asyncio.run(asyncio.wait_for(main(), timeout=30))

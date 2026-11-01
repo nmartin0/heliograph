@@ -5,6 +5,8 @@
 
 from typing import Any, get_args, get_origin
 
+import pytest
+
 from heliograph.app.config import STRATEGY_ROLES, StrategyConfig
 
 
@@ -12,7 +14,7 @@ def test_every_role_is_a_field_of_a_strategy_and_every_component_field_is_a_role
     fields = StrategyConfig.model_fields
     roles = [role for role, _, _ in STRATEGY_ROLES]
     assert set(roles) <= set(fields)
-    assert set(fields) - set(roles) == {"name", "price"}  # the two that are not components
+    assert set(fields) - set(roles) == {"name", "price", "answer_within"}  # not components
 
 
 def test_a_role_takes_many_exactly_when_its_field_is_a_tuple() -> None:
@@ -27,3 +29,16 @@ def test_a_role_takes_many_exactly_when_its_field_is_a_tuple() -> None:
 def test_the_kind_of_a_role_is_the_kind_the_strategy_says_it_must_be() -> None:
     strategy = StrategyConfig(name="s", price="b@1h.close", forecasters=("f",), sizer="z")
     assert [kind for _, kind, _ in STRATEGY_ROLES] == list(strategy.stages())
+
+
+def test_the_time_to_answer_is_a_span_or_absent() -> None:
+    base: dict[str, Any] = {
+        "name": "t",
+        "price": "btc@1h.close",
+        "forecasters": ["f"],
+        "sizer": "s",
+    }
+    assert StrategyConfig(**base).answer_within is None
+    assert StrategyConfig(**base, answer_within="90m").answer_within == "90m"
+    with pytest.raises(ValueError, match="not a span"):
+        StrategyConfig(**base, answer_within="soon")

@@ -1175,3 +1175,31 @@ script, later the window).
 **Rejected:** a socket or the engine's HTTP API (the session does not serve one yet, and a
 dead session would drop answers); answering through the sinks (they only send); reading the
 person's answer from the journal file itself (SQLite has one writer).
+
+## D51 · The strategy's position held is the person's, as their answers leave it (2026-10-31)
+
+**Decision:** in a live session each strategy has a `Followed` that tells it the position the
+person holds. Worked out in the order the signals were made from flat: a signal the person
+holds moves the position to its target, or by the quantity they said they traded; one they
+skipped, or that expired, changes nothing. Until answered a signal counts as followed (as in a
+backtest): at once for a strategy without a broker, and for one with a broker (`fills`) when
+the broker is done with it (`on_applied`: after the fill, or when there was nothing to trade).
+A *took* answer counts at once; a later answer replaces an earlier, even after expiry. A signal
+not answered within `answer_within` (a span on the strategy, one bar of its price stream by
+default) expires: one alarm per strategy publishes a derived `SignalExpired` and the signal
+counts as skipped. The broker's fills are untouched, so they stay the signal's own paper result
+for the comparison. A backtest has no person, so it has no `Followed` and is unchanged.
+
+**Why:** the owner chose to assume a signal was taken until told otherwise (it keeps live
+signals comparable with the backtest) and to treat silence at expiry as skipped (the position
+should go back to what the person really holds).
+
+**Consequences:** while a person holds less than the strategy wants (they skipped, or let it
+expire), the strategy keeps asking for the difference: a new signal at each close at which its
+target differs from their position. A signal that is replaced at the broker before its fill is
+never counted unless the person took it. `Followed` keeps every signal of the session for now;
+folding the settled ones into a base position waits for saving state (the next commit).
+
+**Rejected:** assuming *not taken* until told (a strategy never told anything holds nothing);
+expiry as *took it* (it records trades the person never made); letting the fills follow the
+answers (the paper result would stop being the signal's own).
