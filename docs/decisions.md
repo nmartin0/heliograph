@@ -1219,3 +1219,32 @@ replayable in principle, and an end-to-end test now shows it for a real strategy
 
 **Rejected:** a separate replay path for live journals (it would be a second implementation
 of the same loop, free to drift from the first).
+
+## D53 · A live session resumes by replaying its earlier journal into its components (2026-10-31)
+
+**Decision:** `heliograph live <config> --resume <journal>` (`run_live_session(resume=...)`)
+carries on from an earlier live session. The old journal must be a live session's, from the
+same configuration digest and components (the checks a replay makes). The new session builds
+its components as usual, then feeds the old *inputs* (prices, answers, delivery outcomes) to
+its `LiveEngine` at the instants they were first known, using a `ResumedClock` that stands
+at each in turn, then at where the old session stopped (its end mark, or its last input if it
+crashed), and is then released to follow the real clock (never going back). That rebuilds the bars,
+indicators, forecasts, signals, the broker's position, the position the person holds and the
+signals still waiting for an answer, exactly as the journal replay does. Nothing is given to
+the sinks for the restored signals (the delivery watcher is built after the restore), and the
+answers inbox is the new journal's. The new journal holds the old history and the new, begins
+at the old session's `start`, and records `resumes` in its header, so it replays as one run.
+An uninterrupted session and a stopped-and-resumed one produce the same history (prices, bars,
+indicator values, signals, answers, expiries); only the engine's marks may fall differently.
+
+**Why:** the journal already records every input and replay already reproduces every derived
+message (D43, D52), so recovering is the same loop run on the old inputs; there is no second
+copy of the state to save, keep in step, or version. This is the Phase 4 gate's first half: a
+paper session survives a restart with its positions and clock intact.
+
+**Not done:** a restart loses the time the process was down (the data it would have seen); the
+journal grows with the history each time (replaying a long history takes as long as it did to
+run, less the waiting); the old inbox's unread answers go nowhere (answer to the new journal).
+
+**Rejected:** saving state beside the journal (a second record that could disagree with it);
+appending to the old journal file (a run writes a new journal; the old one stays as it ended).

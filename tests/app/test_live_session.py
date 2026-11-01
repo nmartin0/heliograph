@@ -5,6 +5,8 @@
 
 import asyncio
 import json
+import shutil
+import sqlite3
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import ClassVar
@@ -16,8 +18,9 @@ from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest, run_live_session
 from heliograph.core.answers import SignalAnswer, SignalExpired
 from heliograph.core.errors import InvalidValueError
+from heliograph.core.graph import IndicatorValues
 from heliograph.core.messages import Bar, Message, Point, RunEnded
-from heliograph.core.pipeline import Signal
+from heliograph.core.pipeline import Signal, SignalRefused
 from heliograph.core.sinks import Delivered, Delivery, SinkUnavailableError
 from heliograph.core.sources import (
     Capabilities,
@@ -64,6 +67,7 @@ class Pulse(Plugin[NoParams]):
     then: ClassVar[str] = "end"  # "end", "wait" for a stop, or "fail"
     closed: ClassVar[int] = 0
     gate: ClassVar["asyncio.Queue[None] | None"] = None  # each trade waits for a permit
+    start_at: ClassVar[int] = 0  # the trade to begin with (a resumed session carries on)
 
     @property
     def capabilities(self) -> Capabilities:
@@ -78,7 +82,7 @@ class Pulse(Plugin[NoParams]):
 
     async def subscribe(self, subscriptions: Sequence[Subscription]) -> AsyncIterator[Message]:
         instrument = subscriptions[0].instrument
-        for step in range(self.steps):
+        for step in range(Pulse.start_at, self.steps):
             if Pulse.gate is not None:
                 await Pulse.gate.get()
             await Pulse.time.advance(10 * 60 if step == 0 else 60 * 60)
@@ -111,6 +115,7 @@ def time() -> SimulatedTime:
     simulated = SimulatedTime(start=NOW)
     Pulse.time, Pulse.steps, Pulse.then, Pulse.closed, Pulse.prices = simulated, 3, "end", 0, None
     Pulse.gate = None
+    Pulse.start_at = 0
     return simulated
 
 
@@ -601,3 +606,150 @@ def test_a_live_day_with_its_answers_replays_to_the_same_entries(
     assert raw_rows(replayed.journal) == raw_rows(journal)
     kinds = {type(e.message) for e in read_entries(replayed.journal, JOURNALLED)}
     assert {Signal, extra} <= kinds
+
+
+# -- a session carries on from an earlier one's journal ------------------------------------
+
+
+def play(
+    registry: Registry,
+    journal: Path,
+    *,
+    start: Timestamp,
+    signals_wanted: int,
+    start_at: int = 0,
+    resume: Path | None = None,
+    config: str = STRATEGY,
+    sinks: str = "",
+) -> Timestamp:
+    """Run a session one trade at a time until it has made ``signals_wanted``, then stop it.
+
+    Returns where its clock stood when it stopped.
+    """
+    time = SimulatedTime(start=start)
+    Pulse.time, Pulse.closed = time, 0
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, len(UP_THEN_DOWN), "wait"
+    Pulse.gate, Pulse.start_at = asyncio.Queue(), start_at
+    text = config.replace('sizer = "vol"\n', 'sizer = "vol"\nanswer_within = "6h"\n') + sinks
+
+    def kinds(kind: type) -> int:
+        return sum(1 for e in read_entries(journal, JOURNALLED) if isinstance(e.message, kind))
+
+    async def idle(_: float) -> None:
+        await asyncio.sleep(0)
+
+    async def main() -> None:
+        task = asyncio.create_task(
+            run_live_session(
+                parse_config(text),
+                registry,
+                journal,
+                time.clock,
+                idle,
+                answers_sleep=idle,
+                resume=resume,
+            )
+        )
+        while not journal.exists():
+            await asyncio.sleep(0)
+        while kinds(Signal) < signals_wanted:
+            assert Pulse.gate is not None
+            taken = kinds(Point)
+            Pulse.gate.put_nowait(None)
+            while kinds(Point) == taken:
+                await asyncio.sleep(0)
+            for _ in range(100):
+                await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(asyncio.wait_for(main(), timeout=30))
+    return time.clock.now()
+
+
+def history(journal: Path) -> list[Message]:
+    """What the strategy lived through, without the engine's marks (when they fell differs)."""
+    keep = (Point, Bar, IndicatorValues, Signal, SignalRefused, SignalAnswer, SignalExpired)
+    return [e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, keep)]
+
+
+def test_a_resumed_session_lives_on_as_if_it_had_not_stopped(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    straight = tmp_path / "straight.sqlite"
+    play(registry, straight, start=NOW, signals_wanted=2)
+    first = tmp_path / "first.sqlite"
+    stopped = play(registry, first, start=NOW, signals_wanted=1)
+    trades = sum(1 for m in history(first) if isinstance(m, Point))
+    second = tmp_path / "second.sqlite"
+    play(registry, second, start=stopped, signals_wanted=2, start_at=trades, resume=first)
+    # The warm-up, the position held and the clock all carried over: the second session's
+    # second signal is the straight session's, which a cold start could not make so soon.
+    assert history(second) == history(straight)
+    made = [m for m in history(second) if isinstance(m, Signal)]
+    assert made[1].held == made[0].target
+    assert read_header(second)["status"] == "complete"
+    assert json.loads(read_header(second)["resumes"])["journal"] == "first.sqlite"
+    assert read_header(second)["start"] == read_header(first)["start"]
+    # and the whole of it, old history and new, replays
+    replayed = replay_backtest(second, tmp_path / "again.sqlite", registry)
+    assert raw_rows(replayed.journal) == raw_rows(second)
+
+
+def test_what_the_old_session_made_is_not_sent_to_the_sinks_again(
+    with_sinks: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    sinks = '[sinks.phone]\nplugin = "recorder"\nparams = { name = "phone" }\n'
+    first = tmp_path / "first.sqlite"
+    stopped = play(with_sinks, first, start=NOW, signals_wanted=1, sinks=sinks)
+    (old,) = [m.id for m in history(first) if isinstance(m, Signal)]
+    assert Recorder.got == [("phone", old)]
+    trades = sum(1 for m in history(first) if isinstance(m, Point))
+    second = tmp_path / "second.sqlite"
+    play(
+        with_sinks,
+        second,
+        start=stopped,
+        signals_wanted=2,
+        start_at=trades,
+        resume=first,
+        sinks=sinks,
+    )
+    ids = [m.id for m in history(second) if isinstance(m, Signal)]
+    assert ids[0] == old
+    assert Recorder.got == [("phone", old), ("phone", ids[1])]  # the second only, once
+
+
+def test_a_session_resumes_only_a_live_journal_of_its_own_configuration(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    first = tmp_path / "first.sqlite"
+    stopped = play(registry, first, start=NOW, signals_wanted=1)
+    again = SimulatedTime(start=stopped)
+
+    def resuming(text: str, journal: Path, resume: Path) -> None:
+        async def main() -> None:
+            await run_live_session(
+                parse_config(text),
+                registry,
+                journal,
+                again.clock,
+                again.advance,
+                resume=resume,
+            )
+
+        asyncio.run(asyncio.wait_for(main(), timeout=5))  # a session that was let start hangs
+
+    other = STRATEGY.replace("fast = 2", "fast = 3")
+    with pytest.raises(InvalidValueError, match="ran another configuration"):
+        resuming(other, tmp_path / "other.sqlite", first)
+    backtest = tmp_path / "backtest.sqlite"
+    shutil.copy(first, backtest)
+    db = sqlite3.connect(backtest)
+    with db:
+        db.execute("UPDATE header SET value = 'backtest' WHERE key = 'kind'")
+    db.close()
+    with pytest.raises(InvalidValueError, match="not the journal of a live session"):
+        resuming(STRATEGY, tmp_path / "x.sqlite", backtest)
+    assert not (tmp_path / "other.sqlite").exists()

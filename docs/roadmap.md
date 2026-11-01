@@ -250,7 +250,8 @@ Wizard.)
   - [x] The position held follows the answers; an unanswered signal is taken as followed
     until it expires, then counts as skipped (D51).
   - [x] A live session's journal replays to the same entries (D52).
-  - [ ] A live session resumes from an earlier journal: positions, answers and clock intact.
+  - [x] A live session resumes from an earlier journal: positions, answers and clock
+    intact (`heliograph live --resume`, D53).
   - [ ] A report comparing the person's result with the signal's paper result.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
 

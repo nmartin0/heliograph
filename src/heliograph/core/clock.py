@@ -46,6 +46,44 @@ class SimulatedClock:
         self._now = ts
 
 
+class ResumedClock:
+    """Stands at the instants of an earlier session while it is rebuilt, then follows ``live``.
+
+    A session resumed from its journal feeds the old inputs back at the times they
+    were first known (``stand_at``, forwards only); ``release`` then lets time run
+    on from ``live``. It never goes back: if ``live`` is behind where the old
+    session stopped, time holds there until ``live`` catches up.
+    """
+
+    __slots__ = ("_held", "_latest", "_live")
+
+    def __init__(self, live: Clock) -> None:
+        self._live = live
+        self._latest = Timestamp(0)
+        self._held = True
+
+    def stand_at(self, ts: Timestamp) -> None:
+        """Hold the clock at ``ts``.
+
+        Raises:
+            ClockError: if ``ts`` is earlier than the clock has been, or it was released.
+        """
+        if not self._held:
+            raise ClockError("the clock was released and now follows the live one")
+        if ts < self._latest:
+            raise ClockError(f"cannot move the clock back from {self._latest} to {ts}")
+        self._latest = ts
+
+    def release(self) -> None:
+        """Follow the live clock from now on."""
+        self._held = False
+
+    def now(self) -> Timestamp:
+        if not self._held:
+            self._latest = Timestamp(max(self._latest, self._live.now()))
+        return self._latest
+
+
 class WallClock:
     """The real current time, from the operating system, never going backwards.
 

@@ -74,7 +74,7 @@ from heliograph.core.answers import Followed, SignalAnswer, SignalExpired
 from heliograph.core.bars import BarsFromBars, TimeBars
 from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
-from heliograph.core.clock import Clock, SimulatedClock
+from heliograph.core.clock import Clock, ResumedClock, SimulatedClock
 from heliograph.core.engine import BacktestEngine, LiveEngine, Sequencer
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import BarField, Graph, Indicator, IndicatorValues
@@ -256,6 +256,7 @@ async def run_live_session(
     *,
     grace: float = 10.0,
     answers_sleep: Sleep = asyncio.sleep,
+    resume: Path | None = None,
 ) -> RunSummary:
     """Run the live session ``loaded`` describes until its sources end or it is cancelled.
 
@@ -276,9 +277,18 @@ async def run_live_session(
     are left in the inbox beside the journal and published as ``SignalAnswer``
     inputs; ``answers_sleep`` paces the looks in the inbox (decision D50).
 
+    With ``resume``, the session carries on from that earlier session's journal
+    (decision D53): the old inputs are fed back to the same components at the
+    times they were first known, which rebuilds the bars, indicators, signals,
+    positions held and answers, nothing is sent to the sinks again, and then the
+    session goes live on from the clock's time. The new journal holds the old
+    history and the new, so it replays as one. The configuration must be the one
+    the old session ran.
+
     Raises:
         ConfigError: as ``run_backtest``, and if the configuration is not live.
-        InvalidValueError: if ``journal`` already exists.
+        InvalidValueError: if ``journal`` already exists, or ``resume`` is not a
+            live session's journal of this configuration and its components.
         asyncio.CancelledError: after a clean stop.
         Whatever a source raised; the journal then records the failure.
     """
@@ -287,12 +297,16 @@ async def run_live_session(
     if journal.exists():
         raise InvalidValueError(f"{journal} exists; a run writes a new journal")
     components = _components(config, registry)
+    earlier = None if resume is None else _earlier(resume, loaded, registry)
     mounts = build_mounts(config, registry, clock, sleep)
     misaligned = config.misaligned({m.name: m.source.capabilities.live_delay for m in mounts})
     if misaligned:
         raise ConfigError("; ".join(misaligned))
     sinks = build_sinks(config, registry)
     header = _header(loaded, mounts, components, clock.now(), None, None)
+    if earlier is not None:
+        header["start"] = earlier.start  # the history begins where the old session did
+        header["resumes"] = earlier.described
     if sinks:
         header["sinks"] = _sinks_described(config, sinks)
     feeds: list[tuple[DataSource, Sequence[Subscription]]] = []
@@ -302,17 +316,22 @@ async def run_live_session(
     stopped = False
     delivered = 0
     dispatcher = Dispatcher(cast(Mapping[str, SignalSink], sinks), sleep=sleep)
+    session_clock: Clock = clock if earlier is None else ResumedClock(clock)
     try:
         with _assembled(
-            config, journal, header, components, clock=clock, make=LiveEngine, batch=1
+            config, journal, header, components, clock=session_clock, make=LiveEngine, batch=1
         ) as engine:
-            deliveries = Deliveries(engine, dispatcher, clock, grace) if sinks else None
-            answers = Answers(engine, clock, inbox_for(journal), answers_sleep)
+            answers = Answers(engine, session_clock, inbox_for(journal), answers_sleep)
+            if earlier is not None:
+                assert isinstance(session_clock, ResumedClock)
+                _restore(engine, session_clock, earlier)
+            # After the restore: what the old session made has been given to the sinks already.
+            deliveries = Deliveries(engine, dispatcher, session_clock, grace) if sinks else None
             try:
                 await run_live(
                     feeds,
                     engine,
-                    clock,
+                    session_clock,
                     sleep=sleep,
                     before_end=None if deliveries is None else deliveries.finish,
                     alongside=[answers.watch],
@@ -329,6 +348,54 @@ async def run_live_session(
     if stopped:
         raise asyncio.CancelledError
     return RunSummary(journal, delivered, header)
+
+
+@dataclass(frozen=True, slots=True)
+class _Earlier:
+    """What a session being resumed left: its inputs, where it stopped, and how it began."""
+
+    inputs: Sequence[Message]
+    until: Timestamp | None
+    start: str
+    described: str
+
+
+def _earlier(resume: Path, loaded: LoadedConfig, registry: Registry) -> _Earlier:
+    """The journal ``resume`` as something a new session can carry on from.
+
+    Raises:
+        InvalidValueError: if it is not a live session's journal, was made by another
+            configuration, or by components that are no longer the same.
+    """
+    written = _recorded_header(resume, ("live",))
+    if written["config_digest"] != loaded.digest:
+        raise InvalidValueError(
+            f"{resume} ran another configuration; a session resumes only the configuration it ran"
+        )
+    _rebuilt(resume, written, registry)
+    found = runs(read_entries(resume, JOURNALLED))
+    inputs = [message for part, _ in found for message in part]
+    until = found[-1][1] if found else None
+    described = json.dumps(
+        {"journal": resume.name, "inputs": len(inputs), "status": written.get("status")},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _Earlier(inputs, until, written["start"], described)
+
+
+def _restore(engine: LiveEngine, clock: ResumedClock, earlier: _Earlier) -> None:
+    """Feed the old session's inputs back at the times they were first known, then go live."""
+    last: Timestamp | None = None
+    for message in earlier.inputs:
+        clock.stand_at(message.ts)
+        engine.receive(message)
+        last = message.ts
+    stopped = last if earlier.until is None else earlier.until
+    if stopped is not None:
+        clock.stand_at(stopped if last is None else max(stopped, last))
+        engine.tick()
+    clock.release()
 
 
 def _sinks_described(config: RunConfig, sinks: Mapping[str, Plugin[Any]]) -> str:
@@ -536,6 +603,59 @@ REQUIRED = ("kind", "config_text", "config_digest", "start", "heliograph")
 """The header keys a run's journal must have to be replayed (a backtest's also has ``until``)."""
 
 
+def _recorded_header(journal: Path, kinds: tuple[str, ...]) -> dict[str, str]:
+    """The header of ``journal``, which must be a ``kinds`` journal with what a replay needs."""
+    written = read_header(journal)
+    kind = written.get("kind")
+    if kind not in kinds:
+        raise InvalidValueError(
+            f"{journal} is not the journal of a {' or '.join(_NAMES[k] for k in kinds)}"
+        )
+    missing = [key for key in REQUIRED if key not in written]
+    if kind == "backtest" and "until" not in written:
+        missing.append("until")
+    if missing:
+        raise InvalidValueError(f"{journal}'s header lacks {', '.join(missing)}")
+    return written
+
+
+_NAMES = {"backtest": "backtest run", "live": "live session"}
+
+
+def _rebuilt(
+    journal: Path, written: Mapping[str, str], registry: Registry
+) -> tuple[LoadedConfig, Built]:
+    """The configuration ``journal`` ran and its components, built again.
+
+    Raises:
+        InvalidValueError: if the configuration no longer matches its digest, or a
+            component's installed version or parameters are not the ones recorded.
+        ConfigError: if a component can no longer be built.
+    """
+    loaded = parse_config(written["config_text"])
+    if loaded.digest != written["config_digest"]:
+        raise InvalidValueError(f"{journal}'s configuration does not match its digest")
+    _runnable(loaded.config, written["kind"])
+    components = _components(loaded.config, registry)
+    # A journal written before indicators ran records none.
+    recorded = json.loads(written.get("components", "{}"))
+    for component, plugin in components:
+        entry = recorded.get(component.name, {})
+        installed = plugin.manifest.version
+        if entry.get("version") != installed:
+            raise InvalidValueError(
+                f"{component.name} ran {component.plugin} version {entry.get('version')}; "
+                f"version {installed} is installed, and its values could differ"
+            )
+        params = plugin.params.model_dump(mode="json")
+        if entry.get("params") != params:
+            raise InvalidValueError(
+                f"{component.name} ran with parameters {entry.get('params')}; they would now "
+                f"be {params} (a default changed?), and its values could differ"
+            )
+    return loaded, components
+
+
 def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
     """Run again what ``journal`` recorded, from its header and inputs alone, into ``out``.
 
@@ -558,15 +678,7 @@ def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
         ConfigError: if a component can no longer be built (its plug-in
             is gone, or its parameters no longer valid).
     """
-    written = read_header(journal)
-    kind = written.get("kind")
-    if kind not in ("backtest", "live"):
-        raise InvalidValueError(f"{journal} is not the journal of a backtest run or live session")
-    missing = [key for key in REQUIRED if key not in written]
-    if kind == "backtest" and "until" not in written:
-        missing.append("until")
-    if missing:
-        raise InvalidValueError(f"{journal}'s header lacks {', '.join(missing)}")
+    written = _recorded_header(journal, ("backtest", "live"))
     if written.get("status") != "complete":
         raise InvalidValueError(
             f"{journal} records a run that did not finish ({written.get('status')}); "
@@ -574,27 +686,7 @@ def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
         )
     if out.exists():
         raise InvalidValueError(f"{out} exists; a replay writes a new journal")
-    loaded = parse_config(written["config_text"])
-    if loaded.digest != written["config_digest"]:
-        raise InvalidValueError(f"{journal}'s configuration does not match its digest")
-    _runnable(loaded.config, kind)
-    components = _components(loaded.config, registry)
-    # A journal written before indicators ran records none.
-    recorded = json.loads(written.get("components", "{}"))
-    for component, plugin in components:
-        entry = recorded.get(component.name, {})
-        installed = plugin.manifest.version
-        if entry.get("version") != installed:
-            raise InvalidValueError(
-                f"{component.name} ran {component.plugin} version {entry.get('version')}; "
-                f"version {installed} is installed, and its values could differ"
-            )
-        params = plugin.params.model_dump(mode="json")
-        if entry.get("params") != params:
-            raise InvalidValueError(
-                f"{component.name} ran with parameters {entry.get('params')}; they would now "
-                f"be {params} (a default changed?), and its values could differ"
-            )
+    loaded, components = _rebuilt(journal, written, registry)
     # The journal writes its own format, versions and status; the rest is the run's.
     header = {k: v for k, v in written.items() if k not in RESERVED_HEADER}
     header["heliograph"] = version("heliograph")

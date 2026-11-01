@@ -264,6 +264,14 @@ within each section.
 - **`uv run` prints a `UV_NATIVE_TLS` deprecation notice** in Claude's cloud
   workspace (an environment variable there, not the project); filter it when
   scanning output.
+- **In a live-session test, a sleep that advances the simulated clock runs ahead to the next
+  alarm at once.** A session given `time.advance` as its sleep fast-forwarded a thousand
+  hours to a signal's expiry before the next trade could be read, so the signal had already
+  expired when the strategy next decided. Where the trades are meant to move time, give the
+  session a sleep that only yields (`asyncio.sleep(0)`); the keeper then waits for the trades.
+- **A session that refuses to start never makes its journal.** A test that waits for the
+  journal to exist hangs on the very refusal it is checking; call the session directly under
+  `asyncio.wait_for` and expect the error.
 
 ## The window
 

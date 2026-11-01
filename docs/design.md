@@ -345,7 +345,9 @@ retrying each independently. Fields map onto FIX tags for future brokers.
 The paper broker is a `Broker` on live data with the backtester's fill and cost
 model, bridged to `SignalSink`; a paper session survives restarts. You mark
 each signal *took it* (with your price and size), *skipped* or *expired*; the
-journal compares your results with the signal's paper result. In a live
+journal compares your results with the signal's paper result. A live session
+can carry on from an earlier one's journal (`heliograph live --resume`): the old inputs
+are fed back to the same components, then it goes live. In a live
 session the strategy's position held is the one *you* hold (`Followed`): a
 signal counts as followed until you skip it or its time to answer runs out
 (`answer_within`, one bar by default); the broker's fills stay the signal's own

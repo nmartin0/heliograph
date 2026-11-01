@@ -4333,8 +4333,8 @@ tests = ["tests/app/test_live_session.py::test_a_stopped_session_leaves_a_comple
 [[control]]
 describes = "a live session journals in small batches, so a crash loses little"
 path = "src/heliograph/app/run.py"
-old = "clock=clock, make=LiveEngine, batch=1\n"
-new = "clock=clock, make=LiveEngine, batch=1000\n"
+old = "clock=session_clock, make=LiveEngine, batch=1\n"
+new = "clock=session_clock, make=LiveEngine, batch=1000\n"
 tests = ["tests/app/test_live_session.py::test_a_stopped_session_leaves_a_complete_journal_and_closed_sources"]
 
 [[control]]
@@ -4912,14 +4912,14 @@ tests = ["tests/app/test_strategy_roles.py::test_the_time_to_answer_is_a_span_or
 [[control]]
 describes = "a live session's journal replays as a live configuration"
 path = "src/heliograph/app/run.py"
-old = "    _runnable(loaded.config, kind)\n"
+old = "    _runnable(loaded.config, written[\"kind\"])\n"
 new = "    _runnable(loaded.config)\n"
 tests = ["tests/app/test_live_session.py::test_a_live_day_with_its_answers_replays_to_the_same_entries"]
 
 [[control]]
 describes = "only a backtest's or a live session's journal replays"
 path = "src/heliograph/app/run.py"
-old = "    if kind not in (\"backtest\", \"live\"):\n"
+old = "    if kind not in kinds:\n"
 new = "    if False:\n"
 tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_does_not_replay"]
 
@@ -4929,3 +4929,66 @@ path = "src/heliograph/app/run.py"
 old = "    if kind == \"backtest\" and \"until\" not in written:\n"
 new = "    if False:\n"
 tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_does_not_replay"]
+
+[[control]]
+describes = "a resumed session rebuilds its state from the old inputs"
+path = "src/heliograph/app/run.py"
+old = "                _restore(engine, session_clock, earlier)\n"
+new = "                session_clock.release()\n"
+tests = ["tests/app/test_live_session.py::test_a_resumed_session_lives_on_as_if_it_had_not_stopped"]
+
+[[control]]
+describes = "a resumed journal begins where the old session did"
+path = "src/heliograph/app/run.py"
+old = "        header[\"start\"] = earlier.start  # the history begins where the old session did\n"
+new = "        pass\n"
+tests = ["tests/app/test_live_session.py::test_a_resumed_session_lives_on_as_if_it_had_not_stopped"]
+
+[[control]]
+describes = "a resumed session does not send the old signals again"
+path = "src/heliograph/app/run.py"
+old = "            answers = Answers(engine, session_clock, inbox_for(journal), answers_sleep)\n            if earlier is not None:\n"
+new = "            answers = Answers(engine, session_clock, inbox_for(journal), answers_sleep)\n            deliveries = Deliveries(engine, dispatcher, session_clock, grace) if sinks else None\n            if earlier is not None:\n"
+tests = ["tests/app/test_live_session.py::test_what_the_old_session_made_is_not_sent_to_the_sinks_again"]
+
+[[control]]
+describes = "a session resumes only the configuration it ran"
+path = "src/heliograph/app/run.py"
+old = "    if written[\"config_digest\"] != loaded.digest:\n"
+new = "    if False:\n"
+tests = ["tests/app/test_live_session.py::test_a_session_resumes_only_a_live_journal_of_its_own_configuration"]
+
+[[control]]
+describes = "only a live session's journal is resumed"
+path = "src/heliograph/app/run.py"
+old = "    written = _recorded_header(resume, (\"live\",))\n"
+new = "    written = _recorded_header(resume, (\"live\", \"backtest\"))\n"
+tests = ["tests/app/test_live_session.py::test_a_session_resumes_only_a_live_journal_of_its_own_configuration"]
+
+[[control]]
+describes = "a resumed clock never goes back"
+path = "src/heliograph/core/clock.py"
+old = "        if ts < self._latest:\n            raise ClockError(f\"cannot move the clock back from {self._latest} to {ts}\")\n        self._latest = ts"
+new = "        self._latest = ts"
+tests = ["tests/core/test_clock.py::test_a_resumed_clock_never_goes_back"]
+
+[[control]]
+describes = "a resumed clock waits for the live one if it is behind"
+path = "src/heliograph/core/clock.py"
+old = "            self._latest = Timestamp(max(self._latest, self._live.now()))"
+new = "            self._latest = self._live.now()"
+tests = ["tests/core/test_clock.py::test_a_resumed_clock_holds_where_the_old_session_stopped_if_the_live_one_is_behind"]
+
+[[control]]
+describes = "a resumed clock follows the live one once released"
+path = "src/heliograph/core/clock.py"
+old = "        if not self._held:\n            self._latest"
+new = "        if False:\n            self._latest"
+tests = ["tests/core/test_clock.py::test_a_resumed_clock_stands_where_it_is_told_and_then_follows_the_live_one"]
+
+[[control]]
+describes = "a released clock is not held again"
+path = "src/heliograph/core/clock.py"
+old = "        if not self._held:\n            raise ClockError(\"the clock was released and now follows the live one\")"
+new = "        if False:\n            raise ClockError(\"the clock was released and now follows the live one\")"
+tests = ["tests/core/test_clock.py::test_a_resumed_clock_cannot_be_held_again_once_released"]

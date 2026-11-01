@@ -31,6 +31,10 @@ engine marks the end, the journal is closed complete, and the exit status is 0.
 ``replay`` runs a backtest's or a live session's journal again and says whether the
 entries come out the same (decision D52).
 
+``live --resume <journal>`` carries on from an earlier live session's journal: the old
+inputs are fed back to the same components, so positions, answers and indicators are
+as they were, and the new journal holds the old history and the new (decision D53).
+
 ``answer`` tells a running live session what you did about one of its signals (took it,
 at a price and quantity if they differ from the signal's, or skipped it); the session
 journals it (decision D50).
@@ -94,6 +98,11 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("config", type=Path, help="the session's configuration (TOML, mode live)")
     live.add_argument(
         "--journal", type=Path, help="where to journal it (default: runs/<name>-live-<time>.sqlite)"
+    )
+    live.add_argument(
+        "--resume",
+        type=Path,
+        help="carry on from an earlier session's journal (the same configuration)",
     )
     live.set_defaults(command=_live)
 
@@ -173,7 +182,7 @@ def _live(args: argparse.Namespace) -> int:
     )
     journal.parent.mkdir(parents=True, exist_ok=True)
     try:
-        asyncio.run(_session(loaded, journal, clock))
+        asyncio.run(_session(loaded, journal, clock, args.resume))
     except HeliographError as exc:
         if journal.is_file():
             raise HeliographError(f"{exc} (the journal {journal} records it)") from exc
@@ -181,7 +190,9 @@ def _live(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _session(loaded: LoadedConfig, journal: Path, clock: WallClock) -> None:
+async def _session(
+    loaded: LoadedConfig, journal: Path, clock: WallClock, resume: Path | None = None
+) -> None:
     """Run the session; SIGTERM and SIGINT cancel it, which ends it cleanly.
 
     (asyncio.run already cancels on SIGINT; naming both keeps the behaviour in one place.)
@@ -192,10 +203,12 @@ async def _session(loaded: LoadedConfig, journal: Path, clock: WallClock) -> Non
     for stop in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(stop, task.cancel)
     print(f"live session; journal {journal}", flush=True)
+    if resume is not None:
+        print(f"carrying on from {resume}", flush=True)
     print(f"answer a signal: heliograph answer {journal} <signal id> took|skipped", flush=True)
     try:
         summary = await run_live_session(
-            loaded, _registry(loaded.config), journal, clock, asyncio.sleep
+            loaded, _registry(loaded.config), journal, clock, asyncio.sleep, resume=resume
         )
     except asyncio.CancelledError:
         print(f"stopped; journal {journal}", flush=True)
