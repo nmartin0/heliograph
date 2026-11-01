@@ -1274,3 +1274,25 @@ both); equity over time and drawdown for the person (only the end result); a rep
 session still running (it reads the journal as it stands).
 
 **Rejected:** a second record of the person's trades (the answers are it, D50).
+
+## D55 · A halt is a risk gate every live strategy has first, and only the owner clears it (2026-11-01)
+
+**Decision:** `Halted(reason, by)` and `Cleared` are journalled messages. The owner's (from
+`heliograph halt` / `clear`, left in the same inbox as answers) are inputs and replayed; a
+watch's (next commits) are derived from the data and the clock. `Halt` is a risk gate a live
+session puts first on every strategy's list, so it behaves as every gate does (D34): it sees only
+proposals that add risk, a refusal is a `SignalRefused` with `refused_by` "halt" and the reason
+"halted by <who>: <why>", a refused reversal goes flat, and a signal that only takes risk off
+still leaves. The first halt stands; later ones do not rewrite why; only `Cleared` ends it.
+A backtest has no `Halt` (nobody to halt it).
+
+**Why:** the owner chose that exits must still reach them while the session is halted (a stop
+that cannot say "get out" is worse than none), and reusing the gate machinery meant no new path
+through the strategy and the existing replay, resume and report all work on it.
+
+**Not done:** halting a single strategy (a halt covers the session); a halt survives a resume
+(it is an input in the old journal, so the restore halts again) but `Cleared` must be in that
+journal too, which is why the owner clears with the command rather than editing anything.
+
+**Rejected:** refusing every signal while halted (design.md's first wording): it would hide a
+stop from the owner exactly when something is wrong.

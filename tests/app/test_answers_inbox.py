@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from heliograph.app.answers import Answers, hand_over, inbox_for, submit
+from heliograph.app.answers import Answers, hand_over, inbox_for, order, submit
 from heliograph.core.answers import SignalAnswer
 from heliograph.core.bus import MessageBus
 from heliograph.core.clock import SimulatedClock
 from heliograph.core.engine import LiveEngine
 from heliograph.core.errors import HeliographError, InvalidValueError
+from heliograph.core.halt import Cleared, Halted
 from heliograph.core.journal import JournalEntry, MemoryJournal
 from heliograph.core.pipeline import Signal
 from heliograph.core.time import Timestamp
@@ -182,7 +183,7 @@ def test_an_answer_to_a_resumed_session_names_the_session_that_took_over(tmp_pat
     old, new = tmp_path / "old.sqlite", tmp_path / "new.sqlite"
     inbox_for(old).mkdir()
     hand_over(old, new)
-    with pytest.raises(HeliographError, match=r"resumed; answer new\.sqlite instead"):
+    with pytest.raises(HeliographError, match=r"resumed; use new\.sqlite instead"):
         submit(inbox_for(old), clock, "s1", "took")
     assert list(inbox_for(old).glob("*.json")) == []
 
@@ -191,3 +192,42 @@ def test_there_is_nothing_to_hand_over_from_a_session_that_never_had_an_inbox(
     tmp_path: Path,
 ) -> None:
     assert hand_over(tmp_path / "old.sqlite", tmp_path / "new.sqlite") == 0
+
+
+def test_the_owners_halt_and_clear_become_inputs_stamped_when_taken(tmp_path: Path) -> None:
+    clock, answers, journal, _, inbox = session(tmp_path)
+    order(inbox, clock, "halt", "feed down")
+    clock.advance_to(Timestamp(150))
+    order(inbox, clock, "clear")
+    clock.advance_to(Timestamp(200))
+    assert answers.poll() == 2
+    assert [(e.origin, e.message) for e in journal.entries] == [
+        ("input", Halted(ts=Timestamp(200), reason="feed down", by="owner")),
+        ("input", Cleared(ts=Timestamp(200), by="owner")),
+    ]
+
+
+def test_a_halt_without_a_reason_says_who_halted_it(tmp_path: Path) -> None:
+    clock, answers, journal, _, inbox = session(tmp_path)
+    order(inbox, clock, "halt")
+    answers.poll()
+    (entry,) = journal.entries
+    assert isinstance(entry.message, Halted)
+    assert entry.message.reason == "halted by the owner"
+
+
+def test_only_halt_and_clear_are_orders(tmp_path: Path) -> None:
+    clock, _, _, _, inbox = session(tmp_path)
+    with pytest.raises(InvalidValueError, match="an order is halt or clear"):
+        order(inbox, clock, "stop")
+
+
+@pytest.mark.parametrize(
+    "text", ['{"halt": "x", "signal": "s1"}', '{"halt": "x", "clear": ""}', '{"pause": ""}']
+)
+def test_a_file_that_mixes_orders_or_names_another_is_rejected(tmp_path: Path, text: str) -> None:
+    _, answers, journal, _, inbox = session(tmp_path)
+    (inbox / "00000000000000000001-0.json").write_text(text)
+    assert answers.poll() == 0
+    assert not journal.entries
+    assert len(list((inbox / "rejected").glob("*.why"))) == 1

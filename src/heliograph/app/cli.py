@@ -6,6 +6,8 @@
     heliograph backtest examples/trend.toml          # run, journal, print the report
     heliograph live examples/trend-live.toml         # run on live data until stopped
     heliograph answer runs/trend-live-20261031T101500Z.sqlite 3f2a took --price 67500
+    heliograph halt runs/trend-live-20261031T101500Z.sqlite "exchange maintenance"
+    heliograph clear runs/trend-live-20261031T101500Z.sqlite
     heliograph report runs/trend-20261023T101500Z.sqlite
     heliograph replay runs/trend-20261023T101500Z.sqlite
     heliograph serve --data ~/heliograph-data --configs examples
@@ -42,6 +44,9 @@ as they were, and the new journal holds the old history and the new (decision D5
 at a price and quantity if they differ from the signal's, or skipped it); the session
 journals it (decision D50).
 
+``halt`` and ``clear`` halt a running live session, which then refuses signals that add risk
+(those that take it off still leave), and clear the halt; only you clear it (decision D55).
+
 ``serve`` runs the engine's own process and its JSON API (D18; see
 app/server.py) until it is stopped (SIGTERM, or Ctrl-C), then exits 0, or
 1 if a backtest had not stopped by the deadline.
@@ -56,7 +61,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from heliograph import __version__
-from heliograph.app.answers import inbox_for, submit
+from heliograph.app.answers import inbox_for, order, submit
 from heliograph.app.config import LoadedConfig, RunConfig, load_config, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import report
@@ -120,6 +125,17 @@ def _parser() -> argparse.ArgumentParser:
         help="units you traded, negative to sell (took only; default: what the signal asked)",
     )
     answer.set_defaults(command=_answer)
+
+    halt = commands.add_parser(
+        "halt", help="halt a live session: it refuses signals that add risk until you clear it"
+    )
+    halt.add_argument("journal", type=Path, help="the live session's journal")
+    halt.add_argument("reason", nargs="*", help="why (kept in the journal)")
+    halt.set_defaults(command=_halt)
+
+    clear = commands.add_parser("clear", help="clear a live session's halt")
+    clear.add_argument("journal", type=Path, help="the live session's journal")
+    clear.set_defaults(command=_clear)
 
     report_ = commands.add_parser(
         "report", help="print the report of a backtest's or live session's journal"
@@ -225,6 +241,20 @@ def _answer(args: argparse.Namespace) -> int:
     inbox = inbox_for(args.journal)
     submit(inbox, WallClock(), args.signal, args.verdict, args.price, args.quantity)
     print(f"{args.verdict} {args.signal}: left in {inbox}; the session takes it within a second")
+    return 0
+
+
+def _halt(args: argparse.Namespace) -> int:
+    inbox = inbox_for(args.journal)
+    order(inbox, WallClock(), "halt", " ".join(args.reason))
+    print(f"halt: left in {inbox}; the session takes it within a second")
+    return 0
+
+
+def _clear(args: argparse.Namespace) -> int:
+    inbox = inbox_for(args.journal)
+    order(inbox, WallClock(), "clear")
+    print(f"clear: left in {inbox}; the session takes it within a second")
     return 0
 
 

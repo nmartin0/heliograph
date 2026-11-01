@@ -7,18 +7,19 @@ import asyncio
 import json
 import shutil
 import sqlite3
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 from typing import ClassVar
 
 import pytest
 
-from heliograph.app.answers import inbox_for, submit
+from heliograph.app.answers import inbox_for, order, submit
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest, run_live_session
 from heliograph.core.answers import SignalAnswer, SignalExpired
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import IndicatorValues
+from heliograph.core.halt import Cleared, Halted
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.pipeline import Signal, SignalRefused
 from heliograph.core.sinks import Delivered, Delivery, SinkUnavailableError
@@ -770,7 +771,7 @@ def test_an_answer_left_for_a_session_that_is_resumed_reaches_the_new_one(
     play(registry, second, start=stopped, signals_wanted=2, start_at=trades, resume=first)
     answered = [m for m in history(second) if isinstance(m, SignalAnswer)]
     assert [(a.signal, a.verdict) for a in answered] == [(made.id, "skipped")]
-    with pytest.raises(HeliographError, match=r"resumed; answer second\.sqlite instead"):
+    with pytest.raises(HeliographError, match=r"resumed; use second\.sqlite instead"):
         submit(inbox_for(first), time.clock, made.id, "took")
 
 
@@ -788,3 +789,125 @@ params = { name = "slow" }
     made = signals(journal)
     assert [d.ok for d in deliveries(journal)] == [True] * len(made)
     assert sorted(i for _, i in Recorder.got) == sorted(s.id for s in made)
+
+
+def halted_day(
+    registry: Registry, folder: Path, halt_after: int, until_signals: int | None = None
+) -> list[Message]:
+    """A gated session; the owner halts it once ``halt_after`` signals are out, then clears it.
+
+    The first signal, if any, is answered as taken (so there is a position to leave). The halt
+    lasts until a refusal, or until ``until_signals`` signals are out if that is given.
+
+    Returns the halt-related and decision messages in the order journalled.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    time = SimulatedTime(start=NOW)
+    Pulse.time, Pulse.closed = time, 0
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, len(UP_THEN_DOWN), "wait"
+    Pulse.gate = asyncio.Queue()
+    journal = folder / "live.sqlite"
+
+    def seen(*kinds: type) -> list[Message]:
+        return [
+            e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, kinds)
+        ]
+
+    async def idle(_: float) -> None:
+        await asyncio.sleep(0)
+
+    async def until(done: Callable[[], bool]) -> None:
+        while not done():
+            assert Pulse.gate is not None
+            taken = len(seen(Point))
+            Pulse.gate.put_nowait(None)
+            while len(seen(Point)) == taken:
+                await asyncio.sleep(0)
+            for _ in range(100):
+                await asyncio.sleep(0)
+
+    async def main() -> None:
+        task = asyncio.create_task(
+            run_live_session(
+                parse_config(STRATEGY), registry, journal, time.clock, idle, answers_sleep=idle
+            )
+        )
+        while not journal.exists():
+            await asyncio.sleep(0)
+        await until(lambda: len(seen(Signal)) >= halt_after)
+        if halt_after:
+            (first, *_) = seen(Signal)
+            assert isinstance(first, Signal)
+            submit(inbox_for(journal), time.clock, first.id, "took")
+            while not seen(SignalAnswer):
+                await asyncio.sleep(0)
+        order(inbox_for(journal), time.clock, "halt", "maintenance")
+        while not seen(Halted):
+            await asyncio.sleep(0)
+        if until_signals is None:
+            await until(lambda: len(seen(SignalRefused)) >= 1)
+        else:
+            await until(lambda: len(seen(Signal)) >= until_signals)
+        order(inbox_for(journal), time.clock, "clear")
+        while not seen(Cleared):
+            await asyncio.sleep(0)
+        await until(lambda: len(seen(Signal)) >= max(halt_after, until_signals or 0) + 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(asyncio.wait_for(main(), timeout=60))
+    return seen(Halted, Cleared, Signal, SignalRefused, SignalAnswer)
+
+
+def test_a_halted_session_refuses_entries_until_the_owner_clears_it(
+    registry: Registry, tmp_path: Path
+) -> None:
+    made = halted_day(registry, tmp_path, halt_after=0)
+    kinds = [type(m).__name__ for m in made]
+    assert kinds[:3] == ["Halted", "SignalRefused", "Cleared"]
+    halted, refused = made[0], made[1]
+    assert isinstance(halted, Halted)
+    assert (halted.by, halted.reason) == ("owner", "maintenance")
+    assert isinstance(refused, SignalRefused)
+    assert refused.refused_by == "halt"
+    assert refused.reason == "halted by owner: maintenance"
+    assert refused.held == 0.0
+    assert refused.target != 0
+    assert kinds[3:] == ["Signal"]  # cleared: the same entry now leaves
+    entry = made[3]
+    assert isinstance(entry, Signal)
+    assert entry.held == 0.0
+    assert entry.target > 0
+
+
+def test_a_halted_session_still_sends_the_signal_that_takes_risk_off(
+    registry: Registry, tmp_path: Path
+) -> None:
+    made = halted_day(registry, tmp_path, halt_after=1, until_signals=2)
+    entered = next(m for m in made if isinstance(m, Signal))
+    halt = next(i for i, m in enumerate(made) if isinstance(m, Halted))
+    clear = next(i for i, m in enumerate(made) if isinstance(m, Cleared))
+    during = made[halt:clear]
+    refused = [m for m in during if isinstance(m, SignalRefused)]
+    leaving = [m for m in during if isinstance(m, Signal)]
+    # the price rose while halted: additions were kept in; then it fell: the cut left
+    assert [r.refused_by for r in refused] == ["halt"] * len(refused)
+    assert [r.target > r.held for r in refused] == [True] * len(refused)
+    assert len(refused) >= 1
+    assert [(s.held, s.target < s.held) for s in leaving] == [(entered.target, True)]
+
+
+def test_the_owners_halt_and_clear_are_journalled_inputs_and_the_day_replays(
+    registry: Registry, tmp_path: Path
+) -> None:
+    halted_day(registry, tmp_path, halt_after=1)
+    journal = tmp_path / "live.sqlite"
+    origins = {
+        type(e.message).__name__: e.origin
+        for e in read_entries(journal, JOURNALLED)
+        if isinstance(e.message, Halted | Cleared)
+    }
+    assert origins == {"Halted": "input", "Cleared": "input"}
+    replayed = replay_backtest(journal, tmp_path / "again.sqlite", registry)
+    assert raw_rows(replayed.journal) == raw_rows(journal)

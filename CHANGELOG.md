@@ -272,6 +272,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - `heliograph replay` also replays a live session's journal, answers and all.
 - `heliograph live --resume <journal>`: carry on from an earlier live session. Its inputs are
   fed back to the same components, so positions, answers and indicators are as they were.
+- `heliograph halt` and `heliograph clear`: halt a running live session, which then refuses
+  signals that add risk (those that take it off still leave) until you clear it.
 - `heliograph report` of a live session's journal also says what you took, skipped and let
   expire, the position you hold, and your result beside the signal's paper result.
 

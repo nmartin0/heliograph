@@ -4737,14 +4737,14 @@ tests = ["tests/app/test_dispatch.py::test_each_outcome_is_told_the_moment_its_s
 [[control]]
 describes = "an answer to a signal never made is set aside, not published"
 path = "src/heliograph/app/answers.py"
-old = "                if answer.signal not in self._seen:\n"
-new = "                if False:\n"
+old = "        if answer.signal not in self._seen:\n"
+new = "        if False:\n"
 tests = ["tests/app/test_answers_inbox.py::test_an_answer_to_a_signal_never_made_is_set_aside_with_its_reason"]
 
 [[control]]
 describes = "an answer is stamped when the session learns of it"
 path = "src/heliograph/app/answers.py"
-old = "answer = SignalAnswer(ts=self._clock.now(), **fields)"
+old = "answer = SignalAnswer(ts=now, **fields)"
 new = "answer = SignalAnswer(ts=0, **fields)"
 tests = ["tests/app/test_answers_inbox.py::test_an_answer_left_in_the_inbox_is_journalled_as_an_input_stamped_on_arrival"]
 
@@ -5076,3 +5076,45 @@ path = "src/heliograph/app/run.py"
 old = "                hand_over(resume, journal)\n"
 new = ""
 tests = ["tests/app/test_live_session.py::test_an_answer_left_for_a_session_that_is_resumed_reaches_the_new_one"]
+
+[[control]]
+describes = "a halted session refuses to add risk"
+path = "src/heliograph/core/halt.py"
+old = "        if self._halted is None:\n            return None\n        return f"
+new = "        if True:\n            return None\n        return f"
+tests = ["tests/core/test_halt.py::test_a_halt_refuses_with_who_halted_and_why", "tests/app/test_live_session.py::test_a_halted_session_refuses_entries_until_the_owner_clears_it"]
+
+[[control]]
+describes = "the first halt stands"
+path = "src/heliograph/core/halt.py"
+old = "        if self._halted is None:\n            self._halted = message"
+new = "        if True:\n            self._halted = message"
+tests = ["tests/core/test_halt.py::test_a_halt_refuses_with_who_halted_and_why"]
+
+[[control]]
+describes = "a clear ends a halt"
+path = "src/heliograph/core/halt.py"
+old = "    def _on_cleared(self, message: Cleared) -> None:\n        self._halted = None"
+new = "    def _on_cleared(self, message: Cleared) -> None:\n        return"
+tests = ["tests/core/test_halt.py::test_only_a_clear_ends_a_halt_and_clearing_when_not_halted_is_harmless"]
+
+[[control]]
+describes = "every live strategy has the halt gate first"
+path = "src/heliograph/app/run.py"
+old = "risk_gates=((\"halt\", halt), *spec_.risk_gates)"
+new = "risk_gates=tuple(spec_.risk_gates)"
+tests = ["tests/app/test_live_session.py::test_a_halted_session_refuses_entries_until_the_owner_clears_it"]
+
+[[control]]
+describes = "the inbox turns a halt order into Halted"
+path = "src/heliograph/app/answers.py"
+old = "        if \"halt\" in fields:"
+new = "        if \"never\" in fields:"
+tests = ["tests/app/test_answers_inbox.py::test_the_owners_halt_and_clear_become_inputs_stamped_when_taken"]
+
+[[control]]
+describes = "an order file holds one order only"
+path = "src/heliograph/app/answers.py"
+old = "len(data) == 1 and set(data) <= set(ORDERS)"
+new = "set(data) <= set(ORDERS)"
+tests = ["tests/app/test_answers_inbox.py::test_a_file_that_mixes_orders_or_names_another_is_rejected"]

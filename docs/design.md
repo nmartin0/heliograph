@@ -360,8 +360,9 @@ disabled, behind an explicit setting and the same risk gate.
 ## Safety
 
 - An independent risk gate checks every signal before it leaves.
-- A `Halted(reason)` state, enterable by any component and cleared only by the
-  owner; signals are refused and journalled while halted.
+- A `Halted(reason, by)` state, enterable by the owner (`heliograph halt`) or a watch and
+  cleared only by the owner (`heliograph clear`); while halted, signals that add risk are
+  refused and journalled, and those that take it off still leave (D55).
 - A "too good to be true" warning on implausible backtests, which usually means
   look-ahead.
 - Startup refuses to run if a plug-in's version disagrees with its manifest;

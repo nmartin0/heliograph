@@ -48,7 +48,7 @@ import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -78,6 +78,7 @@ from heliograph.core.clock import Clock, ResumedClock, SimulatedClock
 from heliograph.core.engine import BacktestEngine, LiveEngine, Sequencer
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import BarField, Graph, Indicator, IndicatorValues
+from heliograph.core.halt import Cleared, Halt, Halted
 from heliograph.core.journal import runs
 from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
 from heliograph.core.pipeline import (
@@ -121,6 +122,8 @@ JOURNALLED = (
     Delivered,
     SignalAnswer,
     SignalExpired,
+    Halted,
+    Cleared,
 )
 """Every message type a run journals."""
 
@@ -783,8 +786,12 @@ def _assembled[E: Sequencer](
                     component.name, indicator, [config.input_name(r) for r in component.inputs]
                 )
             models = {c.name: p for c, p in components if c.kind == "fills"}
+            # A live session can be halted (D55); a backtest has no one to halt it.
+            halt = Halt(bus) if config.mode == "live" else None
             for strategy in config.strategies:
                 spec_ = _strategy_spec(config, strategy, components, header["config_digest"])
+                if halt is not None:
+                    spec_ = replace(spec_, risk_gates=(("halt", halt), *spec_.risk_gates))
                 running = Strategy(spec_, graph, bus)
                 found = config.stream_field(strategy.price)
                 assert found is not None  # RunConfig requires it
