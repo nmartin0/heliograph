@@ -1203,3 +1203,19 @@ folding the settled ones into a base position waits for saving state (the next c
 **Rejected:** assuming *not taken* until told (a strategy never told anything holds nothing);
 expiry as *took it* (it records trades the person never made); letting the fills follow the
 answers (the paper result would stop being the signal's own).
+
+## D52 · A live session's journal replays like a backtest's (2026-10-31)
+
+**Decision:** `replay_backtest` (and `heliograph replay`) accepts a complete live session's
+journal as well as a backtest's. Its header's `start` starts the simulated clock; its inputs
+(prices, a person's `SignalAnswer`s, each sink's `Delivered`) are fed to a `BacktestEngine`
+running the same components, up to where the session stopped, and the entries come out byte
+for byte the same, including the strategy's signals, the position held, and each
+`SignalExpired`. A backtest's header still needs `until`; a live one has none.
+
+**Why:** this is the Phase 4 gate's second half (a replayed day reproduces its signals) and
+what makes a session restartable from its journal (the next step): D43 made a live day
+replayable in principle, and an end-to-end test now shows it for a real strategy with answers.
+
+**Rejected:** a separate replay path for live journals (it would be a second implementation
+of the same loop, free to drift from the first).

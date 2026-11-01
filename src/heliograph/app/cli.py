@@ -28,6 +28,9 @@ one message. Anything else is a bug and shows its traceback.
 as it goes, until its sources end or it is stopped (SIGTERM, or Ctrl-C): the
 engine marks the end, the journal is closed complete, and the exit status is 0.
 
+``replay`` runs a backtest's or a live session's journal again and says whether the
+entries come out the same (decision D52).
+
 ``answer`` tells a running live session what you did about one of its signals (took it,
 at a price and quantity if they differ from the signal's, or skipped it); the session
 journals it (decision D50).

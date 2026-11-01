@@ -269,6 +269,7 @@ All notable changes to Heliograph are recorded here. The format follows
 - A live strategy's position held follows what the person did: a signal is taken as followed
   until it is skipped or its time to answer (`answer_within` on the strategy, one bar by
   default) runs out.
+- `heliograph replay` also replays a live session's journal, answers and all.
 
 ### Fixed
 
@@ -420,3 +421,4 @@ All notable changes to Heliograph are recorded here. The format follows
   its own task, every outcome journalled.
 - D50 records a person's answer as an input, left in an inbox beside the journal.
 - D51 records the position held following the person's answers and signals that expire.
+- D52 records that a live session's journal replays to the same entries.

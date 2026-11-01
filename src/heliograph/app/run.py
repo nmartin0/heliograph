@@ -532,12 +532,17 @@ def _close_all(loop: SourceLoop, sources: Iterable[DataSource]) -> None:
         raise failures[0]
 
 
-REQUIRED = ("kind", "config_text", "config_digest", "start", "until", "heliograph")
-"""The header keys a run's journal must have to be replayed."""
+REQUIRED = ("kind", "config_text", "config_digest", "start", "heliograph")
+"""The header keys a run's journal must have to be replayed (a backtest's also has ``until``)."""
 
 
 def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
     """Run again what ``journal`` recorded, from its header and inputs alone, into ``out``.
+
+    A live session replays as a backtest does: its inputs (prices, a person's
+    answers, what became of each delivery) are fed to a simulated clock that
+    starts where the session did, and the same signals and positions come out
+    (decision D52).
 
     The configuration is read from the text recorded and checked against its
     digest; the inputs and where each run stopped come from the entries. Only
@@ -546,17 +551,20 @@ def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
     the original's, but for the version of Heliograph that replayed it.
 
     Raises:
-        InvalidValueError: if ``journal`` is not a complete backtest's
-            journal, its configuration no longer matches its digest, a
+        InvalidValueError: if ``journal`` is not a complete backtest's or
+            live session's journal, its configuration no longer matches its digest, a
             component's installed version or parameters are not the ones the
             run recorded, or ``out`` already exists.
         ConfigError: if a component can no longer be built (its plug-in
             is gone, or its parameters no longer valid).
     """
     written = read_header(journal)
-    if written.get("kind") != "backtest":
-        raise InvalidValueError(f"{journal} is not the journal of a backtest run")
+    kind = written.get("kind")
+    if kind not in ("backtest", "live"):
+        raise InvalidValueError(f"{journal} is not the journal of a backtest run or live session")
     missing = [key for key in REQUIRED if key not in written]
+    if kind == "backtest" and "until" not in written:
+        missing.append("until")
     if missing:
         raise InvalidValueError(f"{journal}'s header lacks {', '.join(missing)}")
     if written.get("status") != "complete":
@@ -569,7 +577,7 @@ def replay_backtest(journal: Path, out: Path, registry: Registry) -> RunSummary:
     loaded = parse_config(written["config_text"])
     if loaded.digest != written["config_digest"]:
         raise InvalidValueError(f"{journal}'s configuration does not match its digest")
-    _runnable(loaded.config)
+    _runnable(loaded.config, kind)
     components = _components(loaded.config, registry)
     # A journal written before indicators ran records none.
     recorded = json.loads(written.get("components", "{}"))

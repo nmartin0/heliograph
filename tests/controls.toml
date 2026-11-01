@@ -4908,3 +4908,24 @@ path = "src/heliograph/app/config.py"
 old = "        if value is not None:\n            try:\n                parse_span(value)"
 new = "        if False:\n            try:\n                parse_span(value)"
 tests = ["tests/app/test_strategy_roles.py::test_the_time_to_answer_is_a_span_or_absent"]
+
+[[control]]
+describes = "a live session's journal replays as a live configuration"
+path = "src/heliograph/app/run.py"
+old = "    _runnable(loaded.config, kind)\n"
+new = "    _runnable(loaded.config)\n"
+tests = ["tests/app/test_live_session.py::test_a_live_day_with_its_answers_replays_to_the_same_entries"]
+
+[[control]]
+describes = "only a backtest's or a live session's journal replays"
+path = "src/heliograph/app/run.py"
+old = "    if kind not in (\"backtest\", \"live\"):\n"
+new = "    if False:\n"
+tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_does_not_replay"]
+
+[[control]]
+describes = "a backtest's journal needs the time it ran until"
+path = "src/heliograph/app/run.py"
+old = "    if kind == \"backtest\" and \"until\" not in written:\n"
+new = "    if False:\n"
+tests = ["tests/app/test_run.py::test_a_journal_whose_header_cannot_be_trusted_does_not_replay"]

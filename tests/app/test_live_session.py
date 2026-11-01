@@ -13,7 +13,7 @@ import pytest
 
 from heliograph.app.answers import inbox_for, submit
 from heliograph.app.config import ConfigError, parse_config
-from heliograph.app.run import JOURNALLED, run_backtest, run_live_session
+from heliograph.app.run import JOURNALLED, replay_backtest, run_backtest, run_live_session
 from heliograph.core.answers import SignalAnswer, SignalExpired
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Message, Point, RunEnded
@@ -31,7 +31,7 @@ from heliograph.core.time import NANOS_PER_HOUR, Timestamp, from_iso
 from heliograph.plugins.manifest import Manifest, NoParams, Params, Plugin, param
 from heliograph.plugins.notify_sinks import Webhook
 from heliograph.plugins.registry import Registry
-from heliograph.plugins.sqlite_journal import read_entries, read_header
+from heliograph.plugins.sqlite_journal import raw_rows, read_entries, read_header
 from tests.support.simulated import SimulatedTime
 
 NOW = from_iso("2026-10-21T00:00:00Z")
@@ -585,3 +585,19 @@ def asked_then_next_signal(
         return first, second
 
     return asyncio.run(asyncio.wait_for(main(), timeout=30))
+
+
+@pytest.mark.parametrize(("verdict", "extra"), [("skipped", SignalAnswer), (None, SignalExpired)])
+def test_a_live_day_with_its_answers_replays_to_the_same_entries(
+    registry: Registry,
+    tmp_path: Path,
+    time: SimulatedTime,
+    verdict: str | None,
+    extra: type,
+) -> None:
+    asked_then_next_signal(registry, tmp_path, verdict, "30m")
+    journal = tmp_path / "live.sqlite"
+    replayed = replay_backtest(journal, tmp_path / "again.sqlite", registry)
+    assert raw_rows(replayed.journal) == raw_rows(journal)
+    kinds = {type(e.message) for e in read_entries(replayed.journal, JOURNALLED)}
+    assert {Signal, extra} <= kinds

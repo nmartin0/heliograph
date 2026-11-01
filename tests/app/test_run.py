@@ -307,7 +307,7 @@ def test_a_failed_run_does_not_replay(tmp_path: Path, registry: Registry) -> Non
     [
         ("UPDATE header SET value = 'x' WHERE key = 'config_digest'", "does not match its digest"),
         ("DELETE FROM header WHERE key = 'until'", "header lacks until"),
-        ("UPDATE header SET value = 'live' WHERE key = 'kind'", "not the journal of a backtest"),
+        ("UPDATE header SET value = 'x' WHERE key = 'kind'", "not the journal of a backtest"),
     ],
 )
 def test_a_journal_whose_header_cannot_be_trusted_does_not_replay(

@@ -16,8 +16,12 @@ the clock.
    inbox folder beside the journal and `heliograph answer` to fill it.
 2. The strategy's position held follows the answers; the broker's fills stay as
    the signal's own paper result; unanswered signals expire as skipped.
-3. A live session saves and restores its paper positions and clock.
-4. A report comparing the person's result with the signal's paper result.
+3. A live session's journal replays to the same entries (a replayed day
+   reproduces its signals), so its state can be rebuilt from it.
+4. A live session resumes from an earlier journal by replaying it into its
+   components, then going live: positions, the answers given and the clock
+   carry over.
+5. A report comparing the person's result with the signal's paper result.
 
 **Out of scope.** Real orders (never), the risk gate and `Halted` state (next
 item), buttons in the window (later, on the same message).
