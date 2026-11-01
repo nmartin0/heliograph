@@ -5,6 +5,7 @@
 
     heliograph backtest examples/trend.toml          # run, journal, print the report
     heliograph live examples/trend-live.toml         # run on live data until stopped
+    heliograph answer runs/trend-live-20261031T101500Z.sqlite 3f2a took --price 67500
     heliograph report runs/trend-20261023T101500Z.sqlite
     heliograph replay runs/trend-20261023T101500Z.sqlite
     heliograph serve --data ~/heliograph-data --configs examples
@@ -27,6 +28,10 @@ one message. Anything else is a bug and shows its traceback.
 as it goes, until its sources end or it is stopped (SIGTERM, or Ctrl-C): the
 engine marks the end, the journal is closed complete, and the exit status is 0.
 
+``answer`` tells a running live session what you did about one of its signals (took it,
+at a price and quantity if they differ from the signal's, or skipped it); the session
+journals it (decision D50).
+
 ``serve`` runs the engine's own process and its JSON API (D18; see
 app/server.py) until it is stopped (SIGTERM, or Ctrl-C), then exits 0, or
 1 if a backtest had not stopped by the deadline.
@@ -41,11 +46,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from heliograph import __version__
+from heliograph.app.answers import inbox_for, submit
 from heliograph.app.config import LoadedConfig, RunConfig, load_config, parse_config
 from heliograph.app.mounts import KIND as SOURCES
 from heliograph.app.report import report
 from heliograph.app.run import replay_backtest, run_backtest, run_live_session
 from heliograph.app.server import DEFAULT_PORT, serve, settings_from
+from heliograph.core.answers import VERDICTS
 from heliograph.core.clock import WallClock
 from heliograph.core.errors import HeliographError
 from heliograph.core.time import to_datetime
@@ -86,6 +93,18 @@ def _parser() -> argparse.ArgumentParser:
         "--journal", type=Path, help="where to journal it (default: runs/<name>-live-<time>.sqlite)"
     )
     live.set_defaults(command=_live)
+
+    answer = commands.add_parser("answer", help="tell a live session what you did about a signal")
+    answer.add_argument("journal", type=Path, help="the live session's journal")
+    answer.add_argument("signal", help="the signal's id")
+    answer.add_argument("verdict", choices=VERDICTS)
+    answer.add_argument("--price", type=float, help="what you paid or received (took only)")
+    answer.add_argument(
+        "--quantity",
+        type=float,
+        help="units you traded, negative to sell (took only; default: what the signal asked)",
+    )
+    answer.set_defaults(command=_answer)
 
     report_ = commands.add_parser("report", help="print the report of a backtest's journal")
     report_.add_argument("journal", type=Path)
@@ -170,6 +189,7 @@ async def _session(loaded: LoadedConfig, journal: Path, clock: WallClock) -> Non
     for stop in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(stop, task.cancel)
     print(f"live session; journal {journal}", flush=True)
+    print(f"answer a signal: heliograph answer {journal} <signal id> took|skipped", flush=True)
     try:
         summary = await run_live_session(
             loaded, _registry(loaded.config), journal, clock, asyncio.sleep
@@ -178,6 +198,13 @@ async def _session(loaded: LoadedConfig, journal: Path, clock: WallClock) -> Non
         print(f"stopped; journal {journal}", flush=True)
         return
     print(f"ended; journal {summary.journal} ({summary.delivered} inputs delivered)")
+
+
+def _answer(args: argparse.Namespace) -> int:
+    inbox = inbox_for(args.journal)
+    submit(inbox, WallClock(), args.signal, args.verdict, args.price, args.quantity)
+    print(f"{args.verdict} {args.signal}: left in {inbox}; the session takes it within a second")
+    return 0
 
 
 def _report(args: argparse.Namespace) -> int:

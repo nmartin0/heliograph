@@ -197,6 +197,7 @@ async def run_live(
     sleep: Sleep = asyncio.sleep,
     skew: int = SKEW,
     before_end: Callable[[], Awaitable[None]] | None = None,
+    alongside: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
 ) -> None:
     """Publish live data from every source through ``engine``, stamped on arrival, until all end.
 
@@ -209,6 +210,8 @@ async def run_live(
     leaves a complete journal; it does not when a source or a handler fails.
     ``before_end`` is awaited first, both ways, for what must still be
     recorded (deliveries still under way); it can still publish to ``engine``.
+    Each of ``alongside`` runs as a task of the same group while the sources do
+    (a failure in one fails the run) and is cancelled when they have all ended.
 
     Raises:
         InvalidValueError: for data a source was not subscribed to, or a bar
@@ -246,6 +249,8 @@ async def run_live(
             engine.receive(known_now(data, clock.now()))
             changed.set()
         keeper.cancel()
+        for task in extras:
+            task.cancel()
 
     async def keep_time() -> None:
         while True:
@@ -265,6 +270,7 @@ async def run_live(
                 for source, subscriptions in feeds:
                     group.create_task(produce(source, subscriptions))
                 keeper = group.create_task(keep_time())
+                extras: list[asyncio.Task[None]] = [group.create_task(run()) for run in alongside]
                 group.create_task(consume())
         except* Exception as failures:
             # The task group gathers every failure; the first is the cause, and

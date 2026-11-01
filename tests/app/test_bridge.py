@@ -403,3 +403,45 @@ def test_a_failed_session_does_not_pretend_it_ended_cleanly() -> None:
     with pytest.raises(SourceUnavailableError, match="gone"):
         asyncio.run(run_live([(failing, SUBSCRIBED)], engine, time.clock, sleep=time.advance))
     assert not any(s.startswith("RunEnded") for s in seen)
+
+
+# -- work that runs alongside the sources --------------------------------------------------
+
+
+def test_work_alongside_the_sources_is_stopped_when_they_have_all_ended() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+    started: list[str] = []
+    stopped: list[str] = []
+
+    async def alongside() -> None:
+        started.append("yes")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.append("yes")
+
+    source = ScriptedSource(live=[trade(1, 1)])
+    run = run_live(
+        [(source, SUBSCRIBED)], engine, time.clock, sleep=time.advance, alongside=[alongside]
+    )
+    asyncio.run(asyncio.wait_for(run, timeout=2))  # work left running would hang the run
+    assert (started, stopped) == (["yes"], ["yes"])
+    assert seen[-1].startswith("RunEnded")
+
+
+def test_work_alongside_the_sources_that_fails_fails_the_run_with_its_own_error() -> None:
+    time = SimulatedTime(start=7)
+    engine, _, seen = watched(time)
+
+    async def alongside() -> None:
+        raise InvalidValueError("the inbox broke")
+
+    held = ScriptedSource(live=[trade(1, 1), asyncio.Event().wait])
+    run = run_live(
+        [(held, SUBSCRIBED)], engine, time.clock, sleep=time.advance, alongside=[alongside]
+    )
+    with pytest.raises(InvalidValueError, match="the inbox broke"):
+        asyncio.run(asyncio.wait_for(run, timeout=2))
+    assert held.streams_closed == 1
+    assert not any(s.startswith("RunEnded") for s in seen)

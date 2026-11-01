@@ -53,6 +53,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from heliograph.app.answers import Answers, inbox_for
 from heliograph.app.bridge import HistoryFeed, SourceLoop, run_live
 from heliograph.app.composition import build_components, build_sinks
 from heliograph.app.config import (
@@ -69,6 +70,7 @@ from heliograph.app.dispatch import Dispatcher, Outcome
 from heliograph.app.limits import Sleep
 from heliograph.app.mounts import Mount, build_mounts
 from heliograph.core.alarms import AlarmFired
+from heliograph.core.answers import SignalAnswer
 from heliograph.core.bars import BarsFromBars, TimeBars
 from heliograph.core.broker import Fill, FillModel, SimulatedBroker
 from heliograph.core.bus import MessageBus
@@ -117,6 +119,7 @@ JOURNALLED = (
     SignalRefused,
     Fill,
     Delivered,
+    SignalAnswer,
 )
 """Every message type a run journals."""
 
@@ -251,6 +254,7 @@ async def run_live_session(
     sleep: Sleep = asyncio.sleep,
     *,
     grace: float = 10.0,
+    answers_sleep: Sleep = asyncio.sleep,
 ) -> RunSummary:
     """Run the live session ``loaded`` describes until its sources end or it is cancelled.
 
@@ -266,6 +270,10 @@ async def run_live_session(
     a ``Delivered`` input. When the run ends, deliveries under way get
     ``grace`` seconds to finish; those that do not are recorded as not
     delivered.
+
+    A person's answers to the signals (took it, skipped; ``heliograph answer``)
+    are left in the inbox beside the journal and published as ``SignalAnswer``
+    inputs; ``answers_sleep`` paces the looks in the inbox (decision D50).
 
     Raises:
         ConfigError: as ``run_backtest``, and if the configuration is not live.
@@ -298,6 +306,7 @@ async def run_live_session(
             config, journal, header, components, clock=clock, make=LiveEngine, batch=1
         ) as engine:
             deliveries = Deliveries(engine, dispatcher, clock, grace) if sinks else None
+            answers = Answers(engine, clock, inbox_for(journal), answers_sleep)
             try:
                 await run_live(
                     feeds,
@@ -305,6 +314,7 @@ async def run_live_session(
                     clock,
                     sleep=sleep,
                     before_end=None if deliveries is None else deliveries.finish,
+                    alongside=[answers.watch],
                 )
             except asyncio.CancelledError:
                 stopped = True

@@ -11,8 +11,10 @@ from typing import ClassVar
 
 import pytest
 
+from heliograph.app.answers import inbox_for, submit
 from heliograph.app.config import ConfigError, parse_config
 from heliograph.app.run import JOURNALLED, run_backtest, run_live_session
+from heliograph.core.answers import SignalAnswer
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.pipeline import Signal
@@ -299,14 +301,14 @@ def with_sinks(registry: Registry) -> Registry:
 
 
 def strategy_session(
-    sinks: str, registry: Registry, tmp_path: Path, time: SimulatedTime, **settings: float
+    sinks: str, registry: Registry, tmp_path: Path, time: SimulatedTime, grace: float = 10.0
 ) -> Path:
     Pulse.prices = UP_THEN_DOWN
     Pulse.steps = len(UP_THEN_DOWN)
     journal = tmp_path / "live.sqlite"
     text = STRATEGY + sinks
     run = run_live_session(
-        parse_config(text), registry, journal, time.clock, time.advance, **settings
+        parse_config(text), registry, journal, time.clock, time.advance, grace=grace
     )
     asyncio.run(run)
     return journal
@@ -425,3 +427,51 @@ def test_sinks_belong_to_live_configurations() -> None:
     text = STRATEGY.replace('mode = "live"', 'mode = "backtest"') + SINKS
     with pytest.raises(ConfigError, match="a backtest has none"):
         parse_config(text)
+
+
+# -- a person's answers reach the journal --------------------------------------------------
+
+
+def test_an_answer_left_in_the_inbox_while_the_session_runs_is_journalled(
+    registry: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, len(UP_THEN_DOWN), "wait"
+    journal = tmp_path / "live.sqlite"
+
+    async def look() -> None:
+        await asyncio.sleep(0)
+
+    def seen(kind: type) -> list[Message]:
+        return [e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, kind)]
+
+    async def main() -> None:
+        task = asyncio.create_task(
+            run_live_session(
+                parse_config(STRATEGY),
+                registry,
+                journal,
+                time.clock,
+                time.advance,
+                answers_sleep=lambda _: look(),
+            )
+        )
+        while not journal.exists() or not seen(Signal):
+            await asyncio.sleep(0)
+        (made, *_) = seen(Signal)
+        assert isinstance(made, Signal)
+        submit(inbox_for(journal), time.clock, made.id, "took", price=123.0, quantity=0.5)
+        while not seen(SignalAnswer):
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        (answer, *_) = seen(SignalAnswer)
+        assert answer == SignalAnswer(
+            ts=answer.ts, signal=made.id, verdict="took", price=123.0, quantity=0.5
+        )
+        assert answer.ts >= made.ts
+
+    asyncio.run(asyncio.wait_for(main(), timeout=10))
+    inputs = [e for e in read_entries(journal, JOURNALLED) if isinstance(e.message, SignalAnswer)]
+    assert [e.origin for e in inputs] == ["input"]
+    assert read_header(journal)["status"] == "complete"

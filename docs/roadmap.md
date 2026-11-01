@@ -244,7 +244,12 @@ Wizard.)
 - The second live source: Alpaca, for US stocks (D21).
 - Session calendars (exchange_calendars) for local days and market hours,
   which Alpaca's stocks need (moved from Phase 2).
-- Paper broker on live data; took-it/skipped journal.
+- Paper broker on live data; took-it/skipped journal (spec: [specs/paper-answers.md](specs/paper-answers.md)).
+  - [x] A person's answer (`SignalAnswer`) journalled as an input; the inbox beside the
+    journal and `heliograph answer` (D50).
+  - [ ] The position held follows the answers; unanswered signals expire as skipped.
+  - [ ] A live session saves and restores its paper positions and clock.
+  - [ ] A report comparing the person's result with the signal's paper result.
 - Risk gate and `Halted` state live; signal-rate and staleness alerts.
 
 - From the review of 2026-10-23, to settle before live data:

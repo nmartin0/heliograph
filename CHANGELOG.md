@@ -264,6 +264,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - The Wizard can start empty and add data: a dialog asks for a data source (with
   the settings form its schema draws), the instrument, the span and the bars to
   build; a stream nothing reads can be removed.
+- `heliograph answer`: tell a running live session whether you took or skipped a signal
+  (with the price and quantity if they differ). The answer is journalled as an input.
 
 ### Fixed
 
@@ -413,3 +415,4 @@ All notable changes to Heliograph are recorded here. The format follows
   whether the dispatcher asks again.
 - D48 records sinks in a live session: configured by name, each signal delivered in
   its own task, every outcome journalled.
+- D50 records a person's answer as an input, left in an inbox beside the journal.

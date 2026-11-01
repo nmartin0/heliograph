@@ -4733,3 +4733,87 @@ path = "src/heliograph/app/dispatch.py"
 old = "            if on_outcome is not None:\n                on_outcome(outcome)\n"
 new = "            pass\n"
 tests = ["tests/app/test_dispatch.py::test_each_outcome_is_told_the_moment_its_sink_is_done_even_if_another_never_is"]
+
+[[control]]
+describes = "an answer to a signal never made is set aside, not published"
+path = "src/heliograph/app/answers.py"
+old = "                if answer.signal not in self._seen:\n"
+new = "                if False:\n"
+tests = ["tests/app/test_answers_inbox.py::test_an_answer_to_a_signal_never_made_is_set_aside_with_its_reason"]
+
+[[control]]
+describes = "an answer is stamped when the session learns of it"
+path = "src/heliograph/app/answers.py"
+old = "answer = SignalAnswer(ts=self._clock.now(), **fields)"
+new = "answer = SignalAnswer(ts=0, **fields)"
+tests = ["tests/app/test_answers_inbox.py::test_an_answer_left_in_the_inbox_is_journalled_as_an_input_stamped_on_arrival"]
+
+[[control]]
+describes = "answers are taken oldest first"
+path = "src/heliograph/app/answers.py"
+old = "for path in sorted(self._inbox.glob(\"*.json\")):"
+new = "for path in sorted(self._inbox.glob(\"*.json\"), reverse=True):"
+tests = ["tests/app/test_answers_inbox.py::test_answers_are_taken_oldest_first_and_a_later_one_replaces_an_earlier"]
+
+[[control]]
+describes = "a file that is not an answer does not hold up the answers after it"
+path = "src/heliograph/app/answers.py"
+old = "                self._reject(path, str(exc))\n                continue\n"
+new = "                self._reject(path, str(exc))\n                return taken\n"
+tests = ["tests/app/test_answers_inbox.py::test_a_bad_file_does_not_hold_up_the_good_ones_after_it"]
+
+[[control]]
+describes = "two answers in one instant keep both files"
+path = "src/heliograph/app/answers.py"
+old = "            os.link(pending, target)\n"
+new = "            os.replace(pending, target)\n"
+tests = ["tests/app/test_answers_inbox.py::test_two_answers_in_one_instant_get_two_files"]
+
+[[control]]
+describes = "the session looks in the inbox while it runs"
+path = "src/heliograph/app/run.py"
+old = "                    alongside=[answers.watch],\n"
+new = "                    alongside=[],\n"
+tests = ["tests/app/test_live_session.py::test_an_answer_left_in_the_inbox_while_the_session_runs_is_journalled"]
+
+[[control]]
+describes = "work alongside the sources ends with them"
+path = "src/heliograph/app/bridge.py"
+old = "        for task in extras:\n            task.cancel()\n"
+new = "        for task in extras:\n            pass\n"
+tests = ["tests/app/test_bridge.py::test_work_alongside_the_sources_is_stopped_when_they_have_all_ended"]
+
+[[control]]
+describes = "a skipped answer carries no price or quantity"
+path = "src/heliograph/core/answers.py"
+old = "        if self.verdict == \"skipped\" and ("
+new = "        if False and ("
+tests = ["tests/core/test_answers.py::test_skipped_has_no_price_or_quantity"]
+
+[[control]]
+describes = "a price is positive"
+path = "src/heliograph/core/answers.py"
+old = "math.isfinite(self.price) and self.price > 0"
+new = "math.isfinite(self.price) and self.price >= 0"
+tests = ["tests/core/test_answers.py::test_a_price_is_a_positive_number"]
+
+[[control]]
+describes = "a quantity is not zero"
+path = "src/heliograph/core/answers.py"
+old = "(math.isfinite(self.quantity) and self.quantity != 0)"
+new = "math.isfinite(self.quantity)"
+tests = ["tests/core/test_answers.py::test_a_quantity_is_a_number_other_than_zero"]
+
+[[control]]
+describes = "an answer must be one of the two verdicts"
+path = "src/heliograph/core/answers.py"
+old = "        if self.verdict not in VERDICTS:"
+new = "        if False:"
+tests = ["tests/core/test_answers.py::test_an_answer_names_its_signal_and_is_one_of_the_two"]
+
+[[control]]
+describes = "an invalid answer is refused before it is left"
+path = "src/heliograph/app/answers.py"
+old = "    SignalAnswer(ts=now, signal=signal, verdict=verdict, price=price, quantity=quantity)\n"
+new = "    pass\n"
+tests = ["tests/app/test_answers_inbox.py::test_submitting_checks_the_answer_and_needs_an_inbox"]

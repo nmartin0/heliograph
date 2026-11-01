@@ -1153,3 +1153,25 @@ most.
 **Rejected:** a spec for every change (overhead where the diff is one sentence); a reviewer
 for everything (it always finds something, and chasing it over-engineers); generating
 context files automatically (the study found them costlier and slightly worse).
+
+## D50 · A person's answer is an input, left in an inbox beside the journal (2026-10-31)
+
+**Decision:** what a person did about a signal is a `SignalAnswer` (signal id, `took` or
+`skipped`, and for `took` an optional price and quantity traded), journalled as an input and
+stamped when the session learns of it, like a price. A live session is a process of its own,
+so `heliograph answer <journal> <signal> took|skipped [--price P] [--quantity Q]` leaves a
+small JSON file in `<journal>.answers/`, written under a temporary name and linked into place
+so the session never reads half of one. The session looks in the folder every second
+(`Answers`, run alongside the sources in the bridge's task group so a failure fails the run),
+publishes each answer oldest first, and moves one it cannot use (not an answer, or for a signal
+it has not seen) to `rejected/` with a `.why` beside it. A later answer to the same signal
+replaces an earlier one.
+
+**Why:** an answer comes from outside the run, so replaying a live day with its answers needs
+it in the journal as an input. Files in a folder need no server, no port and no new
+dependency, survive either side restarting, and can be written by anything (the command, a
+script, later the window).
+
+**Rejected:** a socket or the engine's HTTP API (the session does not serve one yet, and a
+dead session would drop answers); answering through the sinks (they only send); reading the
+person's answer from the journal file itself (SQLite has one writer).
