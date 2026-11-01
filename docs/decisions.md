@@ -1248,3 +1248,25 @@ run, less the waiting); the old inbox's unread answers go nowhere (answer to the
 
 **Rejected:** saving state beside the journal (a second record that could disagree with it);
 appending to the old journal file (a run writes a new journal; the old one stays as it ended).
+
+## D54 · A live session's report puts the person's result beside the paper result (2026-11-01)
+
+**Decision:** `heliograph report` reads a live session's journal as well as a backtest's. Its
+figures are the paper result, as before (the fills the simulated broker made, with costs,
+marked at the closes), and, for a strategy with a fill model, what the person did: how many
+signals they took, skipped, let expire, or have not answered, the position they hold, and their
+profit and loss beside the difference from the paper result. The person's result is worked out
+from the journal alone, in the order the signals were made, as `Followed` (D51) does: a signal
+counts for them unless skipped or expired (one still waiting counts, as the strategy took it);
+it moves them to its target, or by the quantity they said they traded. A trade is at the price
+they gave, else the paper fill's, else the close the signal was made on. Marked at the last
+close; none of their own costs are known, so none are taken.
+
+**Why:** the point of answering is to learn how following the signals really went against
+how the paper trading says it should have; the journal already holds every input needed.
+
+**Not done:** a person's costs and slippage (they can give the price they got, which includes
+both); equity over time and drawdown for the person (only the end result); a report of a
+session still running (it reads the journal as it stands).
+
+**Rejected:** a second record of the person's trades (the answers are it, D50).

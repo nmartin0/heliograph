@@ -28,6 +28,9 @@ one message. Anything else is a bug and shows its traceback.
 as it goes, until its sources end or it is stopped (SIGTERM, or Ctrl-C): the
 engine marks the end, the journal is closed complete, and the exit status is 0.
 
+``report`` prints a backtest's or live session's report; a live session's also says what
+you did about its signals and how that compares with the paper result (decision D54).
+
 ``replay`` runs a backtest's or a live session's journal again and says whether the
 entries come out the same (decision D52).
 
@@ -118,7 +121,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     answer.set_defaults(command=_answer)
 
-    report_ = commands.add_parser("report", help="print the report of a backtest's journal")
+    report_ = commands.add_parser(
+        "report", help="print the report of a backtest's or live session's journal"
+    )
     report_.add_argument("journal", type=Path)
     report_.set_defaults(command=_report)
 

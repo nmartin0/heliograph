@@ -4992,3 +4992,45 @@ path = "src/heliograph/core/clock.py"
 old = "        if not self._held:\n            raise ClockError(\"the clock was released and now follows the live one\")"
 new = "        if False:\n            raise ClockError(\"the clock was released and now follows the live one\")"
 tests = ["tests/core/test_clock.py::test_a_resumed_clock_cannot_be_held_again_once_released"]
+
+[[control]]
+describes = "the person's own price is used when they gave one"
+path = "src/heliograph/app/report.py"
+old = "price = told.paid or told.paper or told.price"
+new = "price = told.paper or told.price"
+tests = ["tests/app/test_report.py::test_the_price_and_quantity_a_person_gave_are_the_ones_used"]
+
+[[control]]
+describes = "the quantity a person traded moves their position by that much"
+path = "src/heliograph/app/report.py"
+old = "after = told.target if told.quantity is None else position + told.quantity"
+new = "after = told.target"
+tests = ["tests/app/test_report.py::test_the_price_and_quantity_a_person_gave_are_the_ones_used"]
+
+[[control]]
+describes = "a skipped or expired signal leaves the person's position alone"
+path = "src/heliograph/app/report.py"
+old = "if told.verdict in (\"skipped\", \"expired\"):\n            continue"
+new = "if told.verdict == \"never\":\n            continue"
+tests = ["tests/app/test_report.py::test_skipped_and_expired_signals_leave_the_person_where_they_were"]
+
+[[control]]
+describes = "a later answer replaces an expiry"
+path = "src/heliograph/app/report.py"
+old = "                if one_told is not None:\n                    one_told.verdict, one_told.quantity, one_told.paid = ("
+new = "                if one_told is not None and one_told.verdict is None:\n                    one_told.verdict, one_told.quantity, one_told.paid = ("
+tests = ["tests/app/test_report.py::test_an_answer_after_an_expiry_replaces_it_and_the_person_may_change_their_mind"]
+
+[[control]]
+describes = "a signal's paper fill price is what an unpriced answer is taken at"
+path = "src/heliograph/app/report.py"
+old = "                paper.paper = message.price"
+new = "                paper.paper = None"
+tests = ["tests/app/test_report.py::test_a_person_who_answers_nothing_is_taken_to_have_done_what_every_signal_asked", "tests/app/test_report.py::test_skipped_and_expired_signals_leave_the_person_where_they_were"]
+
+[[control]]
+describes = "a backtest reports no answers"
+path = "src/heliograph/app/report.py"
+old = "yours=_yours(book) if live and book.filled else None"
+new = "yours=_yours(book) if book.filled else None"
+tests = ["tests/app/test_report.py::test_a_backtest_has_no_answers_to_report"]

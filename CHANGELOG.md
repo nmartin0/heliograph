@@ -272,6 +272,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - `heliograph replay` also replays a live session's journal, answers and all.
 - `heliograph live --resume <journal>`: carry on from an earlier live session. Its inputs are
   fed back to the same components, so positions, answers and indicators are as they were.
+- `heliograph report` of a live session's journal also says what you took, skipped and let
+  expire, the position you hold, and your result beside the signal's paper result.
 
 ### Fixed
 
@@ -425,3 +427,4 @@ All notable changes to Heliograph are recorded here. The format follows
 - D51 records the position held following the person's answers and signals that expire.
 - D52 records that a live session's journal replays to the same entries.
 - D53 records resuming a live session by replaying its earlier journal into its components.
+- D54 records the live report: what the person did beside the paper result.

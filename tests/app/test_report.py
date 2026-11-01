@@ -6,17 +6,22 @@
 import json
 import sqlite3
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
 from heliograph.app.config import ConfigError
 from heliograph.app.report import figures, report
 from heliograph.app.run import JOURNALLED
+from heliograph.core.answers import SignalAnswer, SignalExpired, Verdict
 from heliograph.core.broker import Fill
 from heliograph.core.errors import InvalidValueError
+from heliograph.core.journal import JournalEntry, Origin
 from heliograph.core.pipeline import Signal
+from heliograph.core.time import Timestamp
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
+    RESERVED_HEADER,
     SqliteJournal,
     SqliteJournalParams,
     read_entries,
@@ -166,11 +171,151 @@ def test_a_short_reversed_to_a_long_is_accounted_by_hand(
     assert (one.closes, one.exposed) == (4, 2)
 
 
-def test_a_journal_that_is_not_a_backtests_has_no_report(tmp_path: Path) -> None:
+def test_a_journal_that_is_not_a_backtests_or_a_sessions_has_no_report(tmp_path: Path) -> None:
     path = tmp_path / "other.sqlite"
-    SqliteJournal(SqliteJournalParams(path=str(path)), {"kind": "live"}).close()
-    with pytest.raises(InvalidValueError, match="is not the journal of a backtest run"):
+    SqliteJournal(SqliteJournalParams(path=str(path)), {"kind": "x"}).close()
+    with pytest.raises(InvalidValueError, match="is not the journal of a backtest run or live"):
         report(path)
+
+
+def as_live(source: Path, target: Path, *later: SignalAnswer | SignalExpired) -> list[str]:
+    """``source``'s entries as a live session's journal, then ``later`` ones; its signal ids."""
+    header = {k: v for k, v in read_header(source).items() if k not in RESERVED_HEADER}
+    header["kind"] = "live"
+    entries = list(read_entries(source, JOURNALLED))
+    with SqliteJournal(SqliteJournalParams(path=str(target)), header) as journal:
+        for entry in entries:
+            journal.append(entry)
+        for seq, message in enumerate(later, start=len(entries) + 1):
+            origin: Origin = "derived" if isinstance(message, SignalExpired) else "input"
+            journal.append(JournalEntry(seq, origin, message))
+    return [e.message.id for e in entries if isinstance(e.message, Signal)]
+
+
+type Answer = tuple[Verdict, float | None, float | None] | Literal["expired"]
+
+
+def told(tmp_path: Path, registry: Registry, answers: dict[int, Answer]) -> Path:
+    """A live journal of the run above in which signal ``n`` is answered as ``answers[n]``.
+
+    An answer is (verdict, price, quantity), or "expired".
+    """
+    source = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, source)
+    ids = [e.message.id for e in read_entries(source, JOURNALLED) if isinstance(e.message, Signal)]
+    later: list[SignalAnswer | SignalExpired] = []
+    for n, answer in sorted(answers.items()):
+        ts = Timestamp(START + (8 + n) * HOUR)
+        if answer == "expired":
+            later.append(SignalExpired(ts=ts, signal=ids[n]))
+        else:
+            verdict, price, quantity = answer
+            later.append(
+                SignalAnswer(ts=ts, signal=ids[n], verdict=verdict, price=price, quantity=quantity)
+            )
+    target = tmp_path / "live.sqlite"
+    as_live(source, target, *later)
+    return target
+
+
+TOOK: Answer = ("took", None, None)
+SKIPPED: Answer = ("skipped", None, None)
+
+
+def test_a_person_who_answers_nothing_is_taken_to_have_done_what_every_signal_asked(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """Held 2, 1, 4, 3, 0 at the paper fills' prices, the last at its close of 100.
+
+    Cash: -204.02, then +102.96, -312.09, +99 and +300 (the paper fills' prices: no costs).
+    """
+    journal = told(tmp_path, registry, {})
+    _, (one,) = figures(journal)
+    assert one.yours is not None
+    assert (one.yours.took, one.yours.skipped, one.yours.expired, one.yours.waiting) == (0, 0, 0, 5)
+    assert one.yours.position == 0
+    assert one.yours.result == pytest.approx(-14.15)
+
+
+def test_skipped_and_expired_signals_leave_the_person_where_they_were(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """Took 0 (2 at 102.01) and 3 (up to 3 at 99), skipped 1 and 2, the last expired.
+
+    The person holds 3 at the end: cash -204.02 - 99 = -303.02, plus 3 x 100.
+    """
+    journal = told(
+        tmp_path,
+        registry,
+        {0: TOOK, 1: SKIPPED, 2: SKIPPED, 3: TOOK, 4: "expired"},
+    )
+    _, (one,) = figures(journal)
+    assert one.yours is not None
+    assert (one.yours.took, one.yours.skipped, one.yours.expired, one.yours.waiting) == (2, 2, 1, 0)
+    assert one.yours.position == 3
+    assert one.yours.result == pytest.approx(-3.02)
+
+
+def test_the_price_and_quantity_a_person_gave_are_the_ones_used(
+    tmp_path: Path, registry: Registry
+) -> None:
+    """Bought 1.5 at 103 (cash -154.5), skipped three, then took the last: sold 1.5 at 100."""
+    journal = told(
+        tmp_path,
+        registry,
+        {
+            0: ("took", 103.0, 1.5),
+            1: SKIPPED,
+            2: SKIPPED,
+            3: SKIPPED,
+            4: TOOK,
+        },
+    )
+    _, (one,) = figures(journal)
+    assert one.yours is not None
+    assert one.yours.position == 0
+    assert one.yours.result == pytest.approx(-4.5)
+
+
+def test_an_answer_after_an_expiry_replaces_it_and_the_person_may_change_their_mind(
+    tmp_path: Path, registry: Registry
+) -> None:
+    source = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, source)
+    ids = [e.message.id for e in read_entries(source, JOURNALLED) if isinstance(e.message, Signal)]
+    target = tmp_path / "live.sqlite"
+    as_live(
+        source,
+        target,
+        SignalExpired(ts=Timestamp(START + 8 * HOUR), signal=ids[0]),
+        SignalAnswer(ts=Timestamp(START + 9 * HOUR), signal=ids[0], verdict="took"),
+        SignalAnswer(ts=Timestamp(START + 10 * HOUR), signal=ids[1], verdict="took"),
+        SignalAnswer(ts=Timestamp(START + 11 * HOUR), signal=ids[1], verdict="skipped"),
+    )
+    _, (one,) = figures(target)
+    assert one.yours is not None
+    assert (one.yours.took, one.yours.skipped, one.yours.expired, one.yours.waiting) == (1, 1, 0, 3)
+
+
+def test_a_sessions_report_says_what_the_person_did_beside_the_paper_result(
+    tmp_path: Path, registry: Registry
+) -> None:
+    journal = told(tmp_path, registry, {0: TOOK, 1: SKIPPED, 4: "expired"})
+    lines = report(journal).splitlines()
+    assert lines[0].startswith("Live session from ")
+    text = "\n".join(lines)
+    assert "your answers" in text
+    assert "took 1, skipped 1, expired 1, waiting 2" in text
+    assert "your position" in text
+    assert "against the paper result" in text
+
+
+def test_a_backtest_has_no_answers_to_report(tmp_path: Path, registry: Registry) -> None:
+    journal = tmp_path / "run.sqlite"
+    run(config(csv(tmp_path), REST), registry, journal)
+    _, (one,) = figures(journal)
+    assert one.yours is None
+    assert "your answers" not in report(journal)
 
 
 @pytest.mark.parametrize(
