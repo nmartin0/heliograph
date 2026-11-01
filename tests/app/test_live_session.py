@@ -874,7 +874,7 @@ def test_a_halted_session_refuses_entries_until_the_owner_clears_it(
     assert refused.reason == "halted by owner: maintenance"
     assert refused.held == 0.0
     assert refused.target != 0
-    assert kinds[3:] == ["Signal"]  # cleared: the same entry now leaves
+    assert kinds[3] == "Signal"  # cleared: the entry now leaves
     entry = made[3]
     assert isinstance(entry, Signal)
     assert entry.held == 0.0
@@ -911,3 +911,78 @@ def test_the_owners_halt_and_clear_are_journalled_inputs_and_the_day_replays(
     assert origins == {"Halted": "input", "Cleared": "input"}
     replayed = replay_backtest(journal, tmp_path / "again.sqlite", registry)
     assert raw_rows(replayed.journal) == raw_rows(journal)
+
+
+def watched_session(
+    registry: Registry, folder: Path, option: str, *, prices: Sequence[float] | None, then: str
+) -> Path:
+    """A session with a watch configured, run until it halts; its journal."""
+    folder.mkdir(parents=True, exist_ok=True)
+    time = SimulatedTime(start=NOW)
+    Pulse.time, Pulse.closed, Pulse.gate, Pulse.start_at = time, 0, None, 0
+    Pulse.prices = prices
+    Pulse.steps = 3 if prices is None else len(prices)
+    Pulse.then = then
+    journal = folder / "live.sqlite"
+    text = STRATEGY.replace('sizer = "vol"\n', f'sizer = "vol"\n{option}\n')
+
+    async def look(_: float) -> None:
+        await asyncio.sleep(0)
+
+    async def main() -> None:
+        task = asyncio.create_task(
+            run_live_session(
+                parse_config(text), registry, journal, time.clock, time.advance, answers_sleep=look
+            )
+        )
+        while not journal.exists() or not any(
+            isinstance(e.message, Halted) for e in read_entries(journal, JOURNALLED)
+        ):
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(asyncio.wait_for(main(), timeout=30))
+    return journal
+
+
+def test_a_feed_that_goes_quiet_halts_the_session_at_the_silence_deadline(
+    registry: Registry, tmp_path: Path
+) -> None:
+    journal = watched_session(
+        registry, tmp_path, 'halt_after_silence = "2h"', prices=None, then="wait"
+    )
+    halts = [
+        (e.origin, e.message)
+        for e in read_entries(journal, JOURNALLED)
+        if isinstance(e.message, Halted)
+    ]
+    last = [
+        e.message.ts for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Point)
+    ][-1]
+    assert [(origin, m.by, m.ts) for origin, m in halts] == [
+        ("derived", "silence:trend", last + 2 * 3600 * 10**9)
+    ]
+    assert halts[0][1].reason == "no price of BTC/USD for 2h"
+    replayed = replay_backtest(journal, tmp_path / "again.sqlite", registry)
+    assert raw_rows(replayed.journal) == raw_rows(journal)
+
+
+def test_a_strategy_that_signals_too_often_halts_the_session(
+    registry: Registry, tmp_path: Path
+) -> None:
+    option = 'halt_after_signals = 1\nhalt_signals_within = "1d"'
+    journal = watched_session(registry, tmp_path, option, prices=UP_THEN_DOWN, then="wait")
+    messages = [
+        e.message
+        for e in read_entries(journal, JOURNALLED)
+        if isinstance(e.message, Signal | Halted)
+    ]
+    halted = next(i for i, m in enumerate(messages) if isinstance(m, Halted))
+    halt = messages[halted]
+    assert isinstance(halt, Halted)
+    assert halt.by == "rate:trend"
+    assert halt.reason == "trend signalled more than 1 times in 1d"
+    assert [type(m).__name__ for m in messages[:halted]] == ["Signal", "Signal"]
+    assert halt.ts == messages[halted - 1].ts

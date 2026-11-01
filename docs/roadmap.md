@@ -258,7 +258,8 @@ Wizard.)
   [specs/halt.md](specs/halt.md)).
   - [x] `Halted` / `Cleared`, the `Halt` gate every live strategy has first, and
     `heliograph halt` / `clear` through the inbox (D55).
-  - [ ] A staleness watch and a signal-rate watch that halt.
+  - [x] A staleness watch and a signal-rate watch that halt (`halt_after_silence`,
+    `halt_after_signals`; D56).
   - [ ] A feed that gives up halts the session and alerts instead of ending it.
   - [ ] Alerts: a halt or clear delivered to the sinks.
   - [ ] The report says when the session was halted and why.

@@ -439,7 +439,15 @@ class StrategyConfig(BaseModel):
     """How long a person has to answer a signal (live only; a span such as ``30m``);
     by default one bar of the price stream. An unanswered signal then counts as skipped."""
 
-    @field_validator("answer_within")
+    halt_after_silence: str | None = None
+    """Halt the session when no price of the strategy's instrument has come for this long
+    (live only; a span such as ``5m``). Off by default (decision D56)."""
+    halt_after_signals: int | None = Field(default=None, ge=1)
+    """Halt the session when the strategy signals more often than this within
+    ``halt_signals_within`` (live only). Off by default."""
+    halt_signals_within: str = "1h"
+
+    @field_validator("answer_within", "halt_after_silence", "halt_signals_within")
     @classmethod
     def _answer_within_is_a_span(cls, value: str | None) -> str | None:
         if value is not None:

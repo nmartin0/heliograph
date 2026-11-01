@@ -5118,3 +5118,52 @@ path = "src/heliograph/app/answers.py"
 old = "len(data) == 1 and set(data) <= set(ORDERS)"
 new = "set(data) <= set(ORDERS)"
 tests = ["tests/app/test_answers_inbox.py::test_a_file_that_mixes_orders_or_names_another_is_rejected"]
+
+[[control]]
+describes = "a price of another instrument does not feed the silence watch"
+path = "src/heliograph/core/halt.py"
+old = "        if point.instrument == self._instrument:"
+new = "        if True:"
+tests = ["tests/core/test_halt.py::test_a_price_of_another_instrument_is_not_this_ones_news"]
+
+[[control]]
+describes = "a silence halt names the watch that made it"
+path = "src/heliograph/core/halt.py"
+old = "                    by=self._by,"
+new = "                    by=\"owner\","
+tests = ["tests/core/test_halt.py::test_no_price_for_the_span_halts_at_the_deadline_naming_the_watch", "tests/app/test_live_session.py::test_a_feed_that_goes_quiet_halts_the_session_at_the_silence_deadline"]
+
+[[control]]
+describes = "the signal-rate window forgets old signals"
+path = "src/heliograph/core/halt.py"
+old = "        while self._times[0] <= signal.ts - self._span:"
+new = "        while False:"
+tests = ["tests/core/test_halt.py::test_signals_spread_out_or_of_another_strategy_do_not_halt"]
+
+[[control]]
+describes = "the rate watch counts only its own strategy"
+path = "src/heliograph/core/halt.py"
+old = "        if signal.strategy != self._strategy:\n            return\n        self._times"
+new = "        self._times"
+tests = ["tests/core/test_halt.py::test_signals_spread_out_or_of_another_strategy_do_not_halt"]
+
+[[control]]
+describes = "a burst of signals halts once"
+path = "src/heliograph/core/halt.py"
+old = "            self._times.clear()  # one halt for a burst; the next burst counts afresh\n"
+new = ""
+tests = ["tests/core/test_halt.py::test_a_burst_halts_once_and_the_next_burst_counts_afresh"]
+
+[[control]]
+describes = "the rate watch halts past the count, not at it"
+path = "src/heliograph/core/halt.py"
+old = "        if len(self._times) > self._count:"
+new = "        if len(self._times) >= self._count:"
+tests = ["tests/core/test_halt.py::test_more_signals_than_the_count_within_the_window_halts"]
+
+[[control]]
+describes = "a silence deadline is set from the price's own time"
+path = "src/heliograph/core/halt.py"
+old = "max(point.ts + self._span, self._now())"
+new = "self._now() + self._span"
+tests = ["tests/core/test_halt.py::test_the_deadline_counts_from_when_the_price_was_known_not_when_it_was_read"]

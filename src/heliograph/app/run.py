@@ -78,7 +78,7 @@ from heliograph.core.clock import Clock, ResumedClock, SimulatedClock
 from heliograph.core.engine import BacktestEngine, LiveEngine, Sequencer
 from heliograph.core.errors import HeliographError, InvalidValueError
 from heliograph.core.graph import BarField, Graph, Indicator, IndicatorValues
-from heliograph.core.halt import Cleared, Halt, Halted
+from heliograph.core.halt import Cleared, Halt, Halted, RateWatch, SilenceWatch
 from heliograph.core.journal import runs
 from heliograph.core.messages import Bar, Message, Point, RunEnded, Settled
 from heliograph.core.pipeline import (
@@ -812,6 +812,22 @@ def _assembled[E: Sequencer](
                             else parse_span(strategy.answer_within)
                         ),
                     )
+                    if strategy.halt_after_silence is not None:
+                        SilenceWatch(
+                            strategy.name,
+                            config.mounts[found[0]].instrument.instrument(),
+                            parse_span(strategy.halt_after_silence),
+                            bus,
+                            engine.scheduler,
+                            clock.now,
+                        )
+                    if strategy.halt_after_signals is not None:
+                        RateWatch(
+                            strategy.name,
+                            strategy.halt_after_signals,
+                            parse_span(strategy.halt_signals_within),
+                            bus,
+                        )
                 if strategy.fills is not None:
                     broker = SimulatedBroker(
                         strategy.name,

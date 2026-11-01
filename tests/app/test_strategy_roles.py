@@ -14,7 +14,14 @@ def test_every_role_is_a_field_of_a_strategy_and_every_component_field_is_a_role
     fields = StrategyConfig.model_fields
     roles = [role for role, _, _ in STRATEGY_ROLES]
     assert set(roles) <= set(fields)
-    assert set(fields) - set(roles) == {"name", "price", "answer_within"}  # not components
+    assert set(fields) - set(roles) == {
+        "name",
+        "price",
+        "answer_within",
+        "halt_after_silence",
+        "halt_after_signals",
+        "halt_signals_within",
+    }  # not components
 
 
 def test_a_role_takes_many_exactly_when_its_field_is_a_tuple() -> None:
@@ -42,3 +49,35 @@ def test_the_time_to_answer_is_a_span_or_absent() -> None:
     assert StrategyConfig(**base, answer_within="90m").answer_within == "90m"
     with pytest.raises(ValueError, match="not a span"):
         StrategyConfig(**base, answer_within="soon")
+
+
+def test_the_halt_watches_are_off_unless_asked_for_and_take_spans_and_a_count() -> None:
+    base: dict[str, Any] = {
+        "name": "t",
+        "price": "btc@1h.close",
+        "forecasters": ["f"],
+        "sizer": "s",
+    }
+    off = StrategyConfig(**base)
+    assert (off.halt_after_silence, off.halt_after_signals, off.halt_signals_within) == (
+        None,
+        None,
+        "1h",
+    )
+    on = StrategyConfig(
+        **base, halt_after_silence="5m", halt_after_signals=3, halt_signals_within="30m"
+    )
+    assert (on.halt_after_silence, on.halt_after_signals, on.halt_signals_within) == (
+        "5m",
+        3,
+        "30m",
+    )
+    bad_spans: list[dict[str, Any]] = [
+        {"halt_after_silence": "soon"},
+        {"halt_signals_within": "later"},
+    ]
+    for bad in bad_spans:
+        with pytest.raises(ValueError, match="not a span"):
+            StrategyConfig(**base, **bad)
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        StrategyConfig(**base, halt_after_signals=0)

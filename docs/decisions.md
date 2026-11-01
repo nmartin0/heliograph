@@ -1296,3 +1296,24 @@ journal too, which is why the owner clears with the command rather than editing 
 
 **Rejected:** refusing every signal while halted (design.md's first wording): it would hide a
 stop from the owner exactly when something is wrong.
+
+## D56 · Two watches halt a live session by themselves: silence and signal rate (2026-11-01)
+
+**Decision:** a strategy may set `halt_after_silence` (a span) and `halt_after_signals` with
+`halt_signals_within` (default 1h); both are off unless set, and live only. `SilenceWatch` keeps
+one alarm (key `silence:<strategy>`) a span after the latest price of the strategy's instrument
+and, if it fires, publishes `Halted` (derived, `by` "silence:<strategy>") as of the deadline,
+however late the session notices. `RateWatch` counts the strategy's signals in a sliding window
+and publishes `Halted` (`by` "rate:<strategy>") at the signal that makes one too many; a burst
+halts once. They only start the halt; the `Halt` gate (D55) refuses, and the owner clears.
+
+**Why:** the owner asked for both; the alarms and the bus already replay derived messages, so a
+day with a watch's halt replays byte for byte with no extra record.
+
+**Not done:** the silence watch starts at the first price (a feed that never sends one is the
+feed's own failure, next); after a clear, silence that goes on halts again only after the next
+price; a resumed session is silent for as long as it was down, so resuming after longer than the
+span halts at once (the owner decides whether to clear); halting a single strategy.
+
+**Rejected:** a default span (a thin market's quiet hour is not a fault; the owner sets what is
+normal for each instrument).
