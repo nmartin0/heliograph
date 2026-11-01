@@ -44,6 +44,7 @@ refused rather than run without them.
 """
 
 import asyncio
+import hashlib
 import json
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -91,7 +92,7 @@ from heliograph.core.pipeline import (
     Strategy,
     StrategySpec,
 )
-from heliograph.core.sinks import Delivered, SignalSink
+from heliograph.core.sinks import Alert, Delivered, SignalSink
 from heliograph.core.sources import DataSource, Subscription
 from heliograph.core.streams import StreamSpec
 from heliograph.core.time import Timestamp, parse_span
@@ -331,7 +332,9 @@ async def run_live_session(
                 assert isinstance(session_clock, ResumedClock)
                 _restore(engine, session_clock, earlier)
             # After the restore: what the old session made has been given to the sinks already.
-            deliveries = Deliveries(engine, dispatcher, session_clock, grace) if sinks else None
+            deliveries = (
+                Deliveries(engine, dispatcher, session_clock, grace, journal) if sinks else None
+            )
             try:
                 await run_live(
                     feeds,
@@ -419,6 +422,11 @@ def _sinks_described(config: RunConfig, sinks: Mapping[str, Plugin[Any]]) -> str
     return json.dumps(described, sort_keys=True, separators=(",", ":"))
 
 
+def _alert_id(kind: str, ts: Timestamp, by: str) -> str:
+    """A stable identity for an alert: the same event always has the same one."""
+    return hashlib.sha256(f"{kind}:{ts}:{by}".encode()).hexdigest()[:16]
+
+
 def _feed_gave_up(engine: LiveEngine, clock: Clock, source: DataSource, failure: Exception) -> None:
     """Halt the session: a feed has given up, so nothing is known about what the market does."""
     name = getattr(getattr(source, "manifest", None), "name", type(source).__name__)
@@ -437,23 +445,65 @@ class Deliveries:
     """
 
     def __init__(
-        self, engine: LiveEngine, dispatcher: Dispatcher, clock: Clock, grace: float
+        self,
+        engine: LiveEngine,
+        dispatcher: Dispatcher,
+        clock: Clock,
+        grace: float,
+        journal: Path,
     ) -> None:
         self._engine = engine
         self._dispatcher = dispatcher
         self._clock = clock
         self._grace = grace
+        self._journal = journal
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._names: dict[str, list[str]] = {}  # the sinks each task is giving to
         self._signals: dict[str, Signal] = {}
         self._recorded: set[tuple[str, str]] = set()
         engine.bus.subscribe(Signal, self._start)
+        engine.bus.subscribe(Halted, self._halted)
+        engine.bus.subscribe(Cleared, self._cleared)
 
     def _start(self, signal: Signal) -> None:
         self._signals[signal.id] = signal
+        self._names[signal.id] = self._dispatcher.names
         self._tasks[signal.id] = asyncio.create_task(self._give(signal))
+
+    def _halted(self, halted: Halted) -> None:
+        self._alert(
+            Alert(
+                ts=halted.ts,
+                id=_alert_id("halted", halted.ts, halted.by),
+                title=f"Heliograph halted by {halted.by}",
+                text=(
+                    f"{halted.reason}\nSignals that add risk are refused until you clear it: "
+                    f"heliograph clear {self._journal}"
+                ),
+            )
+        )
+
+    def _cleared(self, cleared: Cleared) -> None:
+        self._alert(
+            Alert(
+                ts=cleared.ts,
+                id=_alert_id("cleared", cleared.ts, cleared.by),
+                title="Heliograph halt cleared",
+                text="Signals that add risk are being sent again.",
+            )
+        )
+
+    def _alert(self, alert: Alert) -> None:
+        names = self._dispatcher.alert_names
+        if names:
+            self._names[alert.id] = names
+            self._tasks[alert.id] = asyncio.create_task(self._give_alert(alert))
 
     async def _give(self, signal: Signal) -> None:
         await self._dispatcher.dispatch(signal, self._record_outcome)
+
+    async def _give_alert(self, alert: Alert) -> None:
+        await self._dispatcher.alert(alert, self._record_outcome)
 
     def _record_outcome(self, outcome: Outcome) -> None:
         self._record(outcome.signal, outcome.sink, outcome.ok, outcome.attempts, outcome.detail)
@@ -477,12 +527,12 @@ class Deliveries:
                 raise error
         for task in pending:
             task.cancel()
-        for signal_id, task in self._tasks.items():
+        for identity, task in self._tasks.items():
             if task in pending:
-                for name in self._dispatcher.names:
-                    if (signal_id, name) not in self._recorded:
+                for name in self._names[identity]:
+                    if (identity, name) not in self._recorded:
                         self._record(
-                            signal_id, name, False, 0, "not delivered: the session ended first"
+                            identity, name, False, 0, "not delivered: the session ended first"
                         )
 
 

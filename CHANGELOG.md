@@ -272,6 +272,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - `heliograph replay` also replays a live session's journal, answers and all.
 - `heliograph live --resume <journal>`: carry on from an earlier live session. Its inputs are
   fed back to the same components, so positions, answers and indicators are as they were.
+- A halt, and its clearing, are told to the sinks: ntfy (urgent) and the webhook take alerts.
+  A sink opts in with an `alert` method; ones without it are not told.
 - A feed that gives up after its retries now leaves a halt in the journal (naming the feed
   and the error) before the session ends failed; resuming it starts halted.
 - Strategy options `halt_after_silence` (no price for this long) and `halt_after_signals`

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from heliograph.app.dispatch import Dispatcher
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.pipeline import Signal
-from heliograph.core.sinks import Delivery, SinkUnavailableError
+from heliograph.core.sinks import Alert, AlertSink, Delivery, SinkUnavailableError
 from heliograph.core.time import Timestamp, from_iso
 from heliograph.plugins.notify_sinks import (
     Ntfy,
@@ -316,3 +316,61 @@ def test_closing_a_sink_closes_its_connection(monkeypatch: pytest.MonkeyPatch) -
     sink = Webhook(WebhookParams(url="https://h.example/x"))
     run(emit_and_close(sink, a_signal()))
     assert transport.closed
+
+
+# -- alerts -----------------------------------------------------------------------------
+
+
+def an_alert() -> Alert:
+    return Alert(
+        ts=from_iso("2026-10-28T09:30:00Z"),
+        id="a1b2",
+        title="Heliograph halted by owner",
+        text="exchange maintenance\nclear it: heliograph clear x.sqlite",
+    )
+
+
+def test_both_sinks_can_take_an_alert() -> None:
+    assert isinstance(Ntfy(NtfyParams(topic="mine")), AlertSink)
+    assert isinstance(Webhook(WebhookParams(url="https://example.invalid/hook")), AlertSink)
+
+
+def test_ntfy_posts_an_alert_urgently_with_its_title_and_text(server: Server) -> None:
+    sink = Ntfy(NtfyParams(topic="mine", priority=2))
+
+    async def go() -> Delivery:
+        try:
+            return await sink.alert(an_alert())
+        finally:
+            await sink.close()
+
+    assert run(go()) == Delivery(True, "200")
+    (request,) = server.requests
+    assert str(request.url) == "https://ntfy.sh/mine"
+    assert request.headers["Title"] == "Heliograph halted by owner"
+    assert request.headers["Priority"] == "5"  # an alert is urgent whatever signals are
+    assert request.headers["Tags"] == "warning"
+    assert request.content.decode() == an_alert().text
+
+
+def test_the_webhook_posts_an_alert_as_json_with_the_alerts_id_as_its_key(server: Server) -> None:
+    sink = Webhook(WebhookParams(url="https://example.invalid/hook"))
+
+    async def go() -> Delivery:
+        try:
+            return await sink.alert(an_alert())
+        finally:
+            await sink.close()
+
+    assert run(go()) == Delivery(True, "200")
+    (request,) = server.requests
+    assert request.headers["Idempotency-Key"] == "a1b2"
+    assert json.loads(request.content) == {
+        "alert": {
+            "id": "a1b2",
+            "ts": from_iso("2026-10-28T09:30:00Z"),
+            "time": "2026-10-28T09:30:00Z",
+            "title": "Heliograph halted by owner",
+            "text": an_alert().text,
+        }
+    }

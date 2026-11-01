@@ -25,7 +25,7 @@ from pydantic import field_validator
 
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.pipeline import Signal
-from heliograph.core.sinks import Delivery, SinkUnavailableError
+from heliograph.core.sinks import Alert, Delivery, SinkUnavailableError
 from heliograph.core.sources import Health
 from heliograph.core.time import to_iso
 from heliograph.plugins.conformance import Conformance
@@ -181,6 +181,14 @@ class Ntfy(Plugin[NtfyParams], _Http):
             self._url, self.params.timeout, headers=headers, content=details(signal).encode()
         )
 
+    async def alert(self, alert: Alert) -> Delivery:
+        headers = {"Title": alert.title, "Priority": "5", "Tags": "warning"}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        return await self._post(
+            self._url, self.params.timeout, headers=headers, content=alert.text.encode()
+        )
+
     async def health_check(self) -> Health:
         try:
             reply = await self._http(self.params.timeout).get(
@@ -227,6 +235,21 @@ class Webhook(Plugin[WebhookParams], _Http):
         return await self._post(
             self.params.url, self.params.timeout, headers=headers, json=as_json(signal)
         )
+
+    async def alert(self, alert: Alert) -> Delivery:
+        headers = {"Idempotency-Key": alert.id}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        body = {
+            "alert": {
+                "id": alert.id,
+                "ts": alert.ts,
+                "time": to_iso(alert.ts),
+                "title": alert.title,
+                "text": alert.text,
+            }
+        }
+        return await self._post(self.params.url, self.params.timeout, headers=headers, json=body)
 
     async def health_check(self) -> Health:
         return Health(ok=True, detail="a webhook is not asked until there is something to say")

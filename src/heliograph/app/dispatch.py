@@ -16,13 +16,13 @@ not notify a person twice.
 """
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 from heliograph.app.limits import Sleep
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.pipeline import Signal
-from heliograph.core.sinks import SignalSink, SinkUnavailableError
+from heliograph.core.sinks import Alert, AlertSink, Delivery, SignalSink, SinkUnavailableError
 from heliograph.core.sources import Health
 
 LONGEST_WAIT = 60.0
@@ -73,13 +73,38 @@ class Dispatcher:
         sink that never answers does not keep the others' news waiting.
         """
 
+        return await self._to_all(self.names, signal.id, lambda sink: sink.emit(signal), on_outcome)
+
+    @property
+    def alert_names(self) -> list[str]:
+        """The names of the sinks that can take an alert, in the order outcomes are reported."""
+        return [name for name in self.names if isinstance(self._sinks[name], AlertSink)]
+
+    async def alert(
+        self, alert: Alert, on_outcome: Callable[[Outcome], None] | None = None
+    ) -> tuple[Outcome, ...]:
+        """Give ``alert`` to every sink that can take one, as ``dispatch`` does a signal."""
+        return await self._to_all(
+            self.alert_names,
+            alert.id,
+            lambda sink: sink.alert(alert),  # type: ignore[attr-defined]
+            on_outcome,
+        )
+
+    async def _to_all(
+        self,
+        names: list[str],
+        identity: str,
+        call: Callable[[SignalSink], Awaitable[Delivery]],
+        on_outcome: Callable[[Outcome], None] | None,
+    ) -> tuple[Outcome, ...]:
         async def one(name: str) -> Outcome:
-            outcome = await self._to(name, signal)
+            outcome = await self._to(name, identity, call)
             if on_outcome is not None:
                 on_outcome(outcome)
             return outcome
 
-        return tuple(await asyncio.gather(*(one(name) for name in self.names)))
+        return tuple(await asyncio.gather(*(one(name) for name in names)))
 
     async def health(self) -> dict[str, Health]:
         """Each sink's own report; a sink that cannot even answer is not ok."""
@@ -104,24 +129,26 @@ class Dispatcher:
         if failures:
             raise failures[0]
 
-    async def _to(self, name: str, signal: Signal) -> Outcome:
-        if (name, signal.id) in self._delivered:
-            return Outcome(name, signal.id, True, 0, "already delivered")
+    async def _to(
+        self, name: str, identity: str, call: Callable[[SignalSink], Awaitable[Delivery]]
+    ) -> Outcome:
+        if (name, identity) in self._delivered:
+            return Outcome(name, identity, True, 0, "already delivered")
         sink = self._sinks[name]
         attempts = 0
         while True:
             attempts += 1
             try:
-                delivery = await sink.emit(signal)
+                delivery = await call(sink)
             except SinkUnavailableError as exc:
                 if attempts > self._retries:
-                    return Outcome(name, signal.id, False, attempts, f"unavailable: {exc}")
+                    return Outcome(name, identity, False, attempts, f"unavailable: {exc}")
                 await self._sleep(min(self._backoff * 2 ** (attempts - 1), LONGEST_WAIT))
                 continue
             except InvalidValueError as exc:
-                return Outcome(name, signal.id, False, attempts, f"refused: {exc}")
+                return Outcome(name, identity, False, attempts, f"refused: {exc}")
             except Exception as exc:  # one sink's bug must not stop the others
-                return Outcome(name, signal.id, False, attempts, f"{type(exc).__name__}: {exc}")
+                return Outcome(name, identity, False, attempts, f"{type(exc).__name__}: {exc}")
             if delivery.ok:
-                self._delivered.add((name, signal.id))
-            return Outcome(name, signal.id, delivery.ok, attempts, delivery.detail)
+                self._delivered.add((name, identity))
+            return Outcome(name, identity, delivery.ok, attempts, delivery.detail)

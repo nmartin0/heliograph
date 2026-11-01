@@ -262,7 +262,7 @@ Wizard.)
     `halt_after_signals`; D56).
   - [x] A feed that gives up halts the session: the halt is journalled and deliveries are
     awaited before it ends failed (D57). It cannot carry on: nothing is left to trade on.
-  - [ ] Alerts: a halt or clear delivered to the sinks.
+  - [x] Alerts: a halt or clear delivered to the sinks that take alerts (D58).
   - [ ] The report says when the session was halted and why.
 
 - From the review of 2026-10-23, to settle before live data:

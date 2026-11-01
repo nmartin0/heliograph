@@ -19,10 +19,13 @@ How a sink fails says what to do about it:
 
 A signal's ``id`` is stable, so a sink that is asked twice about the same
 signal (a retry after a lost reply) should deliver it once.
+
+Besides signals a sink may take an ``Alert`` (a halt, or its clearing; D58) by also
+having ``alert``. A sink without it is simply not told: ``AlertSink`` says which can.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from heliograph.core.errors import HeliographError
 from heliograph.core.pipeline import Signal
@@ -59,6 +62,20 @@ class Delivered:
     detail: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class Alert:
+    """Something the person should know that is not a signal: a halt, or its clearing.
+
+    ``id`` is stable (the same event always has the same id), so an alert asked twice
+    is delivered once, as with signals.
+    """
+
+    ts: Timestamp
+    id: str
+    title: str
+    text: str
+
+
 class SignalSink(Protocol):
     """Where signals go, asynchronously."""
 
@@ -77,4 +94,13 @@ class SignalSink(Protocol):
 
     async def close(self) -> None:
         """Release what the sink holds (connections, files)."""
+        ...
+
+
+@runtime_checkable
+class AlertSink(Protocol):
+    """A sink that can also tell the person an ``Alert`` (optional)."""
+
+    async def alert(self, alert: Alert) -> Delivery:
+        """Deliver ``alert``, once however often it is asked; fails as ``emit`` does."""
         ...

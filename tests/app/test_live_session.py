@@ -22,7 +22,7 @@ from heliograph.core.graph import IndicatorValues
 from heliograph.core.halt import Cleared, Halted
 from heliograph.core.messages import Bar, Message, Point, RunEnded
 from heliograph.core.pipeline import Signal, SignalRefused
-from heliograph.core.sinks import Delivered, Delivery, SinkUnavailableError
+from heliograph.core.sinks import Alert, Delivered, Delivery, SinkUnavailableError
 from heliograph.core.sources import (
     Capabilities,
     Health,
@@ -328,6 +328,7 @@ class Recorder(Plugin[RecorderParams]):
         kind="sinks", name="recorder", version="1", summary="Keeps signals", params=RecorderParams
     )
     got: ClassVar[list[tuple[str, str]]] = []
+    alerts: ClassVar[list[tuple[str, str, str]]] = []
     cancelled: ClassVar[int] = 0
     turns: ClassVar[int] = 3
 
@@ -349,6 +350,12 @@ class Recorder(Plugin[RecorderParams]):
         Recorder.got.append((self.params.name, signal.id))
         return Delivery(True, "kept")
 
+    async def alert(self, alert: Alert) -> Delivery:
+        for _ in range(Recorder.turns):
+            await asyncio.sleep(0)
+        Recorder.alerts.append((self.params.name, alert.title, alert.text))
+        return Delivery(True, "kept")
+
     async def health_check(self) -> Health:
         return Health(ok=True)
 
@@ -360,6 +367,7 @@ class Recorder(Plugin[RecorderParams]):
 def with_sinks(registry: Registry) -> Registry:
     registry.register(Recorder)
     Recorder.got.clear()
+    Recorder.alerts.clear()
     Recorder.cancelled = 0
     Recorder.turns = 3
     return registry
@@ -845,7 +853,11 @@ params = { name = "slow" }
 
 
 def halted_day(
-    registry: Registry, folder: Path, halt_after: int, until_signals: int | None = None
+    registry: Registry,
+    folder: Path,
+    halt_after: int,
+    until_signals: int | None = None,
+    sinks: str = "",
 ) -> list[Message]:
     """A gated session; the owner halts it once ``halt_after`` signals are out, then clears it.
 
@@ -882,7 +894,12 @@ def halted_day(
     async def main() -> None:
         task = asyncio.create_task(
             run_live_session(
-                parse_config(STRATEGY), registry, journal, time.clock, idle, answers_sleep=idle
+                parse_config(STRATEGY + sinks),
+                registry,
+                journal,
+                time.clock,
+                idle,
+                answers_sleep=idle,
             )
         )
         while not journal.exists():
@@ -1039,3 +1056,77 @@ def test_a_strategy_that_signals_too_often_halts_the_session(
     assert halt.reason == "trend signalled more than 1 times in 1d"
     assert [type(m).__name__ for m in messages[:halted]] == ["Signal", "Signal"]
     assert halt.ts == messages[halted - 1].ts
+
+
+def test_a_halt_and_its_clearing_are_told_to_the_sinks_that_take_alerts(
+    with_sinks: Registry, tmp_path: Path
+) -> None:
+    halted_day(with_sinks, tmp_path, halt_after=0, sinks=SINKS)
+    journal = tmp_path / "live.sqlite"
+    assert sorted(Recorder.alerts) == sorted(
+        [
+            (
+                sink,
+                "Heliograph halted by owner",
+                f"maintenance\nSignals that add risk are refused "
+                f"until you clear it: heliograph clear {journal}",
+            )
+            for sink in ("log", "phone")
+        ]
+        + [
+            (sink, "Heliograph halt cleared", "Signals that add risk are being sent again.")
+            for sink in ("log", "phone")
+        ]
+    )
+    ids = {
+        d.signal for d in deliveries(journal) if d.signal not in {s.id for s in signals(journal)}
+    }
+    assert len(ids) == 2  # one per alert; each sink's outcome is journalled as an input
+    told = [d for d in deliveries(journal) if d.signal in ids]
+    assert sorted((d.sink, d.ok) for d in told) == [
+        ("log", True),
+        ("log", True),
+        ("phone", True),
+        ("phone", True),
+    ]
+
+
+def test_a_feed_that_gives_up_has_its_halt_told_before_the_session_ends(
+    with_sinks: Registry, tmp_path: Path, time: SimulatedTime
+) -> None:
+    Pulse.then = "fail"
+    journal = tmp_path / "live.sqlite"
+    with pytest.raises(SourceUnavailableError):
+        asyncio.run(session(STRATEGY + SINKS, with_sinks, journal, time))
+    assert sorted(Recorder.alerts) == [
+        ("log", "Heliograph halted by feed:pulse", Recorder.alerts[0][2]),
+        ("phone", "Heliograph halted by feed:pulse", Recorder.alerts[0][2]),
+    ]
+    assert "the pulse feed gave up" in Recorder.alerts[0][2]
+
+
+def test_a_halt_restored_by_a_resume_is_not_told_again(
+    with_sinks: Registry, tmp_path: Path
+) -> None:
+    first = tmp_path / "first.sqlite"
+    time = SimulatedTime(start=NOW)
+    Pulse.time, Pulse.closed, Pulse.gate, Pulse.start_at = time, 0, None, 0
+    Pulse.prices, Pulse.steps, Pulse.then = UP_THEN_DOWN, 4, "fail"
+    with pytest.raises(SourceUnavailableError):
+        asyncio.run(session(STRATEGY + SINKS, with_sinks, first, time))
+    told = len(Recorder.alerts)
+    assert told == 2
+    again = SimulatedTime(start=time.clock.now())
+    Pulse.time, Pulse.then, Pulse.steps, Pulse.start_at = again, "end", 6, 4
+    asyncio.run(
+        run_live_session(
+            parse_config(STRATEGY + SINKS),
+            with_sinks,
+            tmp_path / "second.sqlite",
+            again.clock,
+            again.advance,
+            answers_sleep=lambda _: asyncio.sleep(0),
+            resume=first,
+        )
+    )
+    assert len(Recorder.alerts) == told

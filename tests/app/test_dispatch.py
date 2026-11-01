@@ -13,7 +13,7 @@ import pytest
 from heliograph.app.dispatch import LONGEST_WAIT, Dispatcher, Outcome
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.pipeline import Signal
-from heliograph.core.sinks import Delivery, SinkUnavailableError
+from heliograph.core.sinks import Alert, Delivery, SinkUnavailableError
 from heliograph.core.sources import Health
 from heliograph.core.time import Timestamp
 from tests.support.world import BTC
@@ -200,3 +200,52 @@ def test_each_outcome_is_told_the_moment_its_sink_is_done_even_if_another_never_
 
     asyncio.run(scenario())
     assert told == [Outcome("a", "s-1", True, 1, "")]
+
+
+@dataclass
+class AlertingSink(Sink):
+    """A sink that can also take alerts."""
+
+    alerts: list[str] = field(default_factory=list)
+
+    async def alert(self, alert: Alert) -> Delivery:
+        self.alerts.append(alert.id)
+        step = self.steps[min(len(self.alerts), len(self.steps)) - 1]
+        if isinstance(step, Exception):
+            raise step
+        return step
+
+
+def a_halt() -> Alert:
+    return Alert(ts=Timestamp(5), id="halt-5", title="halted", text="why")
+
+
+def test_an_alert_goes_only_to_the_sinks_that_can_take_one_in_name_order() -> None:
+    sinks = {"b": AlertingSink(), "a": Sink(), "c": AlertingSink((Delivery(True, "sent"),))}
+    dispatcher = Dispatcher(sinks)
+    outcomes = asyncio.run(dispatcher.alert(a_halt()))
+    assert dispatcher.alert_names == ["b", "c"]
+    assert outcomes == (
+        Outcome("b", "halt-5", True, 1, ""),
+        Outcome("c", "halt-5", True, 1, "sent"),
+    )
+    assert sinks["a"].asked == []  # a signal-only sink is not told
+
+
+def test_an_alert_is_retried_like_a_signal_and_delivered_once() -> None:
+    waits = Waits()
+    down = SinkUnavailableError("503")
+    sink = AlertingSink((down, Delivery(True)))
+    dispatcher = Dispatcher({"phone": sink}, sleep=waits, retries=2, backoff=1.0)
+    (first,) = asyncio.run(dispatcher.alert(a_halt()))
+    assert first == Outcome("phone", "halt-5", True, 2, "")
+    (again,) = asyncio.run(dispatcher.alert(a_halt()))
+    assert again == Outcome("phone", "halt-5", True, 0, "already delivered")
+    assert sink.alerts == ["halt-5", "halt-5"]
+
+
+def test_an_alert_outcome_is_reported_the_moment_its_sink_is_done() -> None:
+    told: list[Outcome] = []
+    dispatcher = Dispatcher({"phone": AlertingSink()})
+    asyncio.run(dispatcher.alert(a_halt(), told.append))
+    assert told == [Outcome("phone", "halt-5", True, 1, "")]

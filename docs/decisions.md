@@ -1338,3 +1338,24 @@ all, as before).
 
 **Rejected:** catching the failure and continuing halted (a session with no data that looks
 alive).
+
+## D58 · A halt and its clearing are alerts, an optional second thing a sink can take (2026-11-01)
+
+**Decision:** `Alert(ts, id, title, text)` is something to tell the person that is not a signal.
+A sink opts in with `alert(alert) -> Delivery` (`AlertSink`, a runtime-checkable protocol); a sink
+without it is not told, so existing and third-party sinks keep working. `Dispatcher.alert`
+gives it to the sinks that can, with the same retries, ordering and once-only delivery as signals
+(keyed by the alert's stable id, a hash of what happened, when, and who). The session's
+`Deliveries` makes one alert for every `Halted` and `Cleared` after the restore (so a resume does
+not tell the owner again), records each outcome as a `Delivered` input, and awaits them with the
+signals at the end. ntfy sends an alert at the highest priority whatever the signals use; the webhook
+posts `{"alert": {...}}`.
+
+**Why:** the owner wants to be told when the session halts, wherever they are, by the channels
+already set up; an optional method adds that without breaking the port.
+
+**Not done:** desktop and Apprise sinks (next); per-sink alert settings; alerts for refusals or
+expiries (a refused signal is already in the journal, and flooding the phone defeats the alert).
+
+**Rejected:** making `alert` required (it would break every sink written before this); sending
+alerts as fake signals (they have no target, strategy or price to put in a signal).

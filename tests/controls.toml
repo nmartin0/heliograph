@@ -4485,21 +4485,21 @@ tests = ["tests/app/test_dispatch.py::test_the_wait_between_tries_is_capped"]
 [[control]]
 describes = "a refusal for good is not retried"
 path = "src/heliograph/app/dispatch.py"
-old = "            except InvalidValueError as exc:\n                return Outcome(name, signal.id, False, attempts, f\"refused: {exc}\")\n"
+old = "            except InvalidValueError as exc:\n                return Outcome(name, identity, False, attempts, f\"refused: {exc}\")\n"
 new = "            except InvalidValueError as exc:\n                raise SinkUnavailableError(str(exc)) from exc\n"
 tests = ["tests/app/test_dispatch.py::test_a_refusal_for_good_is_not_retried"]
 
 [[control]]
 describes = "one sink's bug does not stop the others"
 path = "src/heliograph/app/dispatch.py"
-old = "            except Exception as exc:  # one sink's bug must not stop the others\n                return Outcome(name, signal.id, False, attempts, f\"{type(exc).__name__}: {exc}\")\n"
-new = "            except ZeroDivisionError as exc:\n                return Outcome(name, signal.id, False, attempts, str(exc))\n"
+old = "            except Exception as exc:  # one sink's bug must not stop the others\n                return Outcome(name, identity, False, attempts, f\"{type(exc).__name__}: {exc}\")\n"
+new = "            except ZeroDivisionError as exc:\n                return Outcome(name, identity, False, attempts, str(exc))\n"
 tests = ["tests/app/test_dispatch.py::test_one_sinks_failure_does_not_stop_the_others"]
 
 [[control]]
 describes = "a signal a sink accepted is not given to it again"
 path = "src/heliograph/app/dispatch.py"
-old = "                self._delivered.add((name, signal.id))\n"
+old = "                self._delivered.add((name, identity))\n"
 new = "                pass\n"
 tests = ["tests/app/test_dispatch.py::test_a_signal_a_sink_accepted_is_not_given_to_it_again"]
 
@@ -4681,14 +4681,14 @@ tests = ["tests/app/test_live_session.py::test_a_session_waits_for_deliveries_st
 [[control]]
 describes = "deliveries not finished by the end are recorded as not delivered"
 path = "src/heliograph/app/run.py"
-old = "                    if (signal_id, name) not in self._recorded:\n"
+old = "                    if (identity, name) not in self._recorded:\n"
 new = "                    if False:\n"
 tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
 
 [[control]]
 describes = "a delivery never recorded twice for one signal and sink"
 path = "src/heliograph/app/run.py"
-old = "                    if (signal_id, name) not in self._recorded:\n"
+old = "                    if (identity, name) not in self._recorded:\n"
 new = "                    if True:\n"
 tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
 
@@ -5195,3 +5195,52 @@ path = "src/heliograph/app/run.py"
 old = "    engine.receive(Halted(ts=clock.now(), reason=reason[:300], by=f\"feed:{name}\"))"
 new = "    return"
 tests = ["tests/app/test_live_session.py::test_a_feed_that_gives_up_halts_the_session_in_its_journal_before_it_fails", "tests/app/test_live_session.py::test_resuming_a_session_whose_feed_gave_up_starts_halted_until_the_owner_clears_it"]
+
+[[control]]
+describes = "a halt is told to the sinks"
+path = "src/heliograph/app/run.py"
+old = "        engine.bus.subscribe(Halted, self._halted)\n"
+new = ""
+tests = ["tests/app/test_live_session.py::test_a_halt_and_its_clearing_are_told_to_the_sinks_that_take_alerts", "tests/app/test_live_session.py::test_a_feed_that_gives_up_has_its_halt_told_before_the_session_ends"]
+
+[[control]]
+describes = "a clearing is told to the sinks"
+path = "src/heliograph/app/run.py"
+old = "        engine.bus.subscribe(Cleared, self._cleared)\n"
+new = ""
+tests = ["tests/app/test_live_session.py::test_a_halt_and_its_clearing_are_told_to_the_sinks_that_take_alerts"]
+
+[[control]]
+describes = "only alert-capable sinks are given alerts"
+path = "src/heliograph/app/dispatch.py"
+old = "if isinstance(self._sinks[name], AlertSink)"
+new = "if True"
+tests = ["tests/app/test_dispatch.py::test_an_alert_goes_only_to_the_sinks_that_can_take_one_in_name_order"]
+
+[[control]]
+describes = "an alert already delivered is not delivered again"
+path = "src/heliograph/app/dispatch.py"
+old = "        if (name, identity) in self._delivered:"
+new = "        if False:"
+tests = ["tests/app/test_dispatch.py::test_an_alert_is_retried_like_a_signal_and_delivered_once"]
+
+[[control]]
+describes = "an ntfy alert is urgent whatever the signal priority"
+path = "src/heliograph/plugins/notify_sinks.py"
+old = "\"Priority\": \"5\", \"Tags\": \"warning\""
+new = "\"Priority\": str(self.params.priority), \"Tags\": \"warning\""
+tests = ["tests/plugins/test_notify_sinks.py::test_ntfy_posts_an_alert_urgently_with_its_title_and_text"]
+
+[[control]]
+describes = "a webhook alert carries its id as the idempotency key"
+path = "src/heliograph/plugins/notify_sinks.py"
+old = "        headers = {\"Idempotency-Key\": alert.id}"
+new = "        headers = {}"
+tests = ["tests/plugins/test_notify_sinks.py::test_the_webhook_posts_an_alert_as_json_with_the_alerts_id_as_its_key"]
+
+[[control]]
+describes = "deliveries under way at the end are recorded for the sinks they were given to"
+path = "src/heliograph/app/run.py"
+old = "        self._names[signal.id] = self._dispatcher.names\n"
+new = "        self._names[signal.id] = []\n"
+tests = ["tests/app/test_live_session.py::test_deliveries_still_under_way_when_the_session_ends_are_recorded_as_not_delivered"]
