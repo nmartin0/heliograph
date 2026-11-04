@@ -5412,3 +5412,101 @@ path = "src/heliograph/app/run.py"
 old = "market_calendar(config.mounts[found[0]].calendar),"
 new = "market_calendar(\"\"),"
 tests = ["tests/app/test_live_session.py::test_a_stock_feed_is_not_silent_while_the_market_is_closed"]
+
+[[control]]
+describes = "alpaca declares the free plan's rate"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "period=60 * NANOS_PER_SECOND"
+new = "period=NANOS_PER_SECOND"
+tests = ["tests/plugins/test_alpaca_source.py::test_it_declares_stock_history_live_trades_and_the_free_plans_rate"]
+
+[[control]]
+describes = "alpaca pages drop what was already delivered at the cursor"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if at < cursor or (at == cursor and key in delivered):"
+new = "if at < cursor:"
+tests = ["tests/plugins/test_alpaca_source.py::test_trades_are_paged_from_the_last_instant_without_a_repeat_or_a_gap"]
+
+[[control]]
+describes = "alpaca trades at the end are not in the request"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if at >= request.end:"
+new = "if at > request.end:"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_trade_at_the_end_is_not_in_the_request"]
+
+[[control]]
+describes = "alpaca will not loop on a page it cannot move past"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "            if not fresh:\n                raise SourceUnavailableError("
+new = "            if not fresh:\n                return\n            if False:\n                raise SourceUnavailableError("
+tests = ["tests/plugins/test_alpaca_source.py::test_a_full_page_at_one_instant_cannot_be_read_past"]
+
+[[control]]
+describes = "alpaca bars are whole ones only"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if start + size > request.end:"
+new = "if start > request.end:"
+tests = ["tests/plugins/test_alpaca_source.py::test_bars_are_whole_ones_only_and_paged"]
+
+[[control]]
+describes = "alpaca prices are raw"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "adjustment=Adjustment.RAW,"
+new = "adjustment=Adjustment.ALL,"
+tests = ["tests/plugins/test_alpaca_source.py::test_raw_prices_and_the_chosen_feed_are_asked_for"]
+
+[[control]]
+describes = "alpaca does not ask again what asking cannot mend"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if status is None or status == 429 or status >= 500:"
+new = "if True:"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_refused_key_or_plan_is_never_asked_again"]
+
+[[control]]
+describes = "alpaca gives up after its retries"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if attempt >= self.params.retries:"
+new = "if False:"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_request_refused_for_now_is_tried_again_and_then_gives_up"]
+
+[[control]]
+describes = "alpaca live trades seen twice are dropped"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if identity in seen:"
+new = "if False:"
+tests = ["tests/plugins/test_alpaca_source.py::test_live_trades_come_as_points_with_repeats_dropped_and_the_stream_stopped"]
+
+[[control]]
+describes = "alpaca skips a live trade without a time"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if trade.timestamp is None:"
+new = "if False:"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_trade_without_a_time_is_skipped_and_counted"]
+
+[[control]]
+describes = "alpaca says when its stream ends"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "raise SourceUnavailableError(\"alpaca: the trade stream ended\")"
+new = "return"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_stream_that_ends_is_an_error_not_silence"]
+
+[[control]]
+describes = "alpaca checks the key before the stream"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "        await self._call(\n            \"get_stock_latest_trade\", StockLatestTradeRequest(symbol_or_symbols=symbols)\n        )\n"
+new = ""
+tests = ["tests/plugins/test_alpaca_source.py::test_a_refused_key_is_found_before_the_stream_starts"]
+
+[[control]]
+describes = "alpaca reads only its own venue"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if instrument.venue != VENUE:"
+new = "if False:"
+tests = ["tests/plugins/test_alpaca_source.py::test_a_bar_size_alpaca_lacks_and_another_venue_are_refused"]
+
+[[control]]
+describes = "alpaca names a missing key"
+path = "src/heliograph/plugins/alpaca_source.py"
+old = "if not value:"
+new = "if False:"
+tests = ["tests/plugins/test_alpaca_source.py::test_keys_are_named_by_variables_and_a_missing_one_is_named"]

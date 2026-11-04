@@ -241,7 +241,8 @@ Wizard.)
   - [x] A desktop sink (D60). Apprise is left out for now (D60).
 - Optional: a published-records sink writing signals, simulated fills and
   daily equity to a separate SQLite file that Elysium reads as a silo (D20).
-- The second live source: Alpaca, for US stocks (D21).
+- [x] The second live source: Alpaca, for US stocks (D21, D62). Owner to run
+  `uv run pytest -m live` with Alpaca keys once.
 - Session calendars (exchange_calendars) for local days and market hours,
   which Alpaca's stocks need (moved from Phase 2).
   - [x] Market hours for the silence watch: a mount's `calendar` (D61).

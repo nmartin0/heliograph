@@ -15,6 +15,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "alpaca-py>=0.44,<1",
     "ccxt>=4.5,<5",
     "exchange-calendars>=4.13,<5",
     "httpx>=0.28,<1",
@@ -57,6 +58,7 @@ sqlite = "heliograph.plugins.sqlite_journal:SqliteJournal"
 [project.entry-points."heliograph.data_sources"]
 file = "heliograph.plugins.file_source:FileSource"
 ccxt = "heliograph.plugins.ccxt_source:CcxtSource"
+alpaca = "heliograph.plugins.alpaca_source:AlpacaSource"
 store = "heliograph.plugins.store:StoreSource"
 
 [project.entry-points."heliograph.combiners"]
@@ -184,6 +186,8 @@ filterwarnings = [
     "ignore:enable_cleanup_closed ignored:DeprecationWarning",
     # exchange_calendars 4.13 still uses pandas calls that pandas 3 deprecates; it is theirs to fix.
     "ignore::pandas.errors.Pandas4Warning",
+    # alpaca-py 0.44 imports websockets.legacy, which websockets 15 and later deprecate.
+    "ignore:websockets.legacy is deprecated:DeprecationWarning",
     "ignore:The 'generic' unit for NumPy timedelta:DeprecationWarning",
 ]
 
@@ -239,6 +243,9 @@ winloop = "MIT"
 # ta-lib 0.8.2: the licence field is empty; its LICENSE file is BSD 2-Clause,
 # and the TA-Lib C library its wheels bundle is BSD 3-Clause.
 ta-lib = "BSD-2-Clause AND BSD-3-Clause"
+# sseclient-py 1.9: metadata says "Apache Software License v2", not an SPDX identifier; its
+# LICENSE file is the Apache License 2.0.
+sseclient-py = "Apache-2.0"
 
 [tool.heliograph.licences.exceptions]
 # Package = "reason", for a denied licence accepted case by case.

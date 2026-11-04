@@ -40,6 +40,7 @@ def test_every_installed_plugin_is_in_the_kit() -> None:
     assert names == {
         "combiners/weighted",
         "data_sources/ccxt",
+        "data_sources/alpaca",
         "data_sources/file",
         "data_sources/store",
         "exits/trailing_stop",

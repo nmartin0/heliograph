@@ -12,6 +12,7 @@ test runner) are not distributed and are not listed here.
 | aiohttp | 3.14.5 | Apache-2.0 AND MIT | permissive | https://github.com/aio-libs/aiohttp |
 | aiohttp-fast-zlib | 0.3.0 | Apache-2.0 | permissive | https://github.com/bluetooth-devices/aiohttp-fast-zlib |
 | aiosignal | 1.4.0 | Apache-2.0 | permissive | https://github.com/aio-libs/aiosignal |
+| alpaca-py | 0.44.0 | Apache-2.0 | permissive | https://github.com/alpacahq/alpaca-py |
 | annotated-doc | 0.0.5 | MIT | permissive | https://github.com/fastapi/annotated-doc |
 | annotated-types | 0.8.0 | MIT | permissive | https://github.com/annotated-types/annotated-types |
 | anyio | 4.15.1 | MIT | permissive | https://github.com/agronholm/anyio |
@@ -39,6 +40,7 @@ test runner) are not distributed and are not listed here.
 | korean-lunar-calendar | 0.4.0 | MIT | permissive | https://github.com/usingsky/korean_lunar_calendar_py |
 | markdown2 | 2.5.5 | MIT | permissive | https://github.com/trentm/python-markdown2 |
 | markupsafe | 3.0.4 | BSD-3-Clause | permissive | https://github.com/pallets/markupsafe/ |
+| msgpack | 1.2.4 | Apache-2.0 | permissive | https://github.com/msgpack/msgpack-python/ |
 | msgspec | 0.22.0 | BSD-3-Clause | permissive | https://github.com/msgspec/msgspec |
 | multidict | 6.9.1 | Apache-2.0 | permissive | https://github.com/aio-libs/multidict |
 | nicegui | 3.18.0 | MIT | permissive | https://github.com/zauberzeug/nicegui |
@@ -58,9 +60,11 @@ test runner) are not distributed and are not listed here.
 | python-engineio | 4.14.0 | MIT | permissive | see package metadata |
 | python-multipart | 0.0.32 | Apache-2.0 | permissive | https://github.com/Kludex/python-multipart |
 | python-socketio | 5.17.0 | MIT | permissive | see package metadata |
+| pytz | 2026.6 | MIT | permissive | https://github.com/stub42/pytz.git |
 | pyyaml | 6.0.3 | MIT | permissive | https://github.com/yaml/pyyaml |
 | requests | 2.34.2 | Apache-2.0 | permissive | https://github.com/psf/requests |
 | simple-websocket | 1.1.0 | MIT | permissive | https://github.com/miguelgrinberg/simple-websocket |
+| sseclient-py | 1.9.0 | Apache-2.0 | permissive |  |
 | starlette | 1.7.0 | BSD-3-Clause | permissive | https://github.com/Kludex/starlette |
 | ta-lib | 0.8.2 | BSD-2-Clause AND BSD-3-Clause | permissive | https://github.com/TA-Lib/ta-lib-python |
 | talipp | 2.7.0 | MIT | permissive | https://github.com/nardew/talipp |

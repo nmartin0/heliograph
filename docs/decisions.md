@@ -1410,3 +1410,27 @@ its dependencies (pandas, pyluach, toolz, tzdata and others) are permissive.
 **Not done:** the calendar for signals (refusing outside open hours), local days in the report,
 extended-hours trading, and a calendar as a registered plug-in kind. The package's pandas 3
 deprecation warnings are ignored in the test run (pyproject) until it moves.
+
+## D62 · The Alpaca source: US stocks through alpaca-py, IEX by default (2026-11-03)
+
+**Decision:** `plugins/alpaca_source.py` is a second `DataSource` (`alpaca`; venue `alpaca`,
+ticker as symbol). History comes from alpaca-py's synchronous REST client, one request at a time
+in a worker thread through the app's throttle (200 a minute, the free plan's), paged from the last
+instant delivered, whole bars only, prices `raw`. Live trades come from alpaca-py's stream, which
+owns an event loop, so it runs in a worker thread and hands trades over; closing the subscription
+stops it. Keys are read from environment variables named in the configuration (`key_env`,
+`secret_env`), never written in it. The feed is `iex` unless a mount says `sip`. Bar sizes are
+the intraday ones (1, 5, 15, 30 minutes and 1 hour); live bars, daily and longer bars are out.
+
+**Why alpaca-py:** the owner chose the official client. It adds msgpack, pytz and sseclient-py
+(permissive). Its stream reconnects without end and swallows its own errors, so a dead feed shows
+as silence, not as a failure: `halt_after_silence` with the mount's `calendar` (D56, D61) is the
+guard, and one cheap request first refuses a bad key, which the stream would retry forever.
+
+**Not proven here:** the offline tests use real alpaca-py models built from replies written from
+Alpaca's documentation, so our paging, checking and message handling are tested, not Alpaca's
+wire. `tests/live/test_alpaca_live.py` is for the owner to run once with keys
+(`uv run pytest -m live`). Times arrive to the microsecond.
+
+**Not done:** extended hours, daily bars, live bars, corporate-action adjustment, the SIP feed's
+entitlements, and counting stream failures (alpaca-py does not say).
