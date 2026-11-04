@@ -8,11 +8,14 @@ release. Heliograph becomes a usable signal provider at the end of Phase 4.
 | --- | --- | --- |
 | 0 | Foundations | done; CI green; tag deferred by the owner |
 | 1 | Data | built, gate passing; left: the first live check against Kraken |
-| 2 | Backtest engine and strategy pipeline | in progress (D1 the indicator graph, D2 the conformance kit and D3 library indicators done) |
-| 3 | Graphical workspace | planned |
-| 4 | Signals and paper trading | planned |
-| 5 | Research tools | planned |
-| 6 | Advanced plug-ins | planned |
+| 2 | Backtest engine and strategy pipeline | built |
+| 3 | Graphical workspace | built; the Wizard is a first cut |
+| 4 | Signals and paper trading | built; left: live checks of Kraken and Alpaca, and the items below |
+| 5 | Research tools | not started |
+| 6 | Advanced plug-ins | not started |
+
+Development stopped on 2026-11-04 for the absorption into Elysium; see
+[handoff-to-elysium.md](handoff-to-elysium.md).
 
 ## Phase 0 · Foundations (done)
 

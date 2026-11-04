@@ -277,6 +277,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - A halt, and its clearing, are told to the sinks: ntfy (urgent) and the webhook take alerts.
 - A `desktop` sink shows signals and alerts as notifications on the machine the session runs on
   (`notify-send` on Linux, `osascript` on macOS).
+- `docs/handoff-to-elysium.md`: the final state of the roadmap, the open issues and what the
+  Elysium team needs to absorb the project; the roadmap's status table is corrected.
 - An `alpaca` data source for US stocks (history and live trades through alpaca-py, IEX feed by
   default; keys from environment variables).
 - A mount's `calendar` (such as `XNYS`) makes `halt_after_silence` count only that exchange's open

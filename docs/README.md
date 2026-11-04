@@ -15,6 +15,7 @@ session.
 | [decisions.md](decisions.md) | Numbered decisions with their reasons and alternatives | a decision is made or reversed |
 | [licensing.md](licensing.md) | What code and libraries we may use, and the checks | the policy changes or a dependency is added |
 | [lessons.md](lessons.md) | Surprises and mistakes, so they are not repeated | something surprises us |
+| [handoff-to-elysium.md](handoff-to-elysium.md) | Final state of the roadmap, open issues and what Elysium needs to absorb the project | never; a snapshot of 2026-11-04 |
 | [research/](research/) | Findings from research, with sources | new research is done |
 
 ## Rules for these files
