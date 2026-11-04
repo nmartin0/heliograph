@@ -16,6 +16,7 @@ classifiers = [
 ]
 dependencies = [
     "ccxt>=4.5,<5",
+    "exchange-calendars>=4.13,<5",
     "httpx>=0.28,<1",
     "msgspec>=0.19,<1",
     "nicegui>=3.18,<4",
@@ -160,7 +161,7 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 # CCXT and talipp ship no type information; their objects are Any to mypy.
-module = ["ccxt", "ccxt.*", "talipp", "talipp.*"]
+module = ["ccxt", "ccxt.*", "talipp", "talipp.*", "exchange_calendars", "exchange_calendars.*", "pandas", "pandas.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -181,6 +182,9 @@ filterwarnings = [
     "error",
     # CCXT asks aiohttp for a work-around Python 3.13 no longer needs; harmless.
     "ignore:enable_cleanup_closed ignored:DeprecationWarning",
+    # exchange_calendars 4.13 still uses pandas calls that pandas 3 deprecates; it is theirs to fix.
+    "ignore::pandas.errors.Pandas4Warning",
+    "ignore:The 'generic' unit for NumPy timedelta:DeprecationWarning",
 ]
 
 [tool.importlinter]

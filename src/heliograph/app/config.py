@@ -262,6 +262,10 @@ class MountConfig(BaseModel):
     between them fails the run unless ``allow_empty`` is set: a span with no
     data is far more often a mistake (a time unit, a symbol) than a market
     that did not trade.
+
+    ``calendar`` names an exchange (``"XNYS"``) whose open hours a silence watch counts, so a
+    market that closes is not halted for being quiet at night; empty is a market that never
+    closes, as crypto does.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -274,6 +278,7 @@ class MountConfig(BaseModel):
     start: Annotated[datetime | None, Field(strict=True)] = None
     end: Annotated[datetime | None, Field(strict=True)] = None
     allow_empty: bool = False
+    calendar: str = ""
 
     @field_validator("params", mode="after")
     @classmethod

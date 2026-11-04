@@ -244,6 +244,8 @@ Wizard.)
 - The second live source: Alpaca, for US stocks (D21).
 - Session calendars (exchange_calendars) for local days and market hours,
   which Alpaca's stocks need (moved from Phase 2).
+  - [x] Market hours for the silence watch: a mount's `calendar` (D61).
+  - [ ] Local days in reports; signals refused outside open hours.
 - [x] Paper broker on live data; took-it/skipped journal (D50 to D54; its spec was
   deleted when the last commit landed).
   - [x] A person's answer (`SignalAnswer`) journalled as an input; the inbox beside the

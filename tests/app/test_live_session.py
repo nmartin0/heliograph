@@ -987,7 +987,13 @@ def test_the_owners_halt_and_clear_are_journalled_inputs_and_the_day_replays(
 
 
 def watched_session(
-    registry: Registry, folder: Path, option: str, *, prices: Sequence[float] | None, then: str
+    registry: Registry,
+    folder: Path,
+    option: str,
+    *,
+    prices: Sequence[float] | None,
+    then: str,
+    calendar: str = "",
 ) -> Path:
     """A session with a watch configured, run until it halts; its journal."""
     folder.mkdir(parents=True, exist_ok=True)
@@ -998,6 +1004,8 @@ def watched_session(
     Pulse.then = then
     journal = folder / "live.sqlite"
     text = STRATEGY.replace('sizer = "vol"\n', f'sizer = "vol"\n{option}\n')
+    if calendar:
+        text = text.replace('kind = "trades"', f'kind = "trades"\ncalendar = "{calendar}"', 1)
 
     async def look(_: float) -> None:
         await asyncio.sleep(0)
@@ -1040,6 +1048,23 @@ def test_a_feed_that_goes_quiet_halts_the_session_at_the_silence_deadline(
     assert halts[0][1].reason == "no price of BTC/USD for 2h"
     replayed = replay_backtest(journal, tmp_path / "again.sqlite", registry)
     assert raw_rows(replayed.journal) == raw_rows(journal)
+
+
+def test_a_stock_feed_is_not_silent_while_the_market_is_closed(
+    registry: Registry, tmp_path: Path
+) -> None:
+    # The session starts at midnight UTC on a Wednesday, New York closed until 13:30 UTC.
+    journal = watched_session(
+        registry,
+        tmp_path,
+        'halt_after_silence = "2h"',
+        prices=None,
+        then="wait",
+        calendar="XNYS",
+    )
+    [halt] = [e.message for e in read_entries(journal, JOURNALLED) if isinstance(e.message, Halted)]
+    assert halt.ts == from_iso("2026-10-21T15:30:00Z")
+    assert halt.reason == "no price of BTC/USD for 2h of XNYS hours"
 
 
 def test_a_strategy_that_signals_too_often_halts_the_session(

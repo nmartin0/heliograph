@@ -98,6 +98,7 @@ from heliograph.core.sources import DataSource, Subscription
 from heliograph.core.streams import StreamSpec
 from heliograph.core.time import Timestamp, parse_span
 from heliograph.plugins.manifest import Plugin
+from heliograph.plugins.market_calendars import market_calendar
 from heliograph.plugins.registry import Registry
 from heliograph.plugins.sqlite_journal import (
     RESERVED_HEADER,
@@ -893,6 +894,7 @@ def _assembled[E: Sequencer](
                             bus,
                             engine.scheduler,
                             clock.now,
+                            market_calendar(config.mounts[found[0]].calendar),
                         )
                     if strategy.halt_after_signals is not None:
                         RateWatch(

@@ -199,3 +199,38 @@ def test_a_watch_needs_a_positive_span(span: int) -> None:
         SilenceWatch("trend", BTC, span, live.bus, live.engine.scheduler, live.clock.now)
     with pytest.raises(InvalidValueError, match="count of 1 or more and a span"):
         RateWatch("trend", 1, span, live.bus)
+
+
+class Shift:
+    """A market open for the first hour of each day, and closed for the other 23."""
+
+    name = "SHIFT"
+    DAY = 24 * HOUR
+
+    def after_open_time(self, start: Timestamp, span: int) -> Timestamp:
+        day, into = divmod(int(start), self.DAY)
+        if into >= HOUR:  # closed: counting begins at the next open
+            day, into = day + 1, 0
+        left = span
+        while left > HOUR - into:
+            left -= HOUR - into
+            day, into = day + 1, 0
+        return Timestamp(day * self.DAY + into + left)
+
+
+def test_a_closed_market_is_not_silent_and_the_halt_names_its_hours() -> None:
+    live = Live()
+    SilenceWatch("stocks", BTC, HOUR // 2, live.bus, live.engine.scheduler, live.clock.now, Shift())
+    live.at(HOUR // 2 + HOUR // 4)
+    live.engine.receive(point(HOUR // 2 + HOUR // 4))  # a quarter hour before the close
+    live.at(10 * HOUR)  # the night passed with nothing
+    live.engine.tick()
+    assert live.halts == []
+    live.at(24 * HOUR + HOUR // 10)  # 6 min into the next open: 15 min are owed
+    live.engine.tick()
+    assert live.halts == []
+    live.at(24 * HOUR + HOUR // 2)
+    live.engine.tick()
+    [halt] = live.halts
+    assert halt.ts == Timestamp(24 * HOUR + HOUR // 4)
+    assert halt.reason == "no price of BTC/USD for 30m of SHIFT hours"

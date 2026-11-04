@@ -5164,8 +5164,8 @@ tests = ["tests/core/test_halt.py::test_more_signals_than_the_count_within_the_w
 [[control]]
 describes = "a silence deadline is set from the price's own time"
 path = "src/heliograph/core/halt.py"
-old = "max(point.ts + self._span, self._now())"
-new = "self._now() + self._span"
+old = "Timestamp(max(due, self._now()))"
+new = "Timestamp(self._now() + self._span)"
 tests = ["tests/core/test_halt.py::test_the_deadline_counts_from_when_the_price_was_known_not_when_it_was_read"]
 
 [[control]]
@@ -5349,3 +5349,66 @@ path = "src/heliograph/plugins/desktop_sink.py"
 old = "raise InvalidValueError(f\"desktop notifications are not supported on {platform}\")"
 new = "return []"
 tests = ["tests/plugins/test_desktop_sink.py::test_another_system_is_refused_with_its_name", "tests/plugins/test_desktop_sink.py::test_health_says_whether_the_system_is_supported"]
+
+[[control]]
+describes = "a market that never closes counts every nanosecond"
+path = "src/heliograph/core/calendars.py"
+old = "return Timestamp(start + span)"
+new = "return Timestamp(start)"
+tests = ["tests/core/test_calendars.py::test_open_time_is_time_when_a_market_never_closes"]
+
+[[control]]
+describes = "the silence watch counts open time only"
+path = "src/heliograph/core/halt.py"
+old = "due = self._calendar.after_open_time(point.ts, self._span)"
+new = "due = Timestamp(point.ts + self._span)"
+tests = ["tests/core/test_halt.py::test_a_closed_market_is_not_silent_and_the_halt_names_its_hours", "tests/app/test_live_session.py::test_a_stock_feed_is_not_silent_while_the_market_is_closed"]
+
+[[control]]
+describes = "a halt over open hours names the hours"
+path = "src/heliograph/core/halt.py"
+old = "hours = f\" of {self._calendar.name} hours\" if self._calendar.name else \"\""
+new = "hours = \"\""
+tests = ["tests/core/test_halt.py::test_a_closed_market_is_not_silent_and_the_halt_names_its_hours"]
+
+[[control]]
+describes = "an exchange break is not open time"
+path = "src/heliograph/plugins/market_calendars.py"
+old = "if pandas.isna(row.break_start):"
+new = "if True:"
+tests = ["tests/plugins/test_market_calendars.py::test_a_lunch_break_is_not_open_time"]
+
+[[control]]
+describes = "counting from inside a session starts at the start"
+path = "src/heliograph/plugins/market_calendars.py"
+old = "opened = max(begin, cursor)"
+new = "opened = begin"
+tests = ["tests/plugins/test_market_calendars.py::test_inside_a_session_open_time_is_time"]
+
+[[control]]
+describes = "the session holding the start is found"
+path = "src/heliograph/plugins/market_calendars.py"
+old = "first = max(bisect_right(self._starts, cursor) - 1, 0)"
+new = "first = bisect_right(self._starts, cursor)"
+tests = ["tests/plugins/test_market_calendars.py::test_inside_a_session_open_time_is_time"]
+
+[[control]]
+describes = "past the last known session the market is open"
+path = "src/heliograph/plugins/market_calendars.py"
+old = "return Timestamp(cursor + remaining)  # past"
+new = "return Timestamp(cursor)  # past"
+tests = ["tests/plugins/test_market_calendars.py::test_past_the_last_known_session_the_market_is_taken_as_open"]
+
+[[control]]
+describes = "an unknown exchange is refused by name"
+path = "src/heliograph/plugins/market_calendars.py"
+old = "except exchange_calendars.errors.InvalidCalendarName as exc:"
+new = "except ZeroDivisionError as exc:"
+tests = ["tests/plugins/test_market_calendars.py::test_a_name_that_is_no_exchange_is_refused_by_name"]
+
+[[control]]
+describes = "a mount's calendar reaches its silence watch"
+path = "src/heliograph/app/run.py"
+old = "market_calendar(config.mounts[found[0]].calendar),"
+new = "market_calendar(\"\"),"
+tests = ["tests/app/test_live_session.py::test_a_stock_feed_is_not_silent_while_the_market_is_closed"]

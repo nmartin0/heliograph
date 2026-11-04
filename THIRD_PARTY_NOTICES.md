@@ -25,6 +25,7 @@ test runner) are not distributed and are not listed here.
 | coincurve | 21.0.0 | MIT OR Apache-2.0 | permissive | https://github.com/ofek/coincurve |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause | permissive | https://github.com/pyca/cryptography/ |
 | docutils | 0.23 | BSD-3-Clause | permissive | https://docutils.sourceforge.io |
+| exchange-calendars | 4.13.2 | Apache-2.0 | permissive | https://github.com/gerrymanoim/exchange_calendars |
 | fastapi | 0.162.0 | MIT | permissive | https://github.com/fastapi/fastapi |
 | frozenlist | 1.8.0 | Apache-2.0 | permissive | https://github.com/aio-libs/frozenlist |
 | h11 | 0.16.0 | MIT | permissive | https://github.com/python-hyper/h11 |
@@ -35,6 +36,7 @@ test runner) are not distributed and are not listed here.
 | ifaddr | 0.2.0 | MIT | permissive | https://github.com/pydron/ifaddr |
 | itsdangerous | 2.2.0 | BSD-3-Clause | permissive | https://github.com/pallets/itsdangerous/ |
 | jinja2 | 3.1.6 | BSD-3-Clause | permissive | https://github.com/pallets/jinja/ |
+| korean-lunar-calendar | 0.4.0 | MIT | permissive | https://github.com/usingsky/korean_lunar_calendar_py |
 | markdown2 | 2.5.5 | MIT | permissive | https://github.com/trentm/python-markdown2 |
 | markupsafe | 3.0.4 | BSD-3-Clause | permissive | https://github.com/pallets/markupsafe/ |
 | msgspec | 0.22.0 | BSD-3-Clause | permissive | https://github.com/msgspec/msgspec |
@@ -43,12 +45,15 @@ test runner) are not distributed and are not listed here.
 | numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | permissive | https://github.com/numpy/numpy |
 | opentelemetry-api | 1.45.1 | Apache-2.0 | permissive | https://github.com/open-telemetry/opentelemetry-python |
 | orjson | 3.13.0 | MPL-2.0 AND (Apache-2.0 OR MIT) | copyleft | https://github.com/ijl/orjson |
+| pandas | 3.1.0 | BSD-3-Clause | permissive | https://github.com/pandas-dev/pandas |
 | propcache | 0.5.2 | Apache-2.0 | permissive | https://github.com/aio-libs/propcache |
 | pyarrow | 26.0.0 | Apache-2.0 | permissive | https://github.com/apache/arrow |
 | pycparser | 3.0 | BSD-3-Clause | permissive | https://github.com/eliben/pycparser |
 | pydantic | 2.14.1 | MIT | permissive | https://github.com/pydantic/pydantic |
 | pydantic-core | 2.50.1 | MIT | permissive | https://github.com/pydantic/pydantic-core |
 | pygments | 2.21.0 | BSD-2-Clause | permissive | https://github.com/pygments/pygments |
+| pyluach | 2.3.0 | MIT | permissive | https://github.com/simlist/pyluach |
+| python-dateutil | 4.0.0 | BSD-3-Clause | permissive | https://github.com/dateutil/dateutil |
 | python-dotenv | 1.2.4 | BSD-3-Clause | permissive | https://github.com/theskumar/python-dotenv |
 | python-engineio | 4.14.0 | MIT | permissive | see package metadata |
 | python-multipart | 0.0.32 | Apache-2.0 | permissive | https://github.com/Kludex/python-multipart |
@@ -61,8 +66,10 @@ test runner) are not distributed and are not listed here.
 | talipp | 2.7.0 | MIT | permissive | https://github.com/nardew/talipp |
 | tinycss2 | 1.5.1 | BSD-3-Clause | permissive | https://www.courtbouillon.org/tinycss2 |
 | tomli-w | 1.2.0 | MIT | permissive | https://github.com/hukkin/tomli-w |
+| toolz | 1.2.0 | BSD-3-Clause | permissive | https://github.com/pytoolz/toolz |
 | typing-extensions | 4.16.0 | PSF-2.0 | permissive | https://github.com/python/typing_extensions |
 | typing-inspection | 0.4.4 | MIT | permissive | https://github.com/pydantic/typing-inspection |
+| tzdata | 2026.6 | Apache-2.0 | permissive | https://github.com/python/tzdata |
 | urllib3 | 2.8.0 | MIT | permissive |  |
 | uvicorn | 0.54.0 | BSD-3-Clause | permissive | https://github.com/Kludex/uvicorn |
 | uvloop | 0.22.1 | Apache-2.0 | permissive |  |

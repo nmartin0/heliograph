@@ -1390,3 +1390,23 @@ phone, chat and most services.
 
 **Not done:** Windows notifications; Apprise, should a service turn up that ntfy and a webhook
 cannot reach.
+
+## D61 · Session calendars: a silence watch counts open time only (2026-11-03)
+
+**Decision:** `core/calendars.py` has `SessionCalendar`, which says one thing: the instant by which a
+span of *open* time has passed since a start (`after_open_time`; closed time does not count, and
+counting from a closed start begins at the next open). `ALWAYS_OPEN` is the calendar of crypto.
+`plugins/market_calendars.py` builds one from `exchange_calendars` (`MarketCalendar("XNYS")`, with
+its holidays, early closes and lunch breaks); past the last session the package knows (about a
+year) the market is taken as open, so a watch halts sooner rather than never. A mount may set
+`calendar = "XNYS"`; `halt_after_silence` on that mount's strategy then counts that exchange's
+open time, and its halt reads "no price of AAPL for 2h of XNYS hours". With no `calendar` nothing
+changes. It is a name given to a plain function, not yet a plug-in kind with its own registry.
+
+**Why:** a stock feed is quiet at night, at weekends and on holidays; without this a silence watch
+would halt every such session at the first close. `exchange_calendars` is Apache-2.0 (docs/licensing.md);
+its dependencies (pandas, pyluach, toolz, tzdata and others) are permissive.
+
+**Not done:** the calendar for signals (refusing outside open hours), local days in the report,
+extended-hours trading, and a calendar as a registered plug-in kind. The package's pandas 3
+deprecation warnings are ignored in the test run (pyproject) until it moves.

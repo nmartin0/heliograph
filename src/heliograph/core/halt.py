@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from heliograph.core.alarms import AlarmFired, Scheduler
 from heliograph.core.bus import MessageBus
+from heliograph.core.calendars import ALWAYS_OPEN, SessionCalendar
 from heliograph.core.errors import InvalidValueError
 from heliograph.core.messages import Instrument, Point
 from heliograph.core.pipeline import Proposal, Signal
@@ -85,7 +86,8 @@ class SilenceWatch:
 
     Each price pushes one alarm (under this watch's own key) ``span`` on. It starts with the
     first price: a feed that never gives one is for the feed's own checks. It halts once per
-    silence; after a price it is armed again. A resumed session (D53) is silent for as long
+    silence; after a price it is armed again. With a ``calendar`` only open time counts, so a
+    night, a weekend or a holiday is not silence. A resumed session (D53) is silent for as long
     as it was down, so resuming after longer than ``span`` halts at once.
     """
 
@@ -97,9 +99,11 @@ class SilenceWatch:
         bus: MessageBus,
         scheduler: Scheduler,
         now: Callable[[], Timestamp],
+        calendar: SessionCalendar = ALWAYS_OPEN,
     ) -> None:
         if span <= 0:
             raise InvalidValueError(f"the silence to halt after must be positive, not {span}")
+        self._calendar = calendar
         self._by = f"silence:{name}"
         self._instrument = instrument
         self._span = span
@@ -113,14 +117,19 @@ class SilenceWatch:
     def _on_point(self, point: Point) -> None:
         if point.instrument == self._instrument:
             # Not before now: a live clock may be a little past the price it just read.
-            self._scheduler.at(Timestamp(max(point.ts + self._span, self._now())), self._by)
+            due = self._calendar.after_open_time(point.ts, self._span)
+            self._scheduler.at(Timestamp(max(due, self._now())), self._by)
 
     def _on_alarm(self, alarm: AlarmFired) -> None:
         if alarm.key == self._by:
+            hours = f" of {self._calendar.name} hours" if self._calendar.name else ""
             self._bus.publish(
                 Halted(
                     ts=alarm.ts,
-                    reason=f"no price of {self._instrument.symbol} for {format_span(self._span)}",
+                    reason=(
+                        f"no price of {self._instrument.symbol} for "
+                        f"{format_span(self._span)}{hours}"
+                    ),
                     by=self._by,
                 ),
                 origin="derived",
