@@ -275,6 +275,8 @@ All notable changes to Heliograph are recorded here. The format follows
 - `heliograph report` of a live session says when it was halted, by whom and why, when it was
   cleared (or that it is still halted), and how many signals a halt kept in.
 - A halt, and its clearing, are told to the sinks: ntfy (urgent) and the webhook take alerts.
+- A `desktop` sink shows signals and alerts as notifications on the machine the session runs on
+  (`notify-send` on Linux, `osascript` on macOS).
   A sink opts in with an `alert` method; ones without it are not told.
 - A feed that gives up after its retries now leaves a halt in the journal (naming the feed
   and the error) before the session ends failed; resuming it starts halted.

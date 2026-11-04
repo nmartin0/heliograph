@@ -1373,3 +1373,20 @@ when nothing was halted says nothing. Each strategy's table adds "of which by a 
 force, and which signals never left because of it.
 
 **Not done:** the time spent halted as a share of the session; where in the equity the halts fell.
+
+## D60 · A desktop sink; Apprise is left out (2026-11-02)
+
+**Decision:** the `desktop` sink shows each signal and each alert as a notification on the machine
+the session runs on, with `notify-send` (Linux) or `osascript` (macOS), run directly and never
+through a shell. A missing program or an unsupported system is `InvalidValueError` (asking again
+cannot help); a program that ran and failed, such as having no screen, is `SinkUnavailableError`
+(asked again later). Alerts are always urgent; signals are only if `urgent = true`. Apprise is not
+added.
+
+**Why:** the desktop sink needs nothing installed and holds no secret. Apprise is a large
+dependency whose service addresses carry their own secrets, which the rule that no secret is
+written in a configuration (D47) would have to bend around; ntfy and the webhook already reach a
+phone, chat and most services.
+
+**Not done:** Windows notifications; Apprise, should a service turn up that ntfy and a webhook
+cannot reach.

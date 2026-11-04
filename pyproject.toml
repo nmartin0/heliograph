@@ -95,6 +95,7 @@ vol_target = "heliograph.plugins.stages:VolTarget"
 [project.entry-points."heliograph.sinks"]
 ntfy = "heliograph.plugins.notify_sinks:Ntfy"
 webhook = "heliograph.plugins.notify_sinks:Webhook"
+desktop = "heliograph.plugins.desktop_sink:Desktop"
 
 [project.entry-points."heliograph.instrument_providers"]
 static = "heliograph.plugins.static_instruments:StaticInstruments"

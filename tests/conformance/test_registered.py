@@ -48,6 +48,7 @@ def test_every_installed_plugin_is_in_the_kit() -> None:
         "forecasters/linear",
         "gates/threshold",
         "sinks/ntfy",
+        "sinks/desktop",
         "sinks/webhook",
         "instrument_providers/static",
         "indicators/alma",

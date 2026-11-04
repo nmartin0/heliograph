@@ -238,7 +238,7 @@ Wizard.)
   - [x] ntfy and a webhook (D47).
   - [x] The `[sinks.<name>]` configuration, signals delivered in the background during a live
     session, outcomes journalled as `Delivered` inputs (D48).
-  - [ ] Desktop and Apprise.
+  - [x] A desktop sink (D60). Apprise is left out for now (D60).
 - Optional: a published-records sink writing signals, simulated fills and
   daily equity to a separate SQLite file that Elysium reads as a silo (D20).
 - The second live source: Alpaca, for US stocks (D21).

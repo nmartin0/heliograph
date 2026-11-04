@@ -5307,3 +5307,45 @@ path = "src/heliograph/app/cli.py"
 old = "        if status != \"running\":"
 new = "        if False:"
 tests = ["tests/app/test_cli_answer.py::test_nothing_is_left_for_a_session_that_has_ended"]
+
+[[control]]
+describes = "a desktop title that starts with a dash is not an option"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "\"critical\" if urgent else \"normal\", \"--\", title"
+new = "\"critical\" if urgent else \"normal\", title"
+tests = ["tests/plugins/test_desktop_sink.py::test_linux_runs_notify_send_with_the_text_as_arguments"]
+
+[[control]]
+describes = "a desktop alert is always urgent"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "alert.title, alert.text, urgent=True"
+new = "alert.title, alert.text, urgent=False"
+tests = ["tests/plugins/test_desktop_sink.py::test_an_alert_is_always_urgent"]
+
+[[control]]
+describes = "a desktop text's backslashes are escaped for AppleScript"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "text.replace(\"\\\\\", \"\\\\\\\\\")"
+new = "text"
+tests = ["tests/plugins/test_desktop_sink.py::test_macos_quotes_the_text_for_applescript"]
+
+[[control]]
+describes = "a desktop program that failed is reported"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "        if status != 0:"
+new = "        if False:"
+tests = ["tests/plugins/test_desktop_sink.py::test_a_program_that_failed_is_asked_again_later"]
+
+[[control]]
+describes = "a desktop program that is missing is refused for good"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "except FileNotFoundError as exc:"
+new = "except ZeroDivisionError as exc:"
+tests = ["tests/plugins/test_desktop_sink.py::test_a_program_that_is_missing_is_not_asked_again"]
+
+[[control]]
+describes = "a system without desktop notifications is refused"
+path = "src/heliograph/plugins/desktop_sink.py"
+old = "raise InvalidValueError(f\"desktop notifications are not supported on {platform}\")"
+new = "return []"
+tests = ["tests/plugins/test_desktop_sink.py::test_another_system_is_refused_with_its_name", "tests/plugins/test_desktop_sink.py::test_health_says_whether_the_system_is_supported"]
